@@ -79,7 +79,7 @@
 
         <div class="input-group">
             <label>Тип</label>
-            <select id="add-kind">
+            <select id="add-kind" onchange="toggleFields()">
                 <option value="equipment">Оборудование (выдаётся и возвращается)</option>
                 <option value="consumable">Расходник (списывается)</option>
             </select>
@@ -97,14 +97,17 @@
             </select>
         </div>
 
-        <div class="input-group">
-            <label>Количество при добавлении</label>
-            <input id="add-qty" type="number" placeholder="0" value="0">
-        </div>
+        <!-- Блок для расходников (скрыт для оборудования) -->
+        <div id="consumable-fields" class="hidden">
+            <div class="input-group">
+                <label>Количество при добавлении</label>
+                <input id="add-qty" type="number" placeholder="0" value="0">
+            </div>
 
-        <div class="input-group">
-            <label>Минимальное значение (для оповещения)</label>
-            <input id="add-min-stock" type="number" placeholder="Например, 5" value="0">
+            <div class="input-group">
+                <label>Минимальное значение (для оповещения)</label>
+                <input id="add-min-stock" type="number" placeholder="Например, 5" value="0">
+            </div>
         </div>
 
         <div class="input-group">
@@ -213,9 +216,9 @@
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">
                                 ${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}
                             </span>
-                            ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ''}
+                            ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                         </div>
-                        <div class="meta">${i.code} · всего: ${i.total} шт (мин: ${i.min_stock})</div>
+                        <div class="meta">${i.code} · всего: ${i.total} шт</div>
                         ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username || h.user_id).join(", ")}</div>` : ""}
                     </div>
                 </div>
@@ -256,11 +259,13 @@
                 let photoHtml = currentItem.photo ? 
                     `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
 
+                let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
+
                 document.getElementById("item-card").innerHTML = `
                     ${photoHtml}
                     <div class="meta">Код: ${currentItem.code}</div>
                     <div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>
-                    <div class="meta">Мин. остаток: ${currentItem.min_stock}</div>
+                    ${minStockText}
                     ${currentItem.stocks.map(s => `
                         <div class="stock-line">
                             <span>${s.location_name}${s.spot ? " · " + s.spot : ""}</span>
@@ -359,16 +364,13 @@
             const spot = document.getElementById("spot-name").value.trim();
             if (!spot) { notify("Введите название полки"); return; }
             
-            // Сначала сохраняем полку в базу
             try {
                 await api("/api/spots", {
                     method: "POST",
                     body: JSON.stringify({ name: spot })
                 });
-                await loadSpots(); // Обновляем список полок
-            } catch (e) {
-                // Если полка уже есть, это не ошибка, просто идем дальше
-            }
+                await loadSpots();
+            } catch (e) {}
 
             const url = `/api/qr/${encodeURIComponent(spot)}`;
             document.getElementById("spot-qr-result").innerHTML = `
@@ -424,14 +426,30 @@
             } catch (e) { notify(e.message); }
         }
 
+        // --- НОВАЯ ФУНКЦИЯ: Скрывает/показывает поля для расходников ---
+        function toggleFields() {
+            const kind = document.getElementById("add-kind").value;
+            const consumableFields = document.getElementById("consumable-fields");
+            if (kind === "consumable") {
+                consumableFields.classList.remove("hidden");
+            } else {
+                consumableFields.classList.add("hidden");
+                // Сбрасываем значения для оборудования
+                document.getElementById("add-qty").value = "1";
+                document.getElementById("add-min-stock").value = "0";
+            }
+        }
+
         async function showAddForm() {
-            // Запрашиваем следующий код
             try {
                 const res = await api("/api/next_code");
                 document.getElementById("add-code").value = res.code;
             } catch (e) {
                 document.getElementById("add-code").value = "ITEM-1";
             }
+            // По умолчанию ставим "Оборудование" и скрываем поля
+            document.getElementById("add-kind").value = "equipment";
+            toggleFields();
             showScreen("screen-add");
         }
         function showImportForm() { showScreen("screen-import"); }
@@ -441,9 +459,16 @@
             const name = document.getElementById("add-name").value.trim();
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
-            const qty = parseInt(document.getElementById("add-qty").value) || 0;
+            
+            // Если это оборудование, всегда ставим 1 и 0, иначе берем из полей
+            let qty = 1;
+            let minStock = 0;
+            if (kind === "consumable") {
+                qty = parseInt(document.getElementById("add-qty").value) || 0;
+                minStock = parseInt(document.getElementById("add-min-stock").value) || 0;
+            }
+
             const spot = document.getElementById("add-spot").value;
-            const minStock = parseInt(document.getElementById("add-min-stock").value) || 0;
             const photoFile = document.getElementById("add-photo").files[0];
 
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
@@ -462,8 +487,6 @@
                 await api("/api/items", { method: "POST", body: formData });
                 notify("Добавлено");
                 ["add-code", "add-name", "add-photo"].forEach(id => document.getElementById(id).value = "");
-                document.getElementById("add-qty").value = "0";
-                document.getElementById("add-min-stock").value = "0";
                 backToMain();
             } catch (e) { notify(e.message); }
         }
