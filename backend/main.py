@@ -677,4 +677,4 @@ def force_locations():
         return {"status": "error", "message": str(e)}
     conn.close()
     return {"status": "ok", "message": "Локации принудительно заменены на Этаж2, Склад11, Офис7!"}
-    app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
