@@ -32,6 +32,7 @@
         <button onclick="scanQr()">📷 Сканировать QR</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
+        <button class="secondary" onclick="showSpotQrForm()">🔲 QR-коды для полок</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
         <div id="items-list"></div>
@@ -71,6 +72,18 @@
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
+    <!-- НОВЫЙ ЭКРАН ДЛЯ QR ПОЛОК -->
+    <div id="screen-spot-qr" class="hidden">
+        <h1>QR для полок</h1>
+        <div class="card">
+            <p>Введите название полки (места). Сгенерируйте и распечатайте QR-код. При перемещении товара сотрудник сможет его отсканировать.</p>
+        </div>
+        <input id="spot-name" placeholder="Название полки (например, Т1 или Полка 3)">
+        <button onclick="generateSpotQr()">Сгенерировать QR</button>
+        <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
+        <button class="secondary" onclick="backToMain()">← Назад</button>
+    </div>
+
     <div id="screen-history" class="hidden">
         <h1>История</h1>
         <div id="history-list"></div>
@@ -78,16 +91,12 @@
     </div>
 
     <script>
-        // Заглушка для работы в браузере (на ПК), если Telegram API недоступен
         const tg = window.Telegram?.WebApp || {
             ready: () => {}, expand: () => {},
             showAlert: (msg) => alert(msg),
             showPopup: (opts, cb) => { if(confirm(opts.message)) cb('open'); },
-            initData: "",
-            initDataUnsafe: {},
-            openLink: (url) => window.open(url, '_blank')
+            initData: "", initDataUnsafe: {}, openLink: (url) => window.open(url, '_blank')
         };
-
         tg.ready(); tg.expand();
 
         let currentItem = null;
@@ -142,7 +151,7 @@
         }
 
         function scanQr() {
-            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона через Telegram"); return; }
+            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
                 if (text) { openItem(text.trim()); return true; }
             });
@@ -175,7 +184,7 @@
         function renderActions() {
             const box = document.getElementById("actions");
             const isEq = currentItem.kind === "equipment";
-            const myId = tg.initDataUnsafe?.user?.id || 1; // 1 для браузера
+            const myId = tg.initDataUnsafe?.user?.id || 1;
             const myCheckout = currentItem.holders.find(h => h.user_id === myId);
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId);
             let html = "";
@@ -214,15 +223,11 @@
 
         function showQr() {
             const url = `/api/qr/${currentItem.code}`;
-            if (tg.openLink) {
-                tg.openLink(window.location.origin + url);
-            } else {
-                window.open(window.location.origin + url, '_blank');
-            }
+            if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
         }
 
         function scanSpotQr() {
-            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона через Telegram"); return; }
+            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
                 if (text) {
                     document.getElementById("mv-spot").value = text.trim();
@@ -230,6 +235,31 @@
                 }
             });
         }
+
+        // --- НОВЫЕ ФУНКЦИИ ДЛЯ QR ПОЛОК ---
+        function showSpotQrForm() {
+            document.getElementById("spot-name").value = "";
+            document.getElementById("spot-qr-result").innerHTML = "";
+            showScreen("screen-spot-qr");
+        }
+
+        function generateSpotQr() {
+            const spot = document.getElementById("spot-name").value.trim();
+            if (!spot) { notify("Введите название полки"); return; }
+            
+            const url = `/api/qr/${encodeURIComponent(spot)}`;
+            document.getElementById("spot-qr-result").innerHTML = `
+                <p>QR для полки: <b>${spot}</b></p>
+                <img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" />
+                <p style="font-size:12px; color:#666;">Нажмите на картинку, чтобы сохранить или распечатать</p>
+            `;
+        }
+
+        function openQrLink(url) {
+            if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
+        }
+
+        // -----------------------------------
 
         async function doCheckout() {
             try {
@@ -329,7 +359,7 @@
         }
 
         function showScreen(id) {
-            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-history"].forEach(s => {
+            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
