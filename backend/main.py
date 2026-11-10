@@ -1,9 +1,9 @@
+import qrcode
+import io
 import sqlite3
 import json
 import hashlib
 import hmac
-import qrcode
-import io
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
