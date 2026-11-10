@@ -16,7 +16,8 @@
         .card { background: #fff; padding: 14px; border-radius: 10px; margin-bottom: 10px; }
         .card .name { font-weight: 600; }
         .card .meta { color: #666; font-size: 14px; margin-top: 4px; }
-        input, select { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; background: #fff; }
+        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; background: #fff; }
+        textarea { font-family: monospace; resize: vertical; }
         .hidden { display: none; }
         .stock-line, .holder-line { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid #eee; font-size: 14px; }
         .stock-line:first-child, .holder-line:first-child { border-top: none; }
@@ -30,7 +31,7 @@
         <h1>Учёт</h1>
         <button onclick="scanQr()">📷 Сканировать QR</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-        <button class="secondary" onclick="showImportForm()">📁 Загрузить из Excel</button>
+        <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
         <div id="items-list"></div>
@@ -60,14 +61,13 @@
     </div>
 
     <div id="screen-import" class="hidden">
-        <h1>Импорт из Excel</h1>
+        <h1>Импорт данных</h1>
         <div class="card">
-            <p>Сохраните таблицу Excel в формате <b>CSV (разделитель — точка с запятой)</b>.</p>
-            <p>Колонки должны быть: <br><code>code;name;kind;location;quantity;spot</code></p>
-            <p style="font-size:12px; color:#666;">Пример:<br>CAM-01;Фотоаппарат;equipment;Мастерская;1;Полка 1<br>BAT-01;Батарейки;consumable;Склад;100;Ящик 3</p>
+            <p>Скопируйте текст из чата и вставьте его в поле ниже.</p>
+            <p style="font-size:12px; color:#666;">Формат (разделитель — точка с запятой):<br><code>code;name;kind;location;quantity;spot</code></p>
         </div>
-        <input type="file" id="csv-file" accept=".csv">
-        <button onclick="uploadCsv()">Загрузить</button>
+        <textarea id="csv-text" rows="10" placeholder="code;name;kind;location;quantity;spot&#10;CAM-01;Фотоаппарат;equipment;Мастерская;1;Полка 1"></textarea>
+        <button onclick="submitText()">Загрузить</button>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
@@ -87,7 +87,7 @@
         async function api(path, options = {}) {
             const res = await fetch(path, {
                 headers: {
-                    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+                    "Content-Type": "application/json",
                     "X-Init-Data": tg.initData || "",
                 },
                 ...options,
@@ -264,6 +264,7 @@
         }
 
         function showAddForm() { showScreen("screen-add"); }
+        function showImportForm() { showScreen("screen-import"); }
 
         async function saveItem() {
             const code = document.getElementById("add-code").value.trim();
@@ -285,16 +286,16 @@
             } catch (e) { tg.showAlert(e.message); }
         }
 
-        function showImportForm() { showScreen("screen-import"); }
-
-        async function uploadCsv() {
-            const fileInput = document.getElementById("csv-file");
-            if (!fileInput.files.length) { tg.showAlert("Выберите файл"); return; }
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+        async function submitText() {
+            const text = document.getElementById("csv-text").value;
+            if (!text.trim()) { tg.showAlert("Вставьте текст"); return; }
             try {
-                const res = await api("/api/import", { method: "POST", body: formData });
+                const res = await api("/api/import_text", {
+                    method: "POST",
+                    body: JSON.stringify({ text: text })
+                });
                 tg.showAlert(`Загружено товаров: ${res.added}`);
+                document.getElementById("csv-text").value = "";
                 backToMain();
             } catch (e) { tg.showAlert(e.message); }
         }
