@@ -3,7 +3,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -14,6 +14,7 @@ import io
 import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
+import base64
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -49,10 +50,12 @@ def init_db():
         code TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         kind TEXT NOT NULL DEFAULT 'equipment',
-        min_stock INTEGER DEFAULT 0
+        min_stock INTEGER DEFAULT 0,
+        photo TEXT DEFAULT ''
     )""")
     try:
         c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
+        c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
 
@@ -130,7 +133,6 @@ def get_user(x_init_data: Optional[str]):
     conn.close()
     return user
 
-# --- ФУНКЦИЯ ДЛЯ ОТПРАВКИ УВЕДОМЛЕНИЙ ---
 async def send_low_stock_alert(item_code: str):
     conn = get_conn()
     item = conn.execute("SELECT name, min_stock FROM items WHERE code = ?", (item_code,)).fetchone()
@@ -151,7 +153,7 @@ async def send_low_stock_alert(item_code: str):
                 try:
                     await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
                 except Exception as e:
-                    print(f"Ошибка отправки для {u['tg_id']}: {e}")
+                    print(f"Ошибка отправки: {e}")
     conn.close()
 
 class ItemCreate(BaseModel):
@@ -188,7 +190,7 @@ def list_locations():
 @app.get("/api/items")
 def list_items():
     conn = get_conn()
-    items = conn.execute("SELECT code, name, kind, min_stock FROM items ORDER BY name").fetchall()
+    items = conn.execute("SELECT code, name, kind, min_stock, photo FROM items ORDER BY name").fetchall()
     result = []
     for it in items:
         stocks = conn.execute(
@@ -206,7 +208,7 @@ def list_items():
         
         result.append({
             "code": it["code"], "name": it["name"], "kind": it["kind"],
-            "min_stock": it["min_stock"],
+            "min_stock": it["min_stock"], "photo": it["photo"],
             "total": total,
             "is_low": total <= it["min_stock"] and it["min_stock"] > 0,
             "stocks": [dict(s) for s in stocks],
@@ -218,7 +220,7 @@ def list_items():
 @app.get("/api/items/{code}")
 def get_item(code: str):
     conn = get_conn()
-    item = conn.execute("SELECT code, name, kind, min_stock FROM items WHERE code = ?", (code,)).fetchone()
+    item = conn.execute("SELECT code, name, kind, min_stock, photo FROM items WHERE code = ?", (code,)).fetchone()
     if not item:
         conn.close(); raise HTTPException(status_code=404, detail="Товар не найден")
     stocks = conn.execute(
@@ -234,62 +236,54 @@ def get_item(code: str):
     conn.close()
     return {
         "code": item["code"], "name": item["name"], "kind": item["kind"],
-        "min_stock": item["min_stock"],
+        "min_stock": item["min_stock"], "photo": item["photo"],
         "stocks": [dict(s) for s in stocks],
         "holders": [dict(h) for h in holders],
     }
 
+@app.get("/api/on_hand")
+def on_hand():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT c.item_code, i.name, u.first_name, u.username, c.taken_at
+        FROM checkouts c 
+        JOIN items i ON i.code = c.item_code 
+        LEFT JOIN users u ON u.tg_id = c.user_id
+        WHERE c.returned_at IS NULL
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 @app.post("/api/items")
-def create_item(item: ItemCreate, x_init_data: Optional[str] = Header(None)):
+async def create_item(
+    code: str = Form(...),
+    name: str = Form(...),
+    kind: str = Form("equipment"),
+    location_id: int = Form(...),
+    quantity: int = Form(0),
+    spot: str = Form(""),
+    min_stock: int = Form(0),
+    photo: Optional[UploadFile] = File(None),
+    x_init_data: Optional[str] = Header(None)
+):
     get_user(x_init_data)
     conn = get_conn()
+    
+    photo_base64 = ""
+    if photo:
+        contents = await photo.read()
+        photo_base64 = base64.b64encode(contents).decode("utf-8")
+    
     try:
-        conn.execute("INSERT INTO items (code, name, kind, min_stock) VALUES (?, ?, ?, ?)",
-                     (item.code, item.name, item.kind, item.min_stock))
+        conn.execute("INSERT INTO items (code, name, kind, min_stock, photo) VALUES (?, ?, ?, ?, ?)",
+                     (code, name, kind, min_stock, photo_base64))
     except sqlite3.IntegrityError:
         conn.close(); raise HTTPException(status_code=400, detail="Код уже существует")
+    
     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
-                 (item.code, item.location_id, item.quantity, item.spot))
+                 (code, location_id, quantity, spot))
     conn.commit(); conn.close()
     return {"status": "ok"}
-
-@app.post("/api/import_text")
-def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
-    conn = get_conn()
-    added = 0
-    try:
-        lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
-        for line in lines[1:]:
-            parts = line.split(';')
-            if len(parts) < 5: continue
-            
-            code = parts[0].strip()
-            name = parts[1].strip()
-            kind = parts[2].strip() if len(parts) > 2 else "equipment"
-            loc_name = parts[3].strip() if len(parts) > 3 else "Мастерская"
-            try: qty = int(parts[4].strip()) if len(parts) > 4 else 0
-            except: qty = 0
-            spot = parts[5].strip() if len(parts) > 5 else ""
-            try: min_stock = int(parts[6].strip()) if len(parts) > 6 else 0
-            except: min_stock = 0
-            
-            if not code or not name: continue
-            
-            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (loc_name,)).fetchone()
-            loc_id = loc["id"] if loc else 1
-            
-            try:
-                conn.execute("INSERT INTO items (code, name, kind, min_stock) VALUES (?, ?, ?, ?)", (code, name, kind, min_stock))
-                conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)", (code, loc_id, qty, spot))
-                added += 1
-            except sqlite3.IntegrityError:
-                pass
-        conn.commit()
-    except Exception as e:
-        conn.close(); raise HTTPException(status_code=400, detail=str(e))
-    conn.close()
-    return {"status": "ok", "added": added}
 
 @app.post("/api/checkout")
 async def checkout(code: str, background_tasks: BackgroundTasks, x_init_data: Optional[str] = Header(None)):
@@ -319,8 +313,6 @@ async def checkout(code: str, background_tasks: BackgroundTasks, x_init_data: Op
         (code, stock["location_id"]),
     )
     conn.commit(); conn.close()
-    
-    # Добавляем фоновую задачу на проверку остатков
     background_tasks.add_task(send_low_stock_alert, code)
     return {"status": "ok"}
 
@@ -398,8 +390,6 @@ async def writeoff(req: WriteoffRequest, background_tasks: BackgroundTasks, x_in
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?, ?, ?, ?)",
                  (req.code, req.quantity, req.location_id, user["id"]))
     conn.commit(); conn.close()
-    
-    # Добавляем фоновую задачу на проверку остатков
     background_tasks.add_task(send_low_stock_alert, req.code)
     return {"status": "ok"}
 
