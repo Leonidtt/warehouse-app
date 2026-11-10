@@ -501,31 +501,46 @@
             } catch (e) { notify(e.message); }
         }
 
+        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ПЕРЕМЕЩЕНИЯ С ПОДРОБНЫМИ ОШИБКАМИ ---
         async function doMove() {
-            const from = parseInt(document.getElementById("mv-from").value);
-            const to = parseInt(document.getElementById("mv-to").value);
-            const qty = parseInt(document.getElementById("mv-qty").value) || 0;
-            const spot = document.getElementById("mv-spot").value;
-            if (from === to) { notify("Локации должны отличаться"); return; }
+            const fromSel = document.getElementById("mv-from");
+            const toSel = document.getElementById("mv-to");
+            const qtyInput = document.getElementById("mv-qty");
+            const spotSel = document.getElementById("mv-spot");
+
+            if (!fromSel || !toSel || !qtyInput) {
+                notify("Ошибка интерфейса: не найдены поля для перемещения");
+                return;
+            }
+
+            const from = parseInt(fromSel.value);
+            const to = parseInt(toSel.value);
+            const qty = parseInt(qtyInput.value) || 0;
+            const spot = spotSel ? spotSel.value : "";
+
+            if (isNaN(from) || isNaN(to)) {
+                notify("Пожалуйста, выберите локации");
+                return;
+            }
+            if (from === to) { 
+                notify("Локации 'Откуда' и 'Куда' не должны совпадать. Выберите другой склад или место."); 
+                return; 
+            }
+            if (qty <= 0) {
+                notify("Количество должно быть больше 0");
+                return;
+            }
+
             try {
                 await api("/api/move", {
                     method: "POST",
                     body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }),
                 });
-                notify("Перемещено"); openItem(currentItem.code);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function doWriteoff() {
-            const loc = parseInt(document.getElementById("wo-loc").value);
-            const qty = parseInt(document.getElementById("wo-qty").value) || 0;
-            try {
-                await api("/api/writeoff", {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }),
-                });
-                notify("Списано"); openItem(currentItem.code);
-            } catch (e) { notify(e.message); }
+                notify("Успешно перемещено!");
+                openItem(currentItem.code);
+            } catch (e) { 
+                notify("Ошибка при перемещении: " + e.message); 
+            }
         }
 
         function toggleFields() {
