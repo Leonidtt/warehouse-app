@@ -1,5 +1,3 @@
-import qrcode
-import io
 import sqlite3
 import json
 import hashlib
@@ -8,8 +6,11 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
+import qrcode
+import io
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER (вместо 123456789:AAH...)
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -315,16 +316,12 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     conn.commit(); conn.close()
     return {"status": "ok"}
 
-# Ищем index.html в текущей папке (точка означает "здесь")
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
-# --- Генерация QR-кода ---
-from fastapi.responses import StreamingResponse
-
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
-    # Генерируем QR, в котором зашит только код товара (например, "CAM-001")
     img = qrcode.make(code)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
