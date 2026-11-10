@@ -662,4 +662,19 @@ def update_locations():
     conn.close()
     return {"status": "ok", "message": "Локации успешно переименованы!"}
 
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+@app.get("/api/force_locations")
+def force_locations():
+    conn = get_conn()
+    try:
+        # Полностью очищаем список локаций и создаем три нужные
+        conn.execute("DELETE FROM locations")
+        conn.execute("INSERT INTO locations (id, name, type) VALUES (1, 'Этаж2', 'workshop')")
+        conn.execute("INSERT INTO locations (id, name, type) VALUES (2, 'Склад11', 'storage')")
+        conn.execute("INSERT INTO locations (id, name, type) VALUES (3, 'Офис7', 'office')")
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return {"status": "error", "message": str(e)}
+    conn.close()
+    return {"status": "ok", "message": "Локации принудительно заменены на Этаж2, Склад11, Офис7!"}
+    app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
