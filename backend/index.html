@@ -36,6 +36,7 @@
 
     <div id="screen-item" class="hidden">
         <h1 id="item-title">Товар</h1>
+        <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         <div class="card" id="item-card"></div>
         <div id="actions"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
@@ -162,7 +163,19 @@
                     </select>
                     <input id="wo-qty" type="number" value="1" placeholder="Количество">
                     <button class="danger" onclick="doWriteoff()">📉 Списать</button>`;
-            }
+            function showQr() {
+    // Открываем картинку с QR-кодом в новом окне (или сохраняем)
+    const url = `/api/qr/${currentItem.code}`;
+    tg.showPopup({
+        title: 'QR-код товара',
+        message: 'Нажмите "Открыть картинку", чтобы сохранить и распечатать.',
+        buttons: [{ type: 'default', text: 'Открыть картинку', id: 'open' }]
+    }, (buttonId) => {
+        if (buttonId === 'open') {
+            tg.openLink(window.location.origin + url);
+        }
+    });
+}}
 
             const stockOpts = currentItem.stocks.filter(s => s.quantity > 0)
                 .map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
