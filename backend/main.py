@@ -2,6 +2,8 @@ import sqlite3
 import json
 import hashlib
 import hmac
+import qrcode
+import io
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -315,3 +317,14 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
 
 # Ищем index.html в текущей папке (точка означает "здесь")
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+# --- Генерация QR-кода ---
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/qr/{code}")
+def generate_qr(code: str):
+    # Генерируем QR, в котором зашит только код товара (например, "CAM-001")
+    img = qrcode.make(code)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
