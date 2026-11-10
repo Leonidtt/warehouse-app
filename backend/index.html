@@ -44,7 +44,7 @@
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         <button class="secondary" onclick="showOnHand()">🖐 Что на руках?</button>
         <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
-        <button class="secondary" onclick="showSpotQrForm()">🔲 QR-коды для полок</button>
+        <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
         <div id="items-list"></div>
@@ -97,7 +97,6 @@
             </select>
         </div>
 
-        <!-- Блок для расходников (скрыт для оборудования) -->
         <div id="consumable-fields" class="hidden">
             <div class="input-group">
                 <label>Количество при добавлении</label>
@@ -130,13 +129,17 @@
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
+    <!-- ОБНОВЛЕННЫЙ ЭКРАН СОЗДАНИЯ ПОЛКИ -->
     <div id="screen-spot-qr" class="hidden">
-        <h1>QR для полок</h1>
+        <h1>Создать полку</h1>
         <div class="card" style="display:block;">
-            <p>Введите название полки. Оно сохранится в базе, и потом вы сможете выбрать его при добавлении товара.</p>
+            <p>Введите название полки (например, "Т1" или "Ящик 3"). После создания приложение сгенерирует для неё QR-код.</p>
         </div>
-        <input id="spot-name" placeholder="Название полки (например, Т1)">
-        <button onclick="generateSpotQr()">Сгенерировать и сохранить</button>
+        <div class="input-group">
+            <label>Название полки</label>
+            <input id="spot-name" placeholder="Например, Т1">
+        </div>
+        <button onclick="createSpot()">Создать</button>
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
@@ -360,7 +363,8 @@
             showScreen("screen-spot-qr");
         }
 
-        async function generateSpotQr() {
+        // --- НОВАЯ ЛОГИКА СОЗДАНИЯ ПОЛКИ ---
+        async function createSpot() {
             const spot = document.getElementById("spot-name").value.trim();
             if (!spot) { notify("Введите название полки"); return; }
             
@@ -369,9 +373,17 @@
                     method: "POST",
                     body: JSON.stringify({ name: spot })
                 });
-                await loadSpots();
-            } catch (e) {}
+                await loadSpots(); // Обновляем список для выпадающего меню
+            } catch (e) {
+                if (e.message.includes("уже есть")) {
+                    notify("Такая полка уже существует, но мы сгенерируем для неё QR.");
+                } else {
+                    notify("Ошибка: " + e.message);
+                    return;
+                }
+            }
 
+            // Генерируем QR для только что созданной полки
             const url = `/api/qr/${encodeURIComponent(spot)}`;
             document.getElementById("spot-qr-result").innerHTML = `
                 <div style="text-align:center; margin-top:10px;">
@@ -381,8 +393,9 @@
                     <div class="label">Текст для создания QR в другом приложении:</div>
                     <div class="value">${spot}</div>
                 </div>
-                <p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка добавлена в список!</p>
+                <p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка успешно создана!</p>
             `;
+            document.getElementById("spot-name").value = ""; // Очищаем поле
         }
 
         async function doCheckout() {
@@ -426,7 +439,6 @@
             } catch (e) { notify(e.message); }
         }
 
-        // --- НОВАЯ ФУНКЦИЯ: Скрывает/показывает поля для расходников ---
         function toggleFields() {
             const kind = document.getElementById("add-kind").value;
             const consumableFields = document.getElementById("consumable-fields");
@@ -434,7 +446,6 @@
                 consumableFields.classList.remove("hidden");
             } else {
                 consumableFields.classList.add("hidden");
-                // Сбрасываем значения для оборудования
                 document.getElementById("add-qty").value = "1";
                 document.getElementById("add-min-stock").value = "0";
             }
@@ -447,7 +458,6 @@
             } catch (e) {
                 document.getElementById("add-code").value = "ITEM-1";
             }
-            // По умолчанию ставим "Оборудование" и скрываем поля
             document.getElementById("add-kind").value = "equipment";
             toggleFields();
             showScreen("screen-add");
@@ -460,7 +470,6 @@
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
             
-            // Если это оборудование, всегда ставим 1 и 0, иначе берем из полей
             let qty = 1;
             let minStock = 0;
             if (kind === "consumable") {
