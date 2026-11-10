@@ -3,7 +3,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -129,6 +129,30 @@ def get_user(x_init_data: Optional[str]):
     conn.commit()
     conn.close()
     return user
+
+# --- ФУНКЦИЯ ДЛЯ ОТПРАВКИ УВЕДОМЛЕНИЙ ---
+async def send_low_stock_alert(item_code: str):
+    conn = get_conn()
+    item = conn.execute("SELECT name, min_stock FROM items WHERE code = ?", (item_code,)).fetchone()
+    if not item: 
+        conn.close()
+        return
+    
+    stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (item_code,)).fetchall()
+    total = sum(s["quantity"] for s in stocks)
+    
+    if total <= item["min_stock"]:
+        users = conn.execute("SELECT tg_id FROM users").fetchall()
+        message = f"⚠️ <b>Внимание! Заканчивается товар:</b>\n\n🔴 {item['name']} ({item_code})\nОсталось: {total} шт. (минимум: {item['min_stock']})"
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        
+        async with httpx.AsyncClient() as client:
+            for u in users:
+                try:
+                    await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
+                except Exception as e:
+                    print(f"Ошибка отправки для {u['tg_id']}: {e}")
+    conn.close()
 
 class ItemCreate(BaseModel):
     code: str
@@ -268,7 +292,7 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
     return {"status": "ok", "added": added}
 
 @app.post("/api/checkout")
-def checkout(code: str, x_init_data: Optional[str] = Header(None)):
+async def checkout(code: str, background_tasks: BackgroundTasks, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
     item = conn.execute("SELECT kind FROM items WHERE code = ?", (code,)).fetchone()
@@ -295,6 +319,9 @@ def checkout(code: str, x_init_data: Optional[str] = Header(None)):
         (code, stock["location_id"]),
     )
     conn.commit(); conn.close()
+    
+    # Добавляем фоновую задачу на проверку остатков
+    background_tasks.add_task(send_low_stock_alert, code)
     return {"status": "ok"}
 
 @app.post("/api/return")
@@ -357,7 +384,7 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     return {"status": "ok"}
 
 @app.post("/api/writeoff")
-def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
+async def writeoff(req: WriteoffRequest, background_tasks: BackgroundTasks, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
     row = conn.execute(
@@ -371,6 +398,9 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?, ?, ?, ?)",
                  (req.code, req.quantity, req.location_id, user["id"]))
     conn.commit(); conn.close()
+    
+    # Добавляем фоновую задачу на проверку остатков
+    background_tasks.add_task(send_low_stock_alert, req.code)
     return {"status": "ok"}
 
 @app.get("/api/history")
@@ -420,37 +450,5 @@ def generate_qr(code: str):
     result_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ ПРОВЕРКИ ОСТАТКОВ И ОТПРАВКИ ВСЕМ ---
-@app.get("/api/check_low_stock")
-async def check_low_stock():
-    conn = get_conn()
-    # Получаем все товары, у которых задан минимальный остаток
-    items = conn.execute("SELECT code, name, min_stock FROM items WHERE min_stock > 0").fetchall()
-    low_items = []
-    
-    for it in items:
-        stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (it["code"],)).fetchall()
-        total = sum(s["quantity"] for s in stocks)
-        if total <= it["min_stock"]:
-            low_items.append(f"🔴 {it['name']} ({it['code']}) — осталось {total} шт. (минимум {it['min_stock']})")
-    
-    # Получаем всех пользователей, которые когда-либо заходили в приложение
-    users = conn.execute("SELECT tg_id FROM users").fetchall()
-    conn.close()
-    
-    # Если есть чего оповещать и есть кому оповещать
-    if low_items and users:
-        message = "⚠️ <b>Внимание! Заканчиваются расходники:</b>\n\n" + "\n".join(low_items)
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        
-        async with httpx.AsyncClient() as client:
-            for u in users:
-                try:
-                    await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
-                except Exception as e:
-                    print(f"Ошибка отправки для {u['tg_id']}: {e}")
-            
-    return {"status": "ok", "low_items_count": len(low_items), "sent_to": len(users)}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
