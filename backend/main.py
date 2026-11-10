@@ -653,5 +653,19 @@ def generate_qr(code: str):
     result_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+    @app.get("/api/update_locations")
+def update_locations():
+    conn = get_conn()
+    try:
+        # Меняем названия старых локаций на новые
+        conn.execute("UPDATE locations SET name = 'Офис7' WHERE name = 'Офис'")
+        conn.execute("UPDATE locations SET name = 'Склад11' WHERE name = 'Склад'")
+        conn.execute("UPDATE locations SET name = 'Этаж2' WHERE name = 'Мастерская'")
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return {"status": "error", "message": str(e)}
+    conn.close()
+    return {"status": "ok", "message": "Локации успешно переименованы!"}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
