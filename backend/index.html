@@ -9,7 +9,7 @@
         body { font-family: -apple-system, sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
         h1 { font-size: 20px; margin: 0 0 16px; }
         h2 { font-size: 15px; margin: 16px 0 8px; color: #555; }
-        button { width: 100%; padding: 14px; margin-bottom: 10px; border: none; border-radius: 10px; font-size: 16px; background: #2AABEE; color: white; }
+        button { width: 100%; padding: 14px; margin-bottom: 10px; border: none; border-radius: 10px; font-size: 16px; background: #2AABEE; color: white; cursor: pointer; }
         button.secondary { background: #fff; color: #333; border: 1px solid #ddd; }
         button.danger { background: #e74c3c; }
         button.ok { background: #27ae60; }
@@ -78,11 +78,24 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
+        // Заглушка для работы в браузере (на ПК), если Telegram API недоступен
+        const tg = window.Telegram?.WebApp || {
+            ready: () => {}, expand: () => {},
+            showAlert: (msg) => alert(msg),
+            showPopup: (opts, cb) => { if(confirm(opts.message)) cb('open'); },
+            initData: "",
+            initDataUnsafe: {},
+            openLink: (url) => window.open(url, '_blank')
+        };
+
         tg.ready(); tg.expand();
 
         let currentItem = null;
         let locations = [];
+
+        function notify(msg) {
+            if (tg.showAlert) tg.showAlert(msg); else alert(msg);
+        }
 
         async function api(path, options = {}) {
             const res = await fetch(path, {
@@ -93,7 +106,7 @@
                 ...options,
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.detail || "Ошибка");
+            if (!res.ok) throw new Error(data.detail || "Ошибка сервера");
             return data;
         }
 
@@ -129,7 +142,7 @@
         }
 
         function scanQr() {
-            if (!tg.showScanQrPopup) { tg.showAlert("Сканер недоступен"); return; }
+            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона через Telegram"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
                 if (text) { openItem(text.trim()); return true; }
             });
@@ -156,13 +169,13 @@
                 `;
                 renderActions();
                 showScreen("screen-item");
-            } catch (e) { tg.showAlert(e.message); }
+            } catch (e) { notify(e.message); }
         }
 
         function renderActions() {
             const box = document.getElementById("actions");
             const isEq = currentItem.kind === "equipment";
-            const myId = tg.initDataUnsafe?.user?.id;
+            const myId = tg.initDataUnsafe?.user?.id || 1; // 1 для браузера
             const myCheckout = currentItem.holders.find(h => h.user_id === myId);
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId);
             let html = "";
@@ -201,19 +214,15 @@
 
         function showQr() {
             const url = `/api/qr/${currentItem.code}`;
-            tg.showPopup({
-                title: 'QR-код товара',
-                message: 'Нажмите "Открыть картинку", чтобы сохранить и распечатать.',
-                buttons: [{ type: 'default', text: 'Открыть картинку', id: 'open' }]
-            }, (buttonId) => {
-                if (buttonId === 'open') {
-                    tg.openLink(window.location.origin + url);
-                }
-            });
+            if (tg.openLink) {
+                tg.openLink(window.location.origin + url);
+            } else {
+                window.open(window.location.origin + url, '_blank');
+            }
         }
 
         function scanSpotQr() {
-            if (!tg.showScanQrPopup) { tg.showAlert("Сканер недоступен"); return; }
+            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона через Telegram"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
                 if (text) {
                     document.getElementById("mv-spot").value = text.trim();
@@ -225,15 +234,15 @@
         async function doCheckout() {
             try {
                 await api(`/api/checkout?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" });
-                tg.showAlert("Выдано"); openItem(currentItem.code);
-            } catch (e) { tg.showAlert(e.message); }
+                notify("Выдано"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
         }
 
         async function doReturn() {
             try {
                 await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" });
-                tg.showAlert("Возвращено"); openItem(currentItem.code);
-            } catch (e) { tg.showAlert(e.message); }
+                notify("Возвращено"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
         }
 
         async function doMove() {
@@ -241,14 +250,14 @@
             const to = parseInt(document.getElementById("mv-to").value);
             const qty = parseInt(document.getElementById("mv-qty").value) || 0;
             const spot = document.getElementById("mv-spot").value.trim();
-            if (from === to) { tg.showAlert("Локации должны отличаться"); return; }
+            if (from === to) { notify("Локации должны отличаться"); return; }
             try {
                 await api("/api/move", {
                     method: "POST",
                     body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }),
                 });
-                tg.showAlert("Перемещено"); openItem(currentItem.code);
-            } catch (e) { tg.showAlert(e.message); }
+                notify("Перемещено"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
         }
 
         async function doWriteoff() {
@@ -259,8 +268,8 @@
                     method: "POST",
                     body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }),
                 });
-                tg.showAlert("Списано"); openItem(currentItem.code);
-            } catch (e) { tg.showAlert(e.message); }
+                notify("Списано"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
         }
 
         function showAddForm() { showScreen("screen-add"); }
@@ -273,31 +282,31 @@
             const loc = parseInt(document.getElementById("add-location").value);
             const qty = parseInt(document.getElementById("add-qty").value) || 0;
             const spot = document.getElementById("add-spot").value.trim();
-            if (!code || !name || !loc) { tg.showAlert("Заполните код, название и локацию"); return; }
+            if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
             try {
                 await api("/api/items", {
                     method: "POST",
                     body: JSON.stringify({ code, name, kind, location_id: loc, quantity: qty, spot }),
                 });
-                tg.showAlert("Добавлено");
+                notify("Добавлено");
                 ["add-code", "add-name", "add-spot"].forEach(id => document.getElementById(id).value = "");
                 document.getElementById("add-qty").value = "0";
                 backToMain();
-            } catch (e) { tg.showAlert(e.message); }
+            } catch (e) { notify(e.message); }
         }
 
         async function submitText() {
             const text = document.getElementById("csv-text").value;
-            if (!text.trim()) { tg.showAlert("Вставьте текст"); return; }
+            if (!text.trim()) { notify("Вставьте текст"); return; }
             try {
                 const res = await api("/api/import_text", {
                     method: "POST",
                     body: JSON.stringify({ text: text })
                 });
-                tg.showAlert(`Загружено товаров: ${res.added}`);
+                notify(`Загружено товаров: ${res.added}`);
                 document.getElementById("csv-text").value = "";
                 backToMain();
-            } catch (e) { tg.showAlert(e.message); }
+            } catch (e) { notify("Ошибка: " + e.message); }
         }
 
         async function showHistory() {
