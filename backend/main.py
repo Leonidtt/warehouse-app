@@ -12,6 +12,8 @@ from typing import Optional
 import qrcode
 import io
 import csv
+import httpx
+from PIL import Image, ImageDraw, ImageFont
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -46,8 +48,14 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         code TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
-        kind TEXT NOT NULL DEFAULT 'equipment'
+        kind TEXT NOT NULL DEFAULT 'equipment',
+        min_stock INTEGER DEFAULT 0
     )""")
+    try:
+        c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS stock (
         item_code TEXT NOT NULL,
         location_id INTEGER NOT NULL,
@@ -129,6 +137,7 @@ class ItemCreate(BaseModel):
     location_id: int
     quantity: int = 0
     spot: str = ""
+    min_stock: int = 0
 
 class MoveRequest(BaseModel):
     code: str
@@ -155,7 +164,7 @@ def list_locations():
 @app.get("/api/items")
 def list_items():
     conn = get_conn()
-    items = conn.execute("SELECT code, name, kind FROM items ORDER BY name").fetchall()
+    items = conn.execute("SELECT code, name, kind, min_stock FROM items ORDER BY name").fetchall()
     result = []
     for it in items:
         stocks = conn.execute(
@@ -168,9 +177,14 @@ def list_items():
                FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id
                WHERE c.item_code = ? AND c.returned_at IS NULL""", (it["code"],)
         ).fetchall()
+        
+        total = sum(s["quantity"] for s in stocks)
+        
         result.append({
             "code": it["code"], "name": it["name"], "kind": it["kind"],
-            "total": sum(s["quantity"] for s in stocks),
+            "min_stock": it["min_stock"],
+            "total": total,
+            "is_low": total <= it["min_stock"] and it["min_stock"] > 0,
             "stocks": [dict(s) for s in stocks],
             "holders": [dict(h) for h in holders],
         })
@@ -180,7 +194,7 @@ def list_items():
 @app.get("/api/items/{code}")
 def get_item(code: str):
     conn = get_conn()
-    item = conn.execute("SELECT code, name, kind FROM items WHERE code = ?", (code,)).fetchone()
+    item = conn.execute("SELECT code, name, kind, min_stock FROM items WHERE code = ?", (code,)).fetchone()
     if not item:
         conn.close(); raise HTTPException(status_code=404, detail="Товар не найден")
     stocks = conn.execute(
@@ -196,6 +210,7 @@ def get_item(code: str):
     conn.close()
     return {
         "code": item["code"], "name": item["name"], "kind": item["kind"],
+        "min_stock": item["min_stock"],
         "stocks": [dict(s) for s in stocks],
         "holders": [dict(h) for h in holders],
     }
@@ -205,8 +220,8 @@ def create_item(item: ItemCreate, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     conn = get_conn()
     try:
-        conn.execute("INSERT INTO items (code, name, kind) VALUES (?, ?, ?)",
-                     (item.code, item.name, item.kind))
+        conn.execute("INSERT INTO items (code, name, kind, min_stock) VALUES (?, ?, ?, ?)",
+                     (item.code, item.name, item.kind, item.min_stock))
     except sqlite3.IntegrityError:
         conn.close(); raise HTTPException(status_code=400, detail="Код уже существует")
     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
@@ -220,31 +235,35 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
     conn = get_conn()
     added = 0
     try:
-        reader = csv.DictReader(io.StringIO(req.text), delimiter=';')
-        for row in reader:
-            code = row.get("code", "").strip()
-            name = row.get("name", "").strip()
-            kind = row.get("kind", "equipment").strip()
-            loc_name = row.get("location", "Мастерская").strip()
-            qty = int(row.get("quantity", "0").strip() or 0)
-            spot = row.get("spot", "").strip()
+        lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
+        for line in lines[1:]:
+            parts = line.split(';')
+            if len(parts) < 5: continue
             
-            if not code or not name: 
-                continue
+            code = parts[0].strip()
+            name = parts[1].strip()
+            kind = parts[2].strip() if len(parts) > 2 else "equipment"
+            loc_name = parts[3].strip() if len(parts) > 3 else "Мастерская"
+            try: qty = int(parts[4].strip()) if len(parts) > 4 else 0
+            except: qty = 0
+            spot = parts[5].strip() if len(parts) > 5 else ""
+            try: min_stock = int(parts[6].strip()) if len(parts) > 6 else 0
+            except: min_stock = 0
+            
+            if not code or not name: continue
             
             loc = conn.execute("SELECT id FROM locations WHERE name = ?", (loc_name,)).fetchone()
             loc_id = loc["id"] if loc else 1
             
             try:
-                conn.execute("INSERT INTO items (code, name, kind) VALUES (?, ?, ?)", (code, name, kind))
+                conn.execute("INSERT INTO items (code, name, kind, min_stock) VALUES (?, ?, ?, ?)", (code, name, kind, min_stock))
                 conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)", (code, loc_id, qty, spot))
                 added += 1
             except sqlite3.IntegrityError:
                 pass
         conn.commit()
     except Exception as e:
-        conn.close()
-        raise HTTPException(status_code=400, detail=str(e))
+        conn.close(); raise HTTPException(status_code=400, detail=str(e))
     conn.close()
     return {"status": "ok", "added": added}
 
@@ -377,10 +396,61 @@ def get_history(limit: int = 50):
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
-    img = qrcode.make(code)
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
+    qr.add_data(code)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+    width, height = qr_img.size
+    new_height = height + 60
+    result_img = Image.new("RGB", (width, new_height), "white")
+    result_img.paste(qr_img, (0, 0))
+
+    draw = ImageDraw.Draw(result_img)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 36)
+    except IOError:
+        font = ImageFont.load_default()
+
+    text_bbox = draw.textbbox((0, 0), code, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    draw.text(((width - text_width) / 2, height + 10), code, fill="black", font=font)
+
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    result_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ПРОВЕРКИ ОСТАТКОВ И ОТПРАВКИ ВСЕМ ---
+@app.get("/api/check_low_stock")
+async def check_low_stock():
+    conn = get_conn()
+    # Получаем все товары, у которых задан минимальный остаток
+    items = conn.execute("SELECT code, name, min_stock FROM items WHERE min_stock > 0").fetchall()
+    low_items = []
+    
+    for it in items:
+        stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (it["code"],)).fetchall()
+        total = sum(s["quantity"] for s in stocks)
+        if total <= it["min_stock"]:
+            low_items.append(f"🔴 {it['name']} ({it['code']}) — осталось {total} шт. (минимум {it['min_stock']})")
+    
+    # Получаем всех пользователей, которые когда-либо заходили в приложение
+    users = conn.execute("SELECT tg_id FROM users").fetchall()
+    conn.close()
+    
+    # Если есть чего оповещать и есть кому оповещать
+    if low_items and users:
+        message = "⚠️ <b>Внимание! Заканчиваются расходники:</b>\n\n" + "\n".join(low_items)
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        
+        async with httpx.AsyncClient() as client:
+            for u in users:
+                try:
+                    await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
+                except Exception as e:
+                    print(f"Ошибка отправки для {u['tg_id']}: {e}")
+            
+    return {"status": "ok", "low_items_count": len(low_items), "sent_to": len(users)}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
