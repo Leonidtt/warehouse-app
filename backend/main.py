@@ -26,9 +26,17 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
+# ПУТЬ К ПОСТОЯННОМУ ДИСКУ
 DB_PATH = "/data/warehouse.db"
 
 def get_conn():
+    # Проверяем, существует ли папка /data, если нет - создаем (на всякий случай)
+    import os
+    if not os.path.exists("/data"):
+        try:
+            os.makedirs("/data")
+        except:
+            pass
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -58,8 +66,6 @@ def init_db():
         min_stock INTEGER DEFAULT 0,
         photo TEXT DEFAULT ''
     )""")
-    
-    # --- НОВЫЕ ТАБЛИЦЫ ---
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         item_code TEXT NOT NULL,
@@ -75,8 +81,7 @@ def init_db():
         text TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    # ---------------------
-
+    
     try:
         c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
         c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
@@ -324,7 +329,6 @@ def on_hand():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- НОВЫЕ ЭНДПОИНТЫ ДЛЯ БРОНИ И КОММЕНТАРИЕВ ---
 @app.get("/api/bookings/{code}")
 def get_bookings(code: str):
     conn = get_conn()
@@ -340,7 +344,6 @@ def get_bookings(code: str):
 def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    # Простая проверка на пересечение дат (если бронь на те же дни)
     existing = conn.execute(
         "SELECT id FROM bookings WHERE item_code = ? AND date_from <= ? AND date_to >= ?",
         (req.code, req.date_to, req.date_from)
@@ -384,7 +387,6 @@ def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None
     )
     conn.commit(); conn.close()
     return {"status": "ok"}
-# ------------------------------------------------
 
 @app.post("/api/items")
 async def create_item(
@@ -432,7 +434,6 @@ async def checkout(code: str, background_tasks: BackgroundTasks, x_init_data: Op
     if item["kind"] != "equipment":
         conn.close(); raise HTTPException(400, "Это расходник, используйте списание")
     
-    # Проверяем, нет ли активной брони на сегодня
     today = datetime.now().strftime("%Y-%m-%d")
     booking = conn.execute(
         "SELECT id FROM bookings WHERE item_code = ? AND date_from <= ? AND date_to >= ? AND user_id != ?",
@@ -497,37 +498,59 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         raise HTTPException(400, "Локации должны отличаться")
     if req.quantity <= 0:
         raise HTTPException(400, "Количество должно быть > 0")
+    
     conn = get_conn()
+    
+    # Проверяем, есть ли товар в источнике
     row = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (req.code, req.from_location)
     ).fetchone()
-    if not row or row["quantity"] < req.quantity:
-        conn.close(); raise HTTPException(400, "Недостаточно товара в источнике")
-    conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?",
-                 (req.quantity, req.code, req.from_location))
     
+    if not row or row["quantity"] < req.quantity:
+        conn.close()
+        raise HTTPException(400, f"Недостаточно товара. В источнике: {row['quantity'] if row else 0} шт.")
+    
+    # Уменьшаем в источнике
+    conn.execute(
+        "UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?",
+        (req.quantity, req.code, req.from_location)
+    )
+    
+    # Если указана полка, добавляем её в базу (если её там нет)
     if req.to_spot:
         try:
             conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
         except:
             pass
 
+    # Проверяем, есть ли уже запись в новой локации
     existing = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (req.code, req.to_location)
     ).fetchone()
+    
     if existing:
+        # Обновляем (и меняем полку, если указали)
         conn.execute(
             "UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?",
-            (req.quantity, req.to_spot, req.code, req.to_location))
+            (req.quantity, req.to_spot, req.code, req.to_location)
+        )
     else:
-        conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
-                     (req.code, req.to_location, req.quantity, req.to_spot))
+        # Создаем новую запись
+        conn.execute(
+            "INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
+            (req.code, req.to_location, req.quantity, req.to_spot)
+        )
+        
+    # Записываем в историю
     conn.execute(
         "INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-        (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["id"]))
-    conn.commit(); conn.close()
+        (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["id"])
+    )
+    
+    conn.commit()
+    conn.close()
     return {"status": "ok"}
 
 @app.post("/api/writeoff")
@@ -569,7 +592,6 @@ def get_history(limit: int = 50):
     conn.close()
     return [dict(r) for r in rows]
 
-# --- НОВЫЙ ЭНДПОИНТ ДЛЯ ЭКСПОРТА В EXCEL (CSV) ---
 @app.get("/api/export_history")
 def export_history(x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
@@ -604,7 +626,6 @@ def export_history(x_init_data: Optional[str] = Header(None)):
         media_type="text/csv", 
         headers={"Content-Disposition": "attachment; filename=warehouse_history.csv"}
     )
-# ------------------------------------------------
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
