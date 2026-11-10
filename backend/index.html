@@ -19,8 +19,11 @@
         .card .meta { color: #666; font-size: 14px; margin-top: 4px; }
         .card.low-stock { border: 2px solid #e74c3c; background: #fdf2f2; }
         .card img.thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; background: #eee; }
-        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; background: #fff; }
-        textarea { font-family: monospace; resize: vertical; }
+        
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+        .input-group input, .input-group select, .input-group textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; background: #fff; }
+        
         .hidden { display: none; }
         .stock-line, .holder-line { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid #eee; font-size: 14px; }
         .stock-line:first-child, .holder-line:first-child { border-top: none; }
@@ -30,7 +33,7 @@
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
-        .search-box { margin-bottom: 10px; }
+        .search-box { margin-bottom: 10px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 16px;}
     </style>
 </head>
 <body>
@@ -63,27 +66,59 @@
 
     <div id="screen-add" class="hidden">
         <h1>Новый товар</h1>
-        <input id="add-code" placeholder="Код (например, CAM-001)">
-        <input id="add-name" placeholder="Название">
-        <select id="add-kind">
-            <option value="equipment">Оборудование (выдаётся и возвращается)</option>
-            <option value="consumable">Расходник (списывается)</option>
-        </select>
-        <select id="add-location"></select>
-        <input id="add-qty" type="number" placeholder="Количество" value="0">
-        <input id="add-spot" placeholder="Место (полка/ячейка)">
-        <input id="add-min-stock" type="number" placeholder="Мин. остаток (для оповещения)" value="0">
-        <div style="margin-bottom:10px;">
-            <label style="font-size:14px; color:#555;">Фотография (необязательно):</label>
+        
+        <div class="input-group">
+            <label>Код товара</label>
+            <input id="add-code" placeholder="Например, ITEM-1">
+        </div>
+        
+        <div class="input-group">
+            <label>Название</label>
+            <input id="add-name" placeholder="Например, Фотоаппарат Sony">
+        </div>
+
+        <div class="input-group">
+            <label>Тип</label>
+            <select id="add-kind">
+                <option value="equipment">Оборудование (выдаётся и возвращается)</option>
+                <option value="consumable">Расходник (списывается)</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label>Локация</label>
+            <select id="add-location"></select>
+        </div>
+
+        <div class="input-group">
+            <label>Место / Полка / Ячейка</label>
+            <select id="add-spot">
+                <option value="">Без места</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label>Количество при добавлении</label>
+            <input id="add-qty" type="number" placeholder="0" value="0">
+        </div>
+
+        <div class="input-group">
+            <label>Минимальное значение (для оповещения)</label>
+            <input id="add-min-stock" type="number" placeholder="Например, 5" value="0">
+        </div>
+
+        <div class="input-group">
+            <label>Фотография (необязательно)</label>
             <input type="file" id="add-photo" accept="image/*">
         </div>
+
         <button onclick="saveItem()">Сохранить</button>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-import" class="hidden">
         <h1>Импорт данных</h1>
-        <div class="card">
+        <div class="card" style="display:block;">
             <p>Скопируйте текст и вставьте в поле.</p>
             <p style="font-size:12px; color:#666;">Формат:<br><code>code;name;kind;location;quantity;spot;min_stock</code></p>
         </div>
@@ -94,8 +129,11 @@
 
     <div id="screen-spot-qr" class="hidden">
         <h1>QR для полок</h1>
+        <div class="card" style="display:block;">
+            <p>Введите название полки. Оно сохранится в базе, и потом вы сможете выбрать его при добавлении товара.</p>
+        </div>
         <input id="spot-name" placeholder="Название полки (например, Т1)">
-        <button onclick="generateSpotQr()">Сгенерировать QR</button>
+        <button onclick="generateSpotQr()">Сгенерировать и сохранить</button>
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
@@ -117,6 +155,7 @@
         let currentItem = null;
         let locations = [];
         let allItems = [];
+        let spots = [];
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
@@ -137,6 +176,12 @@
             locations = await api("/api/locations");
             const opts = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
             document.getElementById("add-location").innerHTML = opts;
+        }
+
+        async function loadSpots() {
+            spots = await api("/api/spots");
+            const opts = spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
+            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + opts;
         }
 
         async function loadItems() {
@@ -266,7 +311,10 @@
                     <select id="mv-from">${stockOpts}</select>
                     <select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select>
                     <input id="mv-qty" type="number" value="1" placeholder="Количество">
-                    <input id="mv-spot" placeholder="Место на новом (необязательно)">
+                    <select id="mv-spot">
+                        <option value="">Без места</option>
+                        ${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}
+                    </select>
                     <button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button>
                     <button class="secondary" onclick="doMove()">📦 Переместить</button>`;
             }
@@ -294,7 +342,10 @@
         function scanSpotQr() {
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
-                if (text) { document.getElementById("mv-spot").value = text.trim(); return true; }
+                if (text) { 
+                    document.getElementById("mv-spot").value = text.trim(); 
+                    return true; 
+                }
             });
         }
 
@@ -304,10 +355,21 @@
             showScreen("screen-spot-qr");
         }
 
-        function generateSpotQr() {
+        async function generateSpotQr() {
             const spot = document.getElementById("spot-name").value.trim();
             if (!spot) { notify("Введите название полки"); return; }
             
+            // Сначала сохраняем полку в базу
+            try {
+                await api("/api/spots", {
+                    method: "POST",
+                    body: JSON.stringify({ name: spot })
+                });
+                await loadSpots(); // Обновляем список полок
+            } catch (e) {
+                // Если полка уже есть, это не ошибка, просто идем дальше
+            }
+
             const url = `/api/qr/${encodeURIComponent(spot)}`;
             document.getElementById("spot-qr-result").innerHTML = `
                 <div style="text-align:center; margin-top:10px;">
@@ -317,6 +379,7 @@
                     <div class="label">Текст для создания QR в другом приложении:</div>
                     <div class="value">${spot}</div>
                 </div>
+                <p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка добавлена в список!</p>
             `;
         }
 
@@ -338,7 +401,7 @@
             const from = parseInt(document.getElementById("mv-from").value);
             const to = parseInt(document.getElementById("mv-to").value);
             const qty = parseInt(document.getElementById("mv-qty").value) || 0;
-            const spot = document.getElementById("mv-spot").value.trim();
+            const spot = document.getElementById("mv-spot").value;
             if (from === to) { notify("Локации должны отличаться"); return; }
             try {
                 await api("/api/move", {
@@ -361,7 +424,16 @@
             } catch (e) { notify(e.message); }
         }
 
-        function showAddForm() { showScreen("screen-add"); }
+        async function showAddForm() {
+            // Запрашиваем следующий код
+            try {
+                const res = await api("/api/next_code");
+                document.getElementById("add-code").value = res.code;
+            } catch (e) {
+                document.getElementById("add-code").value = "ITEM-1";
+            }
+            showScreen("screen-add");
+        }
         function showImportForm() { showScreen("screen-import"); }
 
         async function saveItem() {
@@ -370,7 +442,7 @@
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
             const qty = parseInt(document.getElementById("add-qty").value) || 0;
-            const spot = document.getElementById("add-spot").value.trim();
+            const spot = document.getElementById("add-spot").value;
             const minStock = parseInt(document.getElementById("add-min-stock").value) || 0;
             const photoFile = document.getElementById("add-photo").files[0];
 
@@ -389,7 +461,7 @@
             try {
                 await api("/api/items", { method: "POST", body: formData });
                 notify("Добавлено");
-                ["add-code", "add-name", "add-spot", "add-photo"].forEach(id => document.getElementById(id).value = "");
+                ["add-code", "add-name", "add-photo"].forEach(id => document.getElementById(id).value = "");
                 document.getElementById("add-qty").value = "0";
                 document.getElementById("add-min-stock").value = "0";
                 backToMain();
@@ -436,7 +508,11 @@
         }
         function backToMain() { showScreen("screen-main"); loadItems(); }
 
-        (async () => { await loadLocations(); await loadItems(); })();
+        (async () => { 
+            await loadLocations(); 
+            await loadSpots();
+            await loadItems(); 
+        })();
     </script>
 </body>
 </html>
