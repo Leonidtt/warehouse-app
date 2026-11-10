@@ -45,6 +45,11 @@ def init_db():
         first_name TEXT,
         username TEXT
     )""")
+    # Новая таблица для полок/мест
+    c.execute("""CREATE TABLE IF NOT EXISTS spots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL
+    )""")
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         code TEXT UNIQUE NOT NULL,
@@ -180,12 +185,52 @@ class WriteoffRequest(BaseModel):
 class ImportTextRequest(BaseModel):
     text: str
 
+class SpotCreate(BaseModel):
+    name: str
+
 @app.get("/api/locations")
 def list_locations():
     conn = get_conn()
     rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ПОЛКАМИ ---
+@app.get("/api/spots")
+def list_spots():
+    conn = get_conn()
+    rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/spots")
+def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    conn = get_conn()
+    try:
+        conn.execute("INSERT INTO spots (name) VALUES (?)", (spot.name.strip(),))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Такая полка уже есть")
+    conn.close()
+    return {"status": "ok"}
+
+@app.get("/api/next_code")
+def get_next_code():
+    conn = get_conn()
+    # Ищем максимальный номер кода вида ITEM-X
+    rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
+    max_num = 0
+    for r in rows:
+        try:
+            num = int(r["code"].split("-")[1])
+            if num > max_num: max_num = num
+        except:
+            pass
+    conn.close()
+    return {"code": f"ITEM-{max_num + 1}"}
+# -------------------------------------------
 
 @app.get("/api/items")
 def list_items():
@@ -280,6 +325,13 @@ async def create_item(
     except sqlite3.IntegrityError:
         conn.close(); raise HTTPException(status_code=400, detail="Код уже существует")
     
+    # Если полки нет в таблице spots, добавляем её
+    if spot:
+        try:
+            conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (spot,))
+        except:
+            pass
+
     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
                  (code, location_id, quantity, spot))
     conn.commit(); conn.close()
@@ -358,6 +410,13 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         conn.close(); raise HTTPException(400, "Недостаточно товара в источнике")
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?",
                  (req.quantity, req.code, req.from_location))
+    
+    if req.to_spot:
+        try:
+            conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
+        except:
+            pass
+
     existing = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (req.code, req.to_location)
