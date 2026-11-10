@@ -12,7 +12,7 @@ from typing import Optional
 import qrcode
 import io
 
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER (вместо 123456789:AAH...)
+# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 
 app = FastAPI()
@@ -315,6 +315,27 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
                  (req.code, req.quantity, req.location_id, user["id"]))
     conn.commit(); conn.close()
     return {"status": "ok"}
+
+@app.get("/api/history")
+def get_history(limit: int = 50):
+    conn = get_conn()
+    query = """
+    SELECT 'checkout' as type, c.taken_at as date, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, '') as user_name, 1 as quantity, NULL as from_loc, NULL as to_loc
+    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id
+    UNION ALL
+    SELECT 'return', c.returned_at, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), 1, NULL, NULL
+    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NOT NULL
+    UNION ALL
+    SELECT 'move', m.created_at, m.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), m.quantity, l1.name, l2.name
+    FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id LEFT JOIN locations l1 ON l1.id = m.from_location LEFT JOIN locations l2 ON l2.id = m.to_location
+    UNION ALL
+    SELECT 'writeoff', w.created_at, w.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), w.quantity, l.name, NULL
+    FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id LEFT JOIN locations l ON l.id = w.location_id
+    ORDER BY date DESC LIMIT ?
+    """
+    rows = conn.execute(query, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
