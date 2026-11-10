@@ -15,6 +15,7 @@ import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 import base64
+from datetime import datetime
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -45,7 +46,6 @@ def init_db():
         first_name TEXT,
         username TEXT
     )""")
-    # Новая таблица для полок/мест
     c.execute("""CREATE TABLE IF NOT EXISTS spots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL
@@ -58,6 +58,25 @@ def init_db():
         min_stock INTEGER DEFAULT 0,
         photo TEXT DEFAULT ''
     )""")
+    
+    # --- НОВЫЕ ТАБЛИЦЫ ---
+    c.execute("""CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_code TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        date_from TEXT NOT NULL,
+        date_to TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_code TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # ---------------------
+
     try:
         c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
         c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
@@ -188,6 +207,15 @@ class ImportTextRequest(BaseModel):
 class SpotCreate(BaseModel):
     name: str
 
+class BookingRequest(BaseModel):
+    code: str
+    date_from: str
+    date_to: str
+
+class CommentRequest(BaseModel):
+    code: str
+    text: str
+
 @app.get("/api/locations")
 def list_locations():
     conn = get_conn()
@@ -195,7 +223,6 @@ def list_locations():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ПОЛКАМИ ---
 @app.get("/api/spots")
 def list_spots():
     conn = get_conn()
@@ -219,7 +246,6 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/next_code")
 def get_next_code():
     conn = get_conn()
-    # Ищем максимальный номер кода вида ITEM-X
     rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
     max_num = 0
     for r in rows:
@@ -230,7 +256,6 @@ def get_next_code():
             pass
     conn.close()
     return {"code": f"ITEM-{max_num + 1}"}
-# -------------------------------------------
 
 @app.get("/api/items")
 def list_items():
@@ -299,6 +324,68 @@ def on_hand():
     conn.close()
     return [dict(r) for r in rows]
 
+# --- НОВЫЕ ЭНДПОИНТЫ ДЛЯ БРОНИ И КОММЕНТАРИЕВ ---
+@app.get("/api/bookings/{code}")
+def get_bookings(code: str):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT b.id, b.user_id, u.first_name, u.username, b.date_from, b.date_to
+        FROM bookings b LEFT JOIN users u ON u.tg_id = b.user_id
+        WHERE b.item_code = ? ORDER BY b.date_from
+    """, (code,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/bookings")
+def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    # Простая проверка на пересечение дат (если бронь на те же дни)
+    existing = conn.execute(
+        "SELECT id FROM bookings WHERE item_code = ? AND date_from <= ? AND date_to >= ?",
+        (req.code, req.date_to, req.date_from)
+    ).fetchone()
+    if existing:
+        conn.close(); raise HTTPException(400, "На эти даты уже есть бронь")
+    
+    conn.execute(
+        "INSERT INTO bookings (item_code, user_id, date_from, date_to) VALUES (?, ?, ?, ?)",
+        (req.code, user["id"], req.date_from, req.date_to)
+    )
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
+@app.delete("/api/bookings/{booking_id}")
+def delete_booking(booking_id: int, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    conn.execute("DELETE FROM bookings WHERE id = ? AND user_id = ?", (booking_id, user["id"]))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
+@app.get("/api/comments/{code}")
+def get_comments(code: str):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT c.id, c.text, c.created_at, u.first_name, u.username
+        FROM comments c LEFT JOIN users u ON u.tg_id = c.user_id
+        WHERE c.item_code = ? ORDER BY c.created_at DESC
+    """, (code,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/comments")
+def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO comments (item_code, user_id, text) VALUES (?, ?, ?)",
+        (req.code, user["id"], req.text)
+    )
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+# ------------------------------------------------
+
 @app.post("/api/items")
 async def create_item(
     code: str = Form(...),
@@ -325,7 +412,6 @@ async def create_item(
     except sqlite3.IntegrityError:
         conn.close(); raise HTTPException(status_code=400, detail="Код уже существует")
     
-    # Если полки нет в таблице spots, добавляем её
     if spot:
         try:
             conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (spot,))
@@ -345,6 +431,16 @@ async def checkout(code: str, background_tasks: BackgroundTasks, x_init_data: Op
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     if item["kind"] != "equipment":
         conn.close(); raise HTTPException(400, "Это расходник, используйте списание")
+    
+    # Проверяем, нет ли активной брони на сегодня
+    today = datetime.now().strftime("%Y-%m-%d")
+    booking = conn.execute(
+        "SELECT id FROM bookings WHERE item_code = ? AND date_from <= ? AND date_to >= ? AND user_id != ?",
+        (code, today, today, user["id"])
+    ).fetchone()
+    if booking:
+        conn.close(); raise HTTPException(400, "Вещь забронирована другим сотрудником на сегодня")
+
     existing = conn.execute(
         "SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)
     ).fetchone()
@@ -472,6 +568,43 @@ def get_history(limit: int = 50):
     rows = conn.execute(query, (limit,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+# --- НОВЫЙ ЭНДПОИНТ ДЛЯ ЭКСПОРТА В EXCEL (CSV) ---
+@app.get("/api/export_history")
+def export_history(x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    conn = get_conn()
+    query = """
+    SELECT 'Выдача' as type, c.taken_at as date, c.item_code as code, i.name, u.first_name || ' ' || COALESCE(u.username, '') as user_name, 1 as quantity, '' as from_loc, '' as to_loc
+    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id
+    UNION ALL
+    SELECT 'Возврат', c.returned_at, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), 1, '', ''
+    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NOT NULL
+    UNION ALL
+    SELECT 'Перемещение', m.created_at, m.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), m.quantity, l1.name, l2.name
+    FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id LEFT JOIN locations l1 ON l1.id = m.from_location LEFT JOIN locations l2 ON l2.id = m.to_location
+    UNION ALL
+    SELECT 'Списание', w.created_at, w.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), w.quantity, l.name, ''
+    FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id LEFT JOIN locations l ON l.id = w.location_id
+    ORDER BY date DESC
+    """
+    rows = conn.execute(query).fetchall()
+    conn.close()
+    
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow(["Действие", "Дата и время", "Код", "Название", "Сотрудник", "Кол-во", "Откуда", "Куда"])
+    
+    for r in rows:
+        writer.writerow([r["type"], r["date"], r["code"], r["name"], r["user_name"], r["quantity"], r["from_loc"], r["to_loc"]])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]), 
+        media_type="text/csv", 
+        headers={"Content-Disposition": "attachment; filename=warehouse_history.csv"}
+    )
+# ------------------------------------------------
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
