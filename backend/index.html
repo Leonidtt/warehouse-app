@@ -13,9 +13,12 @@
         button.secondary { background: #fff; color: #333; border: 1px solid #ddd; }
         button.danger { background: #e74c3c; }
         button.ok { background: #27ae60; }
-        .card { background: #fff; padding: 14px; border-radius: 10px; margin-bottom: 10px; }
+        .card { background: #fff; padding: 14px; border-radius: 10px; margin-bottom: 10px; display: flex; gap: 10px; }
+        .card .info { flex: 1; }
         .card .name { font-weight: 600; }
         .card .meta { color: #666; font-size: 14px; margin-top: 4px; }
+        .card.low-stock { border: 2px solid #e74c3c; background: #fdf2f2; }
+        .card img.thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; background: #eee; }
         input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; background: #fff; }
         textarea { font-family: monospace; resize: vertical; }
         .hidden { display: none; }
@@ -24,18 +27,19 @@
         .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; background: #eee; color: #555; }
         .badge.eq { background: #e3f2fd; color: #1565c0; }
         .badge.cons { background: #fff3e0; color: #e65100; }
-        
-        /* Стили для текста QR */
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
+        .search-box { margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div id="screen-main">
         <h1>Учёт</h1>
+        <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         <button onclick="scanQr()">📷 Сканировать QR</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+        <button class="secondary" onclick="showOnHand()">🖐 Что на руках?</button>
         <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
         <button class="secondary" onclick="showSpotQrForm()">🔲 QR-коды для полок</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
@@ -43,10 +47,16 @@
         <div id="items-list"></div>
     </div>
 
+    <div id="screen-on-hand" class="hidden">
+        <h1>На руках</h1>
+        <div id="on-hand-list"></div>
+        <button class="secondary" onclick="backToMain()">← Назад</button>
+    </div>
+
     <div id="screen-item" class="hidden">
         <h1 id="item-title">Товар</h1>
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
-        <div class="card" id="item-card"></div>
+        <div class="card" id="item-card" style="display:block;"></div>
         <div id="actions"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
@@ -62,6 +72,11 @@
         <select id="add-location"></select>
         <input id="add-qty" type="number" placeholder="Количество" value="0">
         <input id="add-spot" placeholder="Место (полка/ячейка)">
+        <input id="add-min-stock" type="number" placeholder="Мин. остаток (для оповещения)" value="0">
+        <div style="margin-bottom:10px;">
+            <label style="font-size:14px; color:#555;">Фотография (необязательно):</label>
+            <input type="file" id="add-photo" accept="image/*">
+        </div>
         <button onclick="saveItem()">Сохранить</button>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
@@ -69,20 +84,17 @@
     <div id="screen-import" class="hidden">
         <h1>Импорт данных</h1>
         <div class="card">
-            <p>Скопируйте текст из чата и вставьте его в поле ниже.</p>
-            <p style="font-size:12px; color:#666;">Формат (разделитель — точка с запятой):<br><code>code;name;kind;location;quantity;spot</code></p>
+            <p>Скопируйте текст и вставьте в поле.</p>
+            <p style="font-size:12px; color:#666;">Формат:<br><code>code;name;kind;location;quantity;spot;min_stock</code></p>
         </div>
-        <textarea id="csv-text" rows="10" placeholder="code;name;kind;location;quantity;spot&#10;CAM-01;Фотоаппарат;equipment;Мастерская;1;Полка 1"></textarea>
+        <textarea id="csv-text" rows="10" placeholder="BAT-01;Батарейки;consumable;Склад;50;Ящик 1;10"></textarea>
         <button onclick="submitText()">Загрузить</button>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-spot-qr" class="hidden">
         <h1>QR для полок</h1>
-        <div class="card">
-            <p>Введите название полки (места). Сгенерируйте и распечатайте QR-код. При перемещении товара сотрудник сможет его отсканировать.</p>
-        </div>
-        <input id="spot-name" placeholder="Название полки (например, Т1 или Полка 3)">
+        <input id="spot-name" placeholder="Название полки (например, Т1)">
         <button onclick="generateSpotQr()">Сгенерировать QR</button>
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
@@ -96,8 +108,7 @@
 
     <script>
         const tg = window.Telegram?.WebApp || {
-            ready: () => {}, expand: () => {},
-            showAlert: (msg) => alert(msg),
+            ready: () => {}, expand: () => {}, showAlert: (msg) => alert(msg),
             showPopup: (opts, cb) => { if(confirm(opts.message)) cb('open'); },
             initData: "", initDataUnsafe: {}, openLink: (url) => window.open(url, '_blank')
         };
@@ -105,15 +116,14 @@
 
         let currentItem = null;
         let locations = [];
+        let allItems = [];
 
-        function notify(msg) {
-            if (tg.showAlert) tg.showAlert(msg); else alert(msg);
-        }
+        function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
         async function api(path, options = {}) {
             const res = await fetch(path, {
                 headers: {
-                    "Content-Type": "application/json",
+                    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
                     "X-Init-Data": tg.initData || "",
                 },
                 ...options,
@@ -133,25 +143,57 @@
             const list = document.getElementById("items-list");
             list.innerHTML = "<p>Загрузка...</p>";
             try {
-                const items = await api("/api/items");
-                if (!items.length) { list.innerHTML = "<p>Пока пусто</p>"; return; }
-                list.innerHTML = items.map(i => `
-                    <div class="card" onclick="openItem('${i.code}')">
+                allItems = await api("/api/items");
+                filterItems();
+            } catch (e) {
+                list.innerHTML = `<p style="color:red">${e.message}</p>`;
+            }
+        }
+
+        function filterItems() {
+            const query = document.getElementById("search-input").value.toLowerCase();
+            const list = document.getElementById("items-list");
+            
+            const filtered = allItems.filter(i => 
+                i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query)
+            );
+
+            if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
+            
+            list.innerHTML = filtered.map(i => `
+                <div class="card ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
+                    ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
+                    <div class="info">
                         <div class="name">${i.name}
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">
                                 ${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}
                             </span>
+                            ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ''}
                         </div>
-                        <div class="meta">${i.code} · всего: ${i.total} шт</div>
-                        ${i.stocks.map(s =>
-                            `<div class="meta">${s.location_name}: ${s.quantity} шт ${s.spot ? "(" + s.spot + ")" : ""}</div>`
-                        ).join("")}
+                        <div class="meta">${i.code} · всего: ${i.total} шт (мин: ${i.min_stock})</div>
                         ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username || h.user_id).join(", ")}</div>` : ""}
                     </div>
+                </div>
+            `).join("");
+        }
+
+        async function showOnHand() {
+            showScreen("screen-on-hand");
+            const list = document.getElementById("on-hand-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const rows = await api("/api/on_hand");
+                if (!rows.length) { list.innerHTML = "<p>Все вещи на месте!</p>"; return; }
+                list.innerHTML = rows.map(r => `
+                    <div class="card" onclick="openItem('${r.item_code}')">
+                        <div class="info">
+                            <div class="name">${r.name} (${r.item_code})</div>
+                            <div class="meta" style="color:#e67e22">У ${r.first_name || r.username || r.user_id}</div>
+                            <div class="meta">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div>
+                        </div>
+                    </div>
                 `).join("");
-            } catch (e) {
-                list.innerHTML = `<p style="color:red">${e.message}</p>`;
-            }
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         function scanQr() {
@@ -165,9 +207,15 @@
             try {
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
+                
+                let photoHtml = currentItem.photo ? 
+                    `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
+
                 document.getElementById("item-card").innerHTML = `
+                    ${photoHtml}
                     <div class="meta">Код: ${currentItem.code}</div>
                     <div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>
+                    <div class="meta">Мин. остаток: ${currentItem.min_stock}</div>
                     ${currentItem.stocks.map(s => `
                         <div class="stock-line">
                             <span>${s.location_name}${s.spot ? " · " + s.spot : ""}</span>
@@ -200,7 +248,7 @@
                     const hasStock = currentItem.stocks.some(s => s.quantity > 0);
                     if (hasStock) html += `<button onclick="doCheckout()">📤 Взять</button>`;
                 } else {
-                    html += `<div class="card" style="color:#e67e22">Вещь у другого сотрудника</div>`;
+                    html += `<div class="card" style="color:#e67e22; display:block;">Вещь у другого сотрудника</div>`;
                 }
             } else {
                 html += `<h2>Списать</h2>
@@ -238,19 +286,15 @@
                 </div>
                 <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">Нажмите на картинку, чтобы открыть и распечатать</p>
             `;
+            document.getElementById("actions").innerHTML = "";
         }
 
-        function openQrLink(url) {
-            if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
-        }
+        function openQrLink(url) { if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank'); }
 
         function scanSpotQr() {
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
-                if (text) {
-                    document.getElementById("mv-spot").value = text.trim();
-                    return true;
-                }
+                if (text) { document.getElementById("mv-spot").value = text.trim(); return true; }
             });
         }
 
@@ -273,7 +317,6 @@
                     <div class="label">Текст для создания QR в другом приложении:</div>
                     <div class="value">${spot}</div>
                 </div>
-                <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">Нажмите на картинку, чтобы открыть и распечатать</p>
             `;
         }
 
@@ -328,15 +371,27 @@
             const loc = parseInt(document.getElementById("add-location").value);
             const qty = parseInt(document.getElementById("add-qty").value) || 0;
             const spot = document.getElementById("add-spot").value.trim();
+            const minStock = parseInt(document.getElementById("add-min-stock").value) || 0;
+            const photoFile = document.getElementById("add-photo").files[0];
+
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
+
+            const formData = new FormData();
+            formData.append("code", code);
+            formData.append("name", name);
+            formData.append("kind", kind);
+            formData.append("location_id", loc);
+            formData.append("quantity", qty);
+            formData.append("spot", spot);
+            formData.append("min_stock", minStock);
+            if (photoFile) formData.append("photo", photoFile);
+
             try {
-                await api("/api/items", {
-                    method: "POST",
-                    body: JSON.stringify({ code, name, kind, location_id: loc, quantity: qty, spot }),
-                });
+                await api("/api/items", { method: "POST", body: formData });
                 notify("Добавлено");
-                ["add-code", "add-name", "add-spot"].forEach(id => document.getElementById(id).value = "");
+                ["add-code", "add-name", "add-spot", "add-photo"].forEach(id => document.getElementById(id).value = "");
                 document.getElementById("add-qty").value = "0";
+                document.getElementById("add-min-stock").value = "0";
                 backToMain();
             } catch (e) { notify(e.message); }
         }
@@ -369,13 +424,13 @@
                     if (l.type === 'move') text = `📦 ${l.user_name} переместил ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'} в ${l.to_loc || '—'}`;
                     if (l.type === 'writeoff') text = `📉 ${l.user_name} списал ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
                     const dateStr = new Date(l.date + 'Z').toLocaleString('ru-RU');
-                    return `<div class="card"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
+                    return `<div class="card" style="display:block;"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
                 }).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         function showScreen(id) {
-            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history"].forEach(s => {
+            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
