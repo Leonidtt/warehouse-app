@@ -26,6 +26,7 @@
     </style>
 </head>
 <body>
+    <!-- Экран 1: Главная -->
     <div id="screen-main">
         <h1>Учёт</h1>
         <button onclick="scanQr()">📷 Сканировать QR</button>
@@ -34,18 +35,23 @@
         <div id="items-list"></div>
     </div>
 
+    <!-- Экран 2: Карточка товара -->
     <div id="screen-item" class="hidden">
         <h1 id="item-title">Товар</h1>
-        <div id="qr-container" style="display: none; text-align: center; margin-bottom: 15px;">
-    <img id="qr-img" style="max-width: 100%; border-radius: 10px;" />
-    <p style="font-size: 12px; color: #666; margin-top: 5px;">Нажмите на картинку, чтобы сохранить</p>
-</div>
-        <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
+        
+        <!-- Блок для QR-кода -->
+        <div id="qr-container" style="display: none; text-align: center; margin-bottom: 15px; background: white; padding: 10px; border-radius: 10px;">
+            <img id="qr-img" style="max-width: 100%; border-radius: 10px;" />
+            <p style="font-size: 12px; color: #666; margin-top: 5px;">Нажмите на картинку, чтобы сохранить</p>
+        </div>
+
+        <button class="secondary" onclick="showQr()" style="margin-bottom: 10px;">🔲 Показать QR-код</button>
         <div class="card" id="item-card"></div>
         <div id="actions"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
+    <!-- Экран 3: Добавление -->
     <div id="screen-add" class="hidden">
         <h1>Новый товар</h1>
         <input id="add-code" placeholder="Код (например, CAM-001)">
@@ -138,9 +144,19 @@
                         </div>
                     `).join("")}
                 `;
+                // Скрываем QR при открытии нового товара
+                document.getElementById("qr-container").style.display = "none";
+                
                 renderActions();
                 showScreen("screen-item");
             } catch (e) { tg.showAlert(e.message); }
+        }
+
+        function showQr() {
+            const container = document.getElementById("qr-container");
+            const img = document.getElementById("qr-img");
+            img.src = `/api/qr/${currentItem.code}`;
+            container.style.display = "block";
         }
 
         function renderActions() {
@@ -167,16 +183,7 @@
                     </select>
                     <input id="wo-qty" type="number" value="1" placeholder="Количество">
                     <button class="danger" onclick="doWriteoff()">📉 Списать</button>`;
-          function showQr() {
-    const container = document.getElementById("qr-container");
-    const img = document.getElementById("qr-img");
-    // Подставляем ссылку на картинку
-    img.src = `/api/qr/${currentItem.code}`;
-    // Показываем картинку
-    container.style.display = "block";
-}
-    });
-}}
+            }
 
             const stockOpts = currentItem.stocks.filter(s => s.quantity > 0)
                 .map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
@@ -255,11 +262,17 @@
         }
 
         function showScreen(id) {
+            // Обязательно добавляем screen-qr в список, чтобы он скрывался
             ["screen-main", "screen-item", "screen-add"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
-        function backToMain() { showScreen("screen-main"); loadItems(); }
+        
+        function backToMain() { 
+            document.getElementById("qr-container").style.display = "none"; // Прячем QR при выходе
+            showScreen("screen-main"); 
+            loadItems(); 
+        }
 
         (async () => { await loadLocations(); await loadItems(); })();
     </script>
