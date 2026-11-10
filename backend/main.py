@@ -3,7 +3,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import Optional
 import qrcode
 import io
+import csv
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -209,6 +210,41 @@ def create_item(item: ItemCreate, x_init_data: Optional[str] = Header(None)):
                  (item.code, item.location_id, item.quantity, item.spot))
     conn.commit(); conn.close()
     return {"status": "ok"}
+
+@app.post("/api/import")
+async def import_csv(file: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    conn = get_conn()
+    try:
+        contents = await file.read()
+        text = contents.decode("utf-8-sig")
+        reader = csv.DictReader(text.splitlines(), delimiter=';')
+        added = 0
+        for row in reader:
+            code = row.get("code", "").strip()
+            name = row.get("name", "").strip()
+            kind = row.get("kind", "equipment").strip()
+            loc_name = row.get("location", "Мастерская").strip()
+            qty = int(row.get("quantity", "0").strip() or 0)
+            spot = row.get("spot", "").strip()
+            
+            if not code or not name: continue
+            
+            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (loc_name,)).fetchone()
+            loc_id = loc["id"] if loc else 1
+            
+            try:
+                conn.execute("INSERT INTO items (code, name, kind) VALUES (?, ?, ?)", (code, name, kind))
+                conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)", (code, loc_id, qty, spot))
+                added += 1
+            except sqlite3.IntegrityError:
+                pass # Пропускаем, если код уже есть
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=str(e))
+    conn.close()
+    return {"status": "ok", "added": added}
 
 @app.post("/api/checkout")
 def checkout(code: str, x_init_data: Optional[str] = Header(None)):
