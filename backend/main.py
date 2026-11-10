@@ -3,7 +3,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -142,6 +142,9 @@ class WriteoffRequest(BaseModel):
     location_id: int
     quantity: int
 
+class ImportTextRequest(BaseModel):
+    text: str
+
 @app.get("/api/locations")
 def list_locations():
     conn = get_conn()
@@ -211,15 +214,13 @@ def create_item(item: ItemCreate, x_init_data: Optional[str] = Header(None)):
     conn.commit(); conn.close()
     return {"status": "ok"}
 
-@app.post("/api/import")
-async def import_csv(file: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
+@app.post("/api/import_text")
+def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     conn = get_conn()
+    added = 0
     try:
-        contents = await file.read()
-        text = contents.decode("utf-8-sig")
-        reader = csv.DictReader(text.splitlines(), delimiter=';')
-        added = 0
+        reader = csv.DictReader(io.StringIO(req.text), delimiter=';')
         for row in reader:
             code = row.get("code", "").strip()
             name = row.get("name", "").strip()
@@ -228,7 +229,8 @@ async def import_csv(file: UploadFile = File(...), x_init_data: Optional[str] = 
             qty = int(row.get("quantity", "0").strip() or 0)
             spot = row.get("spot", "").strip()
             
-            if not code or not name: continue
+            if not code or not name: 
+                continue
             
             loc = conn.execute("SELECT id FROM locations WHERE name = ?", (loc_name,)).fetchone()
             loc_id = loc["id"] if loc else 1
@@ -238,7 +240,7 @@ async def import_csv(file: UploadFile = File(...), x_init_data: Optional[str] = 
                 conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)", (code, loc_id, qty, spot))
                 added += 1
             except sqlite3.IntegrityError:
-                pass # Пропускаем, если код уже есть
+                pass
         conn.commit()
     except Exception as e:
         conn.close()
