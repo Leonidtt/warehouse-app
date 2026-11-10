@@ -34,6 +34,12 @@
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
         .search-box { margin-bottom: 10px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 16px;}
+        
+        .comment-box { background: #f9f9f9; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #2AABEE; }
+        .comment-author { font-size: 12px; font-weight: bold; color: #555; }
+        .comment-date { font-size: 11px; color: #999; margin-left: 5px; }
+        .comment-text { font-size: 14px; margin-top: 4px; }
+        .booking-item { background: #fff3e0; padding: 10px; border-radius: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
@@ -59,9 +65,31 @@
     <div id="screen-item" class="hidden">
         <h1 id="item-title">Товар</h1>
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
+        
         <div class="card" id="item-card" style="display:block;"></div>
+        
         <div id="actions"></div>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
+        
+        <h2>Бронирование</h2>
+        <div id="bookings-list"></div>
+        <div class="input-group">
+            <label>Забронировать с</label>
+            <input type="date" id="book-from">
+        </div>
+        <div class="input-group">
+            <label>По</label>
+            <input type="date" id="book-to">
+        </div>
+        <button class="secondary" onclick="doBook()">Забронировать</button>
+
+        <h2>Комментарии</h2>
+        <div id="comments-list"></div>
+        <div class="input-group">
+            <input id="comment-text" placeholder="Написать комментарий...">
+        </div>
+        <button class="secondary" onclick="doComment()">Отправить</button>
+
+        <button class="secondary" onclick="backToMain()" style="margin-top:20px;">← Назад</button>
     </div>
 
     <div id="screen-add" class="hidden">
@@ -129,7 +157,6 @@
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
-    <!-- ОБНОВЛЕННЫЙ ЭКРАН СОЗДАНИЯ ПОЛКИ -->
     <div id="screen-spot-qr" class="hidden">
         <h1>Создать полку</h1>
         <div class="card" style="display:block;">
@@ -146,6 +173,7 @@
 
     <div id="screen-history" class="hidden">
         <h1>История</h1>
+        <button class="ok" onclick="downloadHistory()">📥 Скачать в Excel</button>
         <div id="history-list"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
@@ -282,6 +310,8 @@
                     `).join("")}
                 `;
                 renderActions();
+                loadBookings(currentItem.code);
+                loadComments(currentItem.code);
                 showScreen("screen-item");
             } catch (e) { notify(e.message); }
         }
@@ -329,6 +359,68 @@
             box.innerHTML = html;
         }
 
+        async function loadBookings(code) {
+            const list = document.getElementById("bookings-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const rows = await api(`/api/bookings/${code}`);
+                if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Нет активных броней</p>"; return; }
+                list.innerHTML = rows.map(r => `
+                    <div class="booking-item">
+                        <div>
+                            <b>${r.first_name || r.username || r.user_id}</b><br>
+                            <span style="font-size:13px;">${r.date_from} — ${r.date_to}</span>
+                        </div>
+                    </div>
+                `).join("");
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function doBook() {
+            const from = document.getElementById("book-from").value;
+            const to = document.getElementById("book-to").value;
+            if (!from || !to) { notify("Выберите даты"); return; }
+            try {
+                await api("/api/bookings", {
+                    method: "POST",
+                    body: JSON.stringify({ code: currentItem.code, date_from: from, date_to: to })
+                });
+                notify("Забронировано");
+                loadBookings(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
+        async function loadComments(code) {
+            const list = document.getElementById("comments-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const rows = await api(`/api/comments/${code}`);
+                if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Пока нет комментариев</p>"; return; }
+                list.innerHTML = rows.map(r => `
+                    <div class="comment-box">
+                        <div>
+                            <span class="comment-author">${r.first_name || r.username || 'Сотрудник'}</span>
+                            <span class="comment-date">${new Date(r.created_at + 'Z').toLocaleString('ru-RU')}</span>
+                        </div>
+                        <div class="comment-text">${r.text}</div>
+                    </div>
+                `).join("");
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function doComment() {
+            const text = document.getElementById("comment-text").value.trim();
+            if (!text) return;
+            try {
+                await api("/api/comments", {
+                    method: "POST",
+                    body: JSON.stringify({ code: currentItem.code, text: text })
+                });
+                document.getElementById("comment-text").value = "";
+                loadComments(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
         function showQr() {
             const url = `/api/qr/${currentItem.code}`;
             document.getElementById("item-card").innerHTML = `
@@ -340,9 +432,10 @@
                     <div class="label">Текст для создания QR в другом приложении:</div>
                     <div class="value">${currentItem.code}</div>
                 </div>
-                <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">Нажмите на картинку, чтобы открыть и распечатать</p>
             `;
             document.getElementById("actions").innerHTML = "";
+            document.getElementById("bookings-list").innerHTML = "";
+            document.getElementById("comments-list").innerHTML = "";
         }
 
         function openQrLink(url) { if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank'); }
@@ -363,7 +456,6 @@
             showScreen("screen-spot-qr");
         }
 
-        // --- НОВАЯ ЛОГИКА СОЗДАНИЯ ПОЛКИ ---
         async function createSpot() {
             const spot = document.getElementById("spot-name").value.trim();
             if (!spot) { notify("Введите название полки"); return; }
@@ -373,17 +465,14 @@
                     method: "POST",
                     body: JSON.stringify({ name: spot })
                 });
-                await loadSpots(); // Обновляем список для выпадающего меню
+                await loadSpots();
             } catch (e) {
-                if (e.message.includes("уже есть")) {
-                    notify("Такая полка уже существует, но мы сгенерируем для неё QR.");
-                } else {
+                if (!e.message.includes("уже есть")) {
                     notify("Ошибка: " + e.message);
                     return;
                 }
             }
 
-            // Генерируем QR для только что созданной полки
             const url = `/api/qr/${encodeURIComponent(spot)}`;
             document.getElementById("spot-qr-result").innerHTML = `
                 <div style="text-align:center; margin-top:10px;">
@@ -395,7 +484,7 @@
                 </div>
                 <p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка успешно создана!</p>
             `;
-            document.getElementById("spot-name").value = ""; // Очищаем поле
+            document.getElementById("spot-name").value = "";
         }
 
         async function doCheckout() {
@@ -531,6 +620,17 @@
                     return `<div class="card" style="display:block;"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
                 }).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function downloadHistory() {
+            try {
+                const url = `/api/export_history`;
+                if (tg.openLink) {
+                    tg.openLink(window.location.origin + url);
+                } else {
+                    window.open(window.location.origin + url, '_blank');
+                }
+            } catch (e) { notify("Ошибка при скачивании"); }
         }
 
         function showScreen(id) {
