@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER (вместо 123456789:AAH...)
-BOT_TOKEN = "123456789:AAH..."
+BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 
 app = FastAPI()
 app.add_middleware(
