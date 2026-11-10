@@ -26,7 +26,7 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
-DB_PATH = "warehouse.db"
+DB_PATH = "/data/warehouse.db"
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
