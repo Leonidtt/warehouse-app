@@ -24,6 +24,7 @@
         .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; background: #eee; color: #555; }
         .badge.eq { background: #e3f2fd; color: #1565c0; }
         .badge.cons { background: #fff3e0; color: #e65100; }
+        .qr-text-box { background: #eee; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 18px; text-align: center; margin-top: 10px; user-select: all; }
     </style>
 </head>
 <body>
@@ -72,7 +73,6 @@
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
-    <!-- НОВЫЙ ЭКРАН ДЛЯ QR ПОЛОК -->
     <div id="screen-spot-qr" class="hidden">
         <h1>QR для полок</h1>
         <div class="card">
@@ -221,9 +221,31 @@
             box.innerHTML = html;
         }
 
+        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ QR ТОВАРА ---
         function showQr() {
             const url = `/api/qr/${currentItem.code}`;
+            document.getElementById("item-card").innerHTML = `
+                <div class="meta">Код товара: ${currentItem.code}</div>
+                <div style="text-align:center; margin-top:10px;">
+                    <img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" />
+                </div>
+                <div class="qr-text-box" onclick="copyText('${currentItem.code}')">
+                    Текст для QR: <b>${currentItem.code}</b>
+                </div>
+                <p style="font-size:12px; color:#666; text-align:center;">Нажмите на картинку, чтобы открыть, или нажмите на текст, чтобы скопировать</p>
+            `;
+        }
+
+        function openQrLink(url) {
             if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                notify("Текст скопирован!");
+            }).catch(() => {
+                notify("Не удалось скопировать. Выделите текст вручную.");
+            });
         }
 
         function scanSpotQr() {
@@ -236,7 +258,7 @@
             });
         }
 
-        // --- НОВЫЕ ФУНКЦИИ ДЛЯ QR ПОЛОК ---
+        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ QR ПОЛОК ---
         function showSpotQrForm() {
             document.getElementById("spot-name").value = "";
             document.getElementById("spot-qr-result").innerHTML = "";
@@ -251,12 +273,11 @@
             document.getElementById("spot-qr-result").innerHTML = `
                 <p>QR для полки: <b>${spot}</b></p>
                 <img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" />
-                <p style="font-size:12px; color:#666;">Нажмите на картинку, чтобы сохранить или распечатать</p>
+                <div class="qr-text-box" onclick="copyText('${spot}')">
+                    Текст для QR: <b>${spot}</b>
+                </div>
+                <p style="font-size:12px; color:#666; text-align:center;">Нажмите на картинку, чтобы сохранить или распечатать. Или скопируйте текст.</p>
             `;
-        }
-
-        function openQrLink(url) {
-            if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
         }
 
         // -----------------------------------
