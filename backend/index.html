@@ -26,32 +26,23 @@
     </style>
 </head>
 <body>
-    <!-- Экран 1: Главная -->
     <div id="screen-main">
         <h1>Учёт</h1>
         <button onclick="scanQr()">📷 Сканировать QR</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+        <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
         <div id="items-list"></div>
     </div>
 
-    <!-- Экран 2: Карточка товара -->
     <div id="screen-item" class="hidden">
         <h1 id="item-title">Товар</h1>
-        
-        <!-- Блок для QR-кода -->
-        <div id="qr-container" style="display: none; text-align: center; margin-bottom: 15px; background: white; padding: 10px; border-radius: 10px;">
-            <img id="qr-img" style="max-width: 100%; border-radius: 10px;" />
-            <p style="font-size: 12px; color: #666; margin-top: 5px;">Нажмите на картинку, чтобы сохранить</p>
-        </div>
-
-        <button class="secondary" onclick="showQr()" style="margin-bottom: 10px;">🔲 Показать QR-код</button>
+        <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         <div class="card" id="item-card"></div>
         <div id="actions"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
-    <!-- Экран 3: Добавление -->
     <div id="screen-add" class="hidden">
         <h1>Новый товар</h1>
         <input id="add-code" placeholder="Код (например, CAM-001)">
@@ -64,6 +55,12 @@
         <input id="add-qty" type="number" placeholder="Количество" value="0">
         <input id="add-spot" placeholder="Место (полка/ячейка)">
         <button onclick="saveItem()">Сохранить</button>
+        <button class="secondary" onclick="backToMain()">← Назад</button>
+    </div>
+
+    <div id="screen-history" class="hidden">
+        <h1>История</h1>
+        <div id="history-list"></div>
         <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
@@ -144,19 +141,9 @@
                         </div>
                     `).join("")}
                 `;
-                // Скрываем QR при открытии нового товара
-                document.getElementById("qr-container").style.display = "none";
-                
                 renderActions();
                 showScreen("screen-item");
             } catch (e) { tg.showAlert(e.message); }
-        }
-
-        function showQr() {
-            const container = document.getElementById("qr-container");
-            const img = document.getElementById("qr-img");
-            img.src = `/api/qr/${currentItem.code}`;
-            container.style.display = "block";
         }
 
         function renderActions() {
@@ -193,9 +180,33 @@
                     <select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select>
                     <input id="mv-qty" type="number" value="1" placeholder="Количество">
                     <input id="mv-spot" placeholder="Место на новом (необязательно)">
+                    <button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button>
                     <button class="secondary" onclick="doMove()">📦 Переместить</button>`;
             }
             box.innerHTML = html;
+        }
+
+        function showQr() {
+            const url = `/api/qr/${currentItem.code}`;
+            tg.showPopup({
+                title: 'QR-код товара',
+                message: 'Нажмите "Открыть картинку", чтобы сохранить и распечатать.',
+                buttons: [{ type: 'default', text: 'Открыть картинку', id: 'open' }]
+            }, (buttonId) => {
+                if (buttonId === 'open') {
+                    tg.openLink(window.location.origin + url);
+                }
+            });
+        }
+
+        function scanSpotQr() {
+            if (!tg.showScanQrPopup) { tg.showAlert("Сканер недоступен"); return; }
+            tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
+                if (text) {
+                    document.getElementById("mv-spot").value = text.trim();
+                    return true;
+                }
+            });
         }
 
         async function doCheckout() {
@@ -261,18 +272,31 @@
             } catch (e) { tg.showAlert(e.message); }
         }
 
+        async function showHistory() {
+            const list = document.getElementById("history-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            showScreen("screen-history");
+            try {
+                const logs = await api("/api/history");
+                if (!logs.length) { list.innerHTML = "<p>Пока нет событий</p>"; return; }
+                list.innerHTML = logs.map(l => {
+                    let text = "";
+                    if (l.type === 'checkout') text = `📤 ${l.user_name} взял ${l.name} (${l.quantity} шт)`;
+                    if (l.type === 'return') text = `📥 ${l.user_name} вернул ${l.name} (${l.quantity} шт)`;
+                    if (l.type === 'move') text = `📦 ${l.user_name} переместил ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'} в ${l.to_loc || '—'}`;
+                    if (l.type === 'writeoff') text = `📉 ${l.user_name} списал ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
+                    const dateStr = new Date(l.date + 'Z').toLocaleString('ru-RU');
+                    return `<div class="card"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
+                }).join("");
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
         function showScreen(id) {
-            // Обязательно добавляем screen-qr в список, чтобы он скрывался
-            ["screen-main", "screen-item", "screen-add"].forEach(s => {
+            ["screen-main", "screen-item", "screen-add", "screen-history"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
-        
-        function backToMain() { 
-            document.getElementById("qr-container").style.display = "none"; // Прячем QR при выходе
-            showScreen("screen-main"); 
-            loadItems(); 
-        }
+        function backToMain() { showScreen("screen-main"); loadItems(); }
 
         (async () => { await loadLocations(); await loadItems(); })();
     </script>
