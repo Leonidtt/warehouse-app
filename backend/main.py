@@ -16,6 +16,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime
+import os
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
@@ -30,8 +31,7 @@ app.add_middleware(
 DB_PATH = "/data/warehouse.db"
 
 def get_conn():
-    # Проверяем, существует ли папка /data, если нет - создаем (на всякий случай)
-    import os
+    # Проверяем, существует ли папка /data, если нет - создаем
     if not os.path.exists("/data"):
         try:
             os.makedirs("/data")
@@ -121,11 +121,12 @@ def init_db():
         user_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
+    
     c.execute("SELECT COUNT(*) FROM locations")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO locations (name, type) VALUES ('Мастерская', 'workshop')")
-        c.execute("INSERT INTO locations (name, type) VALUES ('Склад', 'storage')")
-        c.execute("INSERT INTO locations (name, type) VALUES ('Офис', 'office')")
+        c.execute("INSERT INTO locations (name, type) VALUES ('Этаж2', 'workshop')")
+        c.execute("INSERT INTO locations (name, type) VALUES ('Склад11', 'storage')")
+        c.execute("INSERT INTO locations (name, type) VALUES ('Офис7', 'office')")
     conn.commit()
     conn.close()
 
@@ -500,8 +501,6 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         raise HTTPException(400, "Количество должно быть > 0")
     
     conn = get_conn()
-    
-    # Проверяем, есть ли товар в источнике
     row = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (req.code, req.from_location)
@@ -511,39 +510,33 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         conn.close()
         raise HTTPException(400, f"Недостаточно товара. В источнике: {row['quantity'] if row else 0} шт.")
     
-    # Уменьшаем в источнике
     conn.execute(
         "UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?",
         (req.quantity, req.code, req.from_location)
     )
     
-    # Если указана полка, добавляем её в базу (если её там нет)
     if req.to_spot:
         try:
             conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
         except:
             pass
 
-    # Проверяем, есть ли уже запись в новой локации
     existing = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (req.code, req.to_location)
     ).fetchone()
     
     if existing:
-        # Обновляем (и меняем полку, если указали)
         conn.execute(
             "UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?",
             (req.quantity, req.to_spot, req.code, req.to_location)
         )
     else:
-        # Создаем новую запись
         conn.execute(
             "INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)",
             (req.code, req.to_location, req.quantity, req.to_spot)
         )
         
-    # Записываем в историю
     conn.execute(
         "INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?, ?, ?, ?, ?, ?)",
         (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["id"])
@@ -653,11 +646,12 @@ def generate_qr(code: str):
     result_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-    @app.get("/api/update_locations")
+
+# ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ НАЗВАНИЙ (ВЫЗВАТЬ ОДИН РАЗ)
+@app.get("/api/update_locations")
 def update_locations():
     conn = get_conn()
     try:
-        # Меняем названия старых локаций на новые
         conn.execute("UPDATE locations SET name = 'Офис7' WHERE name = 'Офис'")
         conn.execute("UPDATE locations SET name = 'Склад11' WHERE name = 'Склад'")
         conn.execute("UPDATE locations SET name = 'Этаж2' WHERE name = 'Мастерская'")
