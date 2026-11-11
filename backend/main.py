@@ -444,72 +444,66 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
         current_kit_code = None
         current_kit_data = {"name": "", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
 
-        # Внутренняя функция для сохранения/обновления
         def save_kit(kit_code, kit_data):
             nonlocal added, updated
             if not kit_code: return
-            
-            # Ищем комнату, если нет — берем первую
             loc = conn.execute("SELECT id FROM locations WHERE name = ?", (kit_data["loc"],)).fetchone()
             loc_id = loc["id"] if loc else 1
-            
-            # Проверяем, есть ли уже такой код в базе
             existing = conn.execute("SELECT code FROM items WHERE code = ?", (kit_code,)).fetchone()
             
             if existing:
-                # Если есть — ОБНОВЛЯЕМ
                 conn.execute("""UPDATE items SET name=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, buyout_status=? WHERE code=?""",
                              (kit_data["name"], kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"], kit_code))
-                # Обновляем или создаем остаток
                 stock_exists = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (kit_code,)).fetchone()
-                if stock_exists:
-                    conn.execute("UPDATE stock SET location_id = ?, spot = ? WHERE item_code = ?", (loc_id, kit_code, kit_code))
-                else:
-                    conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
+                if stock_exists: conn.execute("UPDATE stock SET location_id = ?, spot = ? WHERE item_code = ?", (loc_id, kit_code, kit_code))
+                else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
                 updated += 1
             else:
-                # Если нет — СОЗДАЕМ
                 try:
                     conn.execute("""INSERT INTO items (code, name, kind, price, kit_body, kit_lens, kit_flash, buyout_status) VALUES (?,?,?,?,?,?,?,?)""",
                                  (kit_code, kit_data["name"], "equipment", kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"]))
                     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
                     added += 1
-                except sqlite3.IntegrityError:
-                    pass
+                except sqlite3.IntegrityError: pass
 
         for line in lines:
             parts = [p.strip() for p in line.split(',')] if ',' in line else [p.strip() for p in line.split(';')]
             if len(parts) < 2: continue
-            
-            # Определяем новый ли это комплект
             if parts[0] and not parts[1] and not parts[2]:
-                if current_kit_code:
-                    save_kit(current_kit_code, current_kit_data)
-                
+                if current_kit_code: save_kit(current_kit_code, current_kit_data)
                 current_kit_code = parts[0].replace(" ", "")
                 current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
                 continue
-
             if not current_kit_code: continue
-
             if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
-            
             if len(parts) > 3 and parts[3]:
                 try: current_kit_data["price"] = float(parts[3])
                 except: pass
-            if len(parts) > 4 and parts[4]:
-                current_kit_data["buyer"] = parts[4]
+            if len(parts) > 4 and parts[4]: current_kit_data["buyer"] = parts[4]
 
-        if current_kit_code:
-            save_kit(current_kit_code, current_kit_data)
-
+        if current_kit_code: save_kit(current_kit_code, current_kit_data)
         conn.commit()
     except Exception as e:
         conn.close(); raise HTTPException(status_code=400, detail=str(e))
     conn.close(); 
     return {"status": "ok", "added": added, "updated": updated}
+
+@app.post("/api/clear_database")
+def clear_database(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    try:
+        tables = ["items", "stock", "checkouts", "movements", "writeoffs", "bookings", "comments", "lost_items", "daily_reports"]
+        for table in tables:
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(400, str(e))
+    conn.close()
+    return {"status": "ok"}
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
@@ -524,20 +518,5 @@ def generate_qr(code: str):
     draw.text(((width - draw.textlength(code, font=font))/2, height + 10), code, fill="black", font=font)
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-    @app.post("/api/clear_database")
-def clear_database(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    conn = get_conn()
-    try:
-        # Удаляем только товары и связанные с ними данные. Комнаты и пользователи остаются.
-        tables = ["items", "stock", "checkouts", "movements", "writeoffs", "bookings", "comments", "lost_items", "daily_reports"]
-        for table in tables:
-            conn.execute(f"DELETE FROM {table}")
-        conn.commit()
-    except Exception as e:
-        conn.close()
-        raise HTTPException(400, str(e))
-    conn.close()
-    return {"status": "ok"}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
