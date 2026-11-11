@@ -65,10 +65,26 @@
     </style>
 </head>
 <body>
-    <div id="screen-main">
-        <h1>Учёт</h1>
+    <!-- ЭКРАН РЕГИСТРАЦИИ -->
+    <div id="screen-register" class="hidden">
+        <h1>Регистрация</h1>
+        <div class="card" style="display:block;">
+            <p>Добро пожаловать! Пожалуйста, укажите ваши Имя и Фамилию. Это нужно для того, чтобы в истории было видно, кто взял вещь.</p>
+        </div>
+        <div class="input-group">
+            <label>Ваше Имя и Фамилия</label>
+            <input id="reg-name" placeholder="Например, Иван Петров">
+        </div>
+        <button onclick="doRegister()">Зарегистрироваться</button>
+    </div>
+
+    <!-- ГЛАВНЫЙ ЭКРАН -->
+    <div id="screen-main" class="hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h1 style="margin:0;">Учёт</h1>
+            <span id="user-info" style="font-size:12px; color:#666; text-align:right;"></span>
+        </div>
         
-        <!-- Блок "Мои вещи на руках" -->
         <div id="my-items-section" class="hidden" style="margin-bottom: 20px;">
             <h2 style="color: #1565c0;">🖐 Мои вещи на руках</h2>
             <div id="my-items-list"></div>
@@ -76,14 +92,27 @@
 
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         <button onclick="scanQr()">📷 Сканировать QR</button>
-        <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+        
+        <!-- АДМИНСКИЕ КНОПКИ -->
+        <div id="admin-buttons" class="hidden">
+            <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+            <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
+            <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
+            <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
+        </div>
+
         <button class="secondary" onclick="showOnHand()">👀 Все кто взял</button>
         <button class="secondary" onclick="showRooms()">🚪 Что в комнатах?</button>
-        <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
-        <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
         <div id="items-list"></div>
+    </div>
+
+    <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
+    <div id="screen-users" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1>Пользователи</h1>
+        <div id="users-list"></div>
     </div>
 
     <div id="screen-rooms" class="hidden">
@@ -110,10 +139,6 @@
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         
         <div id="item-status-box"></div>
-        
-        <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:15px;">🔧 Отметить как «Требует ремонта»</button>
-        <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:15px;">🚨 Не нашел на месте</button>
-
         <div id="actions"></div>
         
         <div id="booking-section">
@@ -129,7 +154,10 @@
         <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
         <button class="secondary" onclick="doComment()">Отправить</button>
 
-        <button class="danger" onclick="deleteItem()" style="margin-top:40px;">🗑 Удалить товар</button>
+        <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
+        <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
+
+        <button class="danger" onclick="deleteItem()" id="delete-btn" style="margin-top:10px;">🗑 Удалить товар</button>
     </div>
 
     <div id="screen-add" class="hidden">
@@ -195,6 +223,7 @@
         let locations = [];
         let allItems = [];
         let spots = [];
+        let currentUser = null;
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
@@ -207,6 +236,67 @@
             if (!res.ok) throw new Error(data.detail || "Ошибка сервера");
             return data;
         }
+
+        async function init() {
+            try {
+                currentUser = await api("/api/me");
+                if (currentUser.role === "pending") {
+                    showScreen("screen-register");
+                    return;
+                }
+                
+                document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE">${currentUser.role === 'admin' ? 'Администратор' : 'Сотрудник'}</span>`;
+                
+                if (currentUser.role === "admin") {
+                    document.getElementById("admin-buttons").classList.remove("hidden");
+                } else {
+                    document.getElementById("admin-buttons").classList.add("hidden");
+                }
+
+                await loadLocations();
+                await loadSpots();
+                await loadItems();
+                showScreen("screen-main");
+            } catch (e) {
+                notify("Ошибка инициализации: " + e.message);
+            }
+        }
+
+        async function doRegister() {
+            const name = document.getElementById("reg-name").value.trim();
+            if (name.length < 3) { notify("Введите Имя и Фамилию"); return; }
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
+                notify("Вы успешно зарегистрированы!");
+                init();
+            } catch (e) { notify(e.message); }
+        }
+
+        async function loadUsers() {
+            const list = document.getElementById("users-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const users = await api("/api/users");
+                list.innerHTML = users.map(u => `
+                    <div class="card" style="justify-content:space-between; align-items:center;">
+                        <div>
+                            <b>${u.full_name}</b>
+                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
+                        </div>
+                        <button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>
+                    </div>
+                `).join("");
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function toggleRole(id) {
+            try {
+                await api(`/api/users/${id}/role`, { method: "POST" });
+                loadUsers();
+            } catch (e) { notify(e.message); }
+        }
+
+        function showUsers() { loadUsers(); showScreen("screen-users"); }
 
         async function loadLocations() {
             locations = await api("/api/locations");
@@ -286,7 +376,7 @@
                         </div>
                         <div class="meta">${i.code} · всего: ${i.total} шт</div>
                         ${placesHtml}
-                        ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}
+                        ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.full_name).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}
                     </div>
                 </div>
                 `;
@@ -348,7 +438,7 @@
                     <div class="card" onclick="openItem('${r.item_code}')">
                         <div class="info">
                             <div class="name">${r.name} (${r.item_code})</div>
-                            <div class="meta" style="color:#e67e22">У ${r.first_name || r.username} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div>
+                            <div class="meta" style="color:#e67e22">У ${r.full_name} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div>
                             <div class="meta">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div>
                         </div>
                     </div>
@@ -360,7 +450,6 @@
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
             tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { 
                 if (text) { 
-                    // Звуковой/вибрационный отклик при успешном сканировании
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                     openItem(text.trim()); 
                     return true; 
@@ -373,17 +462,29 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
+                // Скрываем кнопки для расходников и не-админов
+                const repairBtn = document.getElementById("repair-btn");
+                if (currentItem.kind === 'consumable') {
+                    repairBtn.style.display = 'none';
+                } else {
+                    repairBtn.style.display = 'block';
+                }
+
+                const delBtn = document.getElementById("delete-btn");
+                if (currentUser.role === 'admin') { delBtn.style.display = 'block'; }
+                else { delBtn.style.display = 'none'; }
+
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 
                 let statusHtml = "";
                 if (currentItem.needs_repair) {
                     statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`;
-                    document.getElementById("repair-btn").textContent = "✅ Вернуть в строй";
+                    repairBtn.textContent = "✅ Вернуть в строй";
                 } else {
-                    document.getElementById("repair-btn").textContent = "🔧 Отметить как «Требует ремонта»";
+                    repairBtn.textContent = "🔧 Отметить как «Требует ремонта»";
                     if (currentItem.holders.length > 0) {
-                        statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
+                        statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
                     } else {
                         let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
                         if (currentItem.kind === 'equipment') {
@@ -415,7 +516,7 @@
         function renderActions() {
             const box = document.getElementById("actions");
             const isEq = currentItem.kind === "equipment";
-            const myId = tg.initDataUnsafe?.user?.id || 1;
+            const myId = currentUser.tg_id;
             const myCheckout = currentItem.holders.find(h => h.user_id === myId);
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId);
             let html = "";
@@ -508,7 +609,7 @@
             try {
                 const rows = await api(`/api/bookings/${code}`);
                 if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Нет активных броней</p>"; return; }
-                list.innerHTML = rows.map(r => `<div class="booking-item"><div><b>${r.first_name || r.username}</b><br><span style="font-size:13px;">${r.date_from} — ${r.date_to}</span></div></div>`).join("");
+                list.innerHTML = rows.map(r => `<div class="booking-item"><div><b>${r.full_name}</b><br><span style="font-size:13px;">${r.date_from} — ${r.date_to}</span></div></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
@@ -528,7 +629,7 @@
             try {
                 const rows = await api(`/api/comments/${code}`);
                 if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Пока нет комментариев</p>"; return; }
-                list.innerHTML = rows.map(r => `<div class="comment-box"><div><span class="comment-author">${r.first_name || r.username}</span><span class="comment-date">${new Date(r.created_at + 'Z').toLocaleString('ru-RU')}</span></div><div class="comment-text">${r.text}</div></div>`).join("");
+                list.innerHTML = rows.map(r => `<div class="comment-box"><div><span class="comment-author">${r.full_name}</span><span class="comment-date">${new Date(r.created_at + 'Z').toLocaleString('ru-RU')}</span></div><div class="comment-text">${r.text}</div></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
@@ -682,13 +783,15 @@
         }
 
         function showScreen(id) {
-            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view"].forEach(s => {
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
         function backToMain() { showScreen("screen-main"); loadItems(); }
 
-        (async () => { await loadLocations(); await loadSpots(); await loadItems(); })();
+        (async () => { 
+            await init();
+        })();
     </script>
 </body>
 </html>
