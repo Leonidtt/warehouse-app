@@ -19,25 +19,21 @@ import base64
 from datetime import datetime, timedelta
 import os
 
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
-BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-
+BOT_TOKEN = "В9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 app = FastAPI()
 
-# Защита от частых запросов (Rate Limiting)
 request_history = {}
 def check_rate_limit(user_id: int):
     now = time.time()
     if user_id in request_history:
         if now - request_history[user_id] < 0.5: 
-            raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите.")
+            raise HTTPException(status_code=429, detail="Слишком много запросов.")
     request_history[user_id] = now
 
-# Глобальный перехватчик ошибок
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера. Попробуйте позже."})
+    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера."})
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -57,8 +53,17 @@ def init_db():
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     
+    # Обновляем таблицу полок: добавляем location_id
+    c.execute("""CREATE TABLE IF NOT EXISTS spots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        name TEXT NOT NULL, 
+        location_id INTEGER NOT NULL,
+        UNIQUE(name, location_id)
+    )""")
+    try: c.execute("ALTER TABLE spots ADD COLUMN location_id INTEGER")
+    except sqlite3.OperationalError: pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', 
         min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0,
@@ -96,6 +101,14 @@ def init_db():
         c.execute("INSERT INTO locations (name, type) VALUES ('Этаж2', 'workshop')")
         c.execute("INSERT INTO locations (name, type) VALUES ('Склад11', 'storage')")
         c.execute("INSERT INTO locations (name, type) VALUES ('Офис7', 'office')")
+        conn.commit()
+
+    # ПРИНУДИТЕЛЬНЫЙ ПЕРЕНОС ВСЕХ СТАРЫХ ПОЛОК В "ОФИС7" (id=3)
+    office_id = conn.execute("SELECT id FROM locations WHERE name = 'Офис7'").fetchone()
+    if office_id:
+        c.execute("UPDATE spots SET location_id = ? WHERE location_id IS NULL", (office_id["id"],))
+        conn.commit()
+
     conn.commit(); conn.close()
 
 init_db()
@@ -131,6 +144,7 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
+# --- МОДЕЛИ ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0
@@ -145,7 +159,7 @@ class BatchMoveRequest(BaseModel):
 
 class WriteoffRequest(BaseModel):
     code: str; location_id: int; quantity: int
-class SpotCreate(BaseModel): name: str
+class SpotCreate(BaseModel): name: str; location_id: int
 class BookingRequest(BaseModel): code: str; date_from: str; date_to: str
 class CommentRequest(BaseModel): code: str; text: str
 class CheckoutRequest(BaseModel): code: str; taken_for: str = ""
@@ -154,9 +168,10 @@ class LocationCreate(BaseModel): name: str
 class LocationUpdate(BaseModel): id: int; name: str
 class ItemUpdate(BaseModel):
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str
-class SpotUpdate(BaseModel): old_name: str; new_name: str
+class SpotUpdate(BaseModel): id: int; new_name: str
 class UserUpdate(BaseModel): tg_id: int; new_name: str
 
+# --- ЭНДПОИНТЫ ---
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -223,25 +238,53 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
 
+@app.delete("/api/locations/{id}")
+def delete_location(id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn()
+    # Проверяем, есть ли товары
+    items = conn.execute("SELECT COUNT(*) FROM stock WHERE location_id = ? AND quantity > 0", (id,)).fetchone()[0]
+    if items > 0:
+        conn.close(); raise HTTPException(400, "Нельзя удалить комнату, в ней есть товары.")
+    conn.execute("DELETE FROM spots WHERE location_id = ?", (id,))
+    conn.execute("DELETE FROM locations WHERE id = ?", (id,))
+    conn.commit(); conn.close(); return {"status": "ok"}
+
 @app.get("/api/spots")
-def list_spots():
-    conn = get_conn(); rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall(); conn.close(); return [dict(r) for r in rows]
+def list_spots(location_id: Optional[int] = None):
+    conn = get_conn()
+    if location_id:
+        rows = conn.execute("SELECT id, name FROM spots WHERE location_id = ? ORDER BY name", (location_id,)).fetchall()
+    else:
+        rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall()
+    conn.close(); return [dict(r) for r in rows]
 
 @app.post("/api/spots")
 def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    try: conn.execute("INSERT INTO spots (name) VALUES (?)", (spot.name.strip(),)); conn.commit()
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая полка уже есть")
+    try: conn.execute("INSERT INTO spots (name, location_id) VALUES (?, ?)", (spot.name.strip(), spot.location_id)); conn.commit()
+    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая полка уже есть в этой комнате")
     conn.close(); return {"status": "ok"}
 
 @app.post("/api/spots/update")
 def update_spot(req: SpotUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
     try:
-        conn.execute("UPDATE spots SET name = ? WHERE name = ?", (req.new_name.strip(), req.old_name))
-        conn.execute("UPDATE stock SET spot = ? WHERE spot = ?", (req.new_name.strip(), req.old_name)); conn.commit()
+        conn.execute("UPDATE spots SET name = ? WHERE id = ?", (req.new_name.strip(), req.id)); conn.commit()
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
+
+@app.delete("/api/spots/{id}")
+def delete_spot(id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn()
+    spot = conn.execute("SELECT name, location_id FROM spots WHERE id = ?", (id,)).fetchone()
+    if not spot: conn.close(); raise HTTPException(404, "Полка не найдена")
+    
+    items = conn.execute("SELECT COUNT(*) FROM stock WHERE spot = ? AND location_id = ? AND quantity > 0", (spot["name"], spot["location_id"])).fetchone()[0]
+    if items > 0:
+        conn.close(); raise HTTPException(400, "Нельзя удалить полку, на ней есть товары.")
+        
+    conn.execute("DELETE FROM spots WHERE id = ?", (id,))
+    conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
@@ -329,14 +372,20 @@ async def create_item(
     kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), budget_tag: str = Form(""), serial_number: str = Form(""),
     photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)
 ):
-    check_admin(x_init_data); conn = get_conn(); photo_base64 = ""
+    check_admin(x_init_data)
+    
+    if not spot or spot.strip() == "":
+        raise HTTPException(400, "Необходимо выбрать полку.")
+
+    conn = get_conn(); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     try:
         conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number))
     except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
-    if spot:
-        try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (spot,))
-        except: pass
+    
+    try: conn.execute("INSERT INTO spots (name, location_id) VALUES (?, ?)", (spot, location_id))
+    except sqlite3.IntegrityError: pass
+    
     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (code, location_id, quantity, spot))
     conn.commit(); conn.close(); return {"status": "ok"}
 
@@ -368,15 +417,18 @@ def return_item(code: str, x_init_data: Optional[str] = Header(None)):
 def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
+    if not req.to_spot: raise HTTPException(400, "Выберите полку")
+    
     conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
-    if req.to_spot:
-        try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
-        except: pass
+    
+    try: conn.execute("INSERT INTO spots (name, location_id) VALUES (?, ?)", (req.to_spot, req.to_location))
+    except: pass
+    
     if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone():
-        conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, req.to_spot, req.code, req.to_location))
+        conn.execute("UPDATE stock SET quantity = quantity + ?, spot = ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.to_spot, req.code, req.to_location))
     else:
         conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (req.code, req.to_location, req.quantity, req.to_spot))
     conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
@@ -386,17 +438,18 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
 def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
+    if not req.to_spot: raise HTTPException(400, "Выберите полку")
+    
     conn = get_conn()
     for code in req.codes:
         row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.from_location)).fetchone()
         if row and row["quantity"] > 0:
             conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, req.from_location))
             conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (code, req.from_location))
-            if req.to_spot:
-                try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
-                except: pass
+            try: conn.execute("INSERT INTO spots (name, location_id) VALUES (?, ?)", (req.to_spot, req.to_location))
+            except: pass
             if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone():
-                conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.to_spot, code, req.to_location))
+                conn.execute("UPDATE stock SET quantity = quantity + 1, spot = ? WHERE item_code = ? AND location_id = ?", (req.to_spot, code, req.to_location))
             else:
                 conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, req.to_spot))
             conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,1,?,?,?,?)", (code, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
