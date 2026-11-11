@@ -144,6 +144,7 @@
 
         <h2 style="margin-top:30px; color: #e74c3c;">Разработка</h2>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
+        <button class="danger" onclick="clearDatabase()" style="margin-top:10px;">🗑 Очистить базу товаров</button>
     </div>
 
     <div id="screen-users" class="hidden">
@@ -286,16 +287,13 @@
         <h1>Импорт данных</h1>
         <div class="card" style="display:block;">
             <p>Вставьте таблицу из Excel (разделитель — запятая).</p>
-            <p style="font-size:12px; color:#666;">Формат:<br>Комплект,Название,Цена,Выкуп<br>Камера,Canon r6,60000,<br>Объектив,24-70,30000,</p>
         </div>
         <textarea id="csv-text" rows="10" placeholder="T1,,,
 Камера,Canon r6,60000,
 Объектив,Canon rf 24-70 f4,60000,
 Вспышка,TT685iic,8000,133000
 Допы,,5000,
-T2,,,
-Камера,Canon 6d Mark2,40000,
-..."></textarea>
+T2,,,"></textarea>
         <button onclick="submitText()">Загрузить</button>
     </div>
 
@@ -341,6 +339,16 @@ T2,,,
             } else {
                 notify("Консоль не загрузилась. Проверьте интернет.");
             }
+        }
+
+        async function clearDatabase() {
+            if (!confirm("Вы уверены, что хотите УДАЛИТЬ ВСЕ ТОВАРЫ, ИСТОРИЮ И БРОНИ? Комнаты и пользователи останутся.")) return;
+            if (!confirm("Это действие необратимо. Точно продолжить?")) return;
+            try {
+                await api("/api/clear_database", { method: "POST" });
+                notify("База товаров очищена.");
+                loadItems();
+            } catch (e) { notify("Ошибка: " + e.message); }
         }
 
         async function api(path, options = {}) {
@@ -411,7 +419,7 @@ T2,,,
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
         async function saveItem() { const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } const formData = new FormData(); formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile); try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); } }
         function showImportForm() { showScreen("screen-import"); }
-        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено комплектов: ${res.added}`); backToMain(); } catch (e) { notify(e.message); } }
+        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено: ${res.added}, обновлено: ${res.updated}`); backToMain(); } catch (e) { notify(e.message); } }
         function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         async function showHistory() { const list = document.getElementById("history-list"); showScreen("screen-history"); try { const logs = await api("/api/history"); list.innerHTML = logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type}: ${l.name} (${l.quantity} шт) - ${l.user_name}</div></div>`).join(""); } catch (e) { list.innerHTML = ""; } }
