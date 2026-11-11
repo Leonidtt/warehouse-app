@@ -31,6 +31,7 @@
         .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; background: #eee; color: #555; }
         .badge.eq { background: #e3f2fd; color: #1565c0; }
         .badge.cons { background: #fff3e0; color: #e65100; }
+        .badge.price { background: #e8f5e9; color: #2e7d32; }
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
@@ -62,6 +63,8 @@
         
         .my-item-card { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #90caf9; }
         .my-item-btn { width: auto; padding: 6px 12px; margin: 0; font-size: 13px; background: #1565c0; }
+        
+        .kit-box { background: #f0f4c3; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -80,8 +83,9 @@
         
         <div id="admin-buttons" class="hidden">
             <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-            <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
+            <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
             <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
+            <button class="secondary" onclick="showSettings()">⚙️ Настройки (Комнаты)</button>
             <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         </div>
 
@@ -93,8 +97,18 @@
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         
         <div id="items-list"></div>
-        
-        <button class="danger" onclick="makeMeAdmin()" id="make-admin-btn" style="margin-top: 30px; font-size: 12px; padding: 10px;">🔑 Получить права администратора</button>
+    </div>
+
+    <div id="screen-settings" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1>Настройки (Комнаты)</h1>
+        <div class="input-group">
+            <label>Новая комната (локация)</label>
+            <input id="new-location-name" placeholder="Например: Гараж">
+        </div>
+        <button onclick="createLocation()">Добавить комнату</button>
+        <h2>Существующие комнаты</h2>
+        <div id="locations-list"></div>
     </div>
 
     <div id="screen-users" class="hidden">
@@ -127,6 +141,12 @@
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         
         <div id="item-status-box"></div>
+        
+        <div id="kit-box" class="kit-box hidden">
+            <b>Комплектация:</b>
+            <div id="kit-text" style="margin-top:5px;"></div>
+        </div>
+        
         <div id="actions"></div>
         
         <div id="booking-section">
@@ -162,9 +182,13 @@
         </div>
         <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
         <div class="input-group"><label>Место / Полка / Ячейка</label><select id="add-spot"><option value="">Без места</option></select></div>
+        
+        <div class="input-group"><label>Стоимость (для админа)</label><input id="add-price" type="number" placeholder="0" value="0"></div>
+        <div class="input-group"><label>Комплектация (что входит)</label><textarea id="add-kit" rows="2" placeholder="Тушка, объектив, вспышка..."></textarea></div>
+
         <div id="consumable-fields" class="hidden">
             <div class="input-group"><label>Количество при добавлении</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
-            <div class="input-group"><label>Минимальное значение (для оповещения)</label><input id="add-min-stock" type="number" placeholder="Например, 5" value="0"></div>
+            <div class="input-group"><label>Минимальное значение</label><input id="add-min-stock" type="number" placeholder="Например, 5" value="0"></div>
         </div>
         <div class="input-group"><label>Фотография (необязательно)</label><input type="file" id="add-photo" accept="image/*"></div>
         <button onclick="saveItem()">Сохранить</button>
@@ -241,10 +265,8 @@
                 
                 if (currentUser.role === "admin") {
                     document.getElementById("admin-buttons").classList.remove("hidden");
-                    document.getElementById("make-admin-btn").classList.add("hidden");
                 } else {
                     document.getElementById("admin-buttons").classList.add("hidden");
-                    document.getElementById("make-admin-btn").classList.remove("hidden");
                 }
 
                 await loadLocations();
@@ -256,13 +278,27 @@
             }
         }
 
-        async function makeMeAdmin() {
-            try {
-                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: currentUser.full_name || "Админ", force_admin: true }) });
-                notify("Готово! Теперь вы администратор. Приложение обновится.");
-                init();
-            } catch (e) { notify("Ошибка: " + e.message); }
+        async function loadLocations() {
+            locations = await api("/api/locations");
+            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+            const list = document.getElementById("locations-list");
+            if (list) {
+                list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div></div>`).join("");
+            }
         }
+
+        async function createLocation() {
+            const name = document.getElementById("new-location-name").value.trim();
+            if (!name) { notify("Введите название"); return; }
+            try {
+                await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) });
+                notify("Комната добавлена");
+                document.getElementById("new-location-name").value = "";
+                loadLocations();
+            } catch (e) { notify(e.message); }
+        }
+
+        function showSettings() { loadLocations(); showScreen("screen-settings"); }
 
         async function loadUsers() {
             const list = document.getElementById("users-list");
@@ -289,11 +325,6 @@
         }
 
         function showUsers() { loadUsers(); showScreen("screen-users"); }
-
-        async function loadLocations() {
-            locations = await api("/api/locations");
-            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
-        }
 
         async function loadSpots() {
             spots = await api("/api/spots");
@@ -356,6 +387,7 @@
                 }
 
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
+                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
 
                 return `
                 <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
@@ -363,6 +395,7 @@
                     <div class="info">
                         <div class="name">${i.name}
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
+                            ${priceBadge}
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                             ${brokenBadge}
                         </div>
@@ -465,6 +498,19 @@
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 
+                let priceBadge = "";
+                if (currentItem.price && currentItem.price > 0) {
+                    priceBadge = `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>`;
+                }
+
+                let kitHtml = "";
+                if (currentItem.kit) {
+                    document.getElementById("kit-box").classList.remove("hidden");
+                    document.getElementById("kit-text").innerHTML = currentItem.kit.replace(/\n/g, '<br>');
+                } else {
+                    document.getElementById("kit-box").classList.add("hidden");
+                }
+
                 let statusHtml = "";
                 if (currentItem.needs_repair) {
                     statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`;
@@ -487,6 +533,7 @@
                     ${photoHtml}
                     <div class="meta">Код: ${currentItem.code}</div>
                     <div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>
+                    ${priceBadge}
                     ${minStockText}
                     ${statusHtml}
                 `;
@@ -704,6 +751,8 @@
         async function showAddForm() {
             try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) { document.getElementById("add-code").value = "ITEM-1"; }
             document.getElementById("add-kind").value = "equipment";
+            document.getElementById("add-price").value = "0";
+            document.getElementById("add-kit").value = "";
             toggleFields();
             showScreen("screen-add");
         }
@@ -714,6 +763,8 @@
             const name = document.getElementById("add-name").value.trim();
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
+            const price = parseFloat(document.getElementById("add-price").value) || 0;
+            const kit = document.getElementById("add-kit").value.trim();
             let qty = 1; let minStock = 0;
             if (kind === "consumable") { qty = parseInt(document.getElementById("add-qty").value) || 0; minStock = parseInt(document.getElementById("add-min-stock").value) || 0; }
             const spot = document.getElementById("add-spot").value;
@@ -723,6 +774,8 @@
             formData.append("code", code); formData.append("name", name); formData.append("kind", kind);
             formData.append("location_id", loc); formData.append("quantity", qty); formData.append("spot", spot);
             formData.append("min_stock", minStock);
+            formData.append("price", price);
+            formData.append("kit", kit);
             if (photoFile) formData.append("photo", photoFile);
             try {
                 await api("/api/items", { method: "POST", body: formData });
@@ -771,7 +824,7 @@
         }
 
         function showScreen(id) {
-            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users"].forEach(s => {
+            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
