@@ -44,7 +44,7 @@ def init_db():
 
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     
-    # Обновленная таблица items с ценой и комплектацией
+    # ТАБЛИЦА ITEMS С РАЗДЕЛЕНИЕМ КОМПЛЕКТАЦИИ
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         code TEXT UNIQUE NOT NULL, 
@@ -54,13 +54,22 @@ def init_db():
         photo TEXT DEFAULT '', 
         needs_repair INTEGER DEFAULT 0,
         price REAL DEFAULT 0,
-        kit TEXT DEFAULT ''
+        kit_body TEXT DEFAULT '',
+        kit_lens TEXT DEFAULT '',
+        kit_flash TEXT DEFAULT '',
+        kit_other TEXT DEFAULT ''
     )""")
     try: c.execute("ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0")
     except sqlite3.OperationalError: pass
     try: c.execute("ALTER TABLE items ADD COLUMN price REAL DEFAULT 0")
     except sqlite3.OperationalError: pass
-    try: c.execute("ALTER TABLE items ADD COLUMN kit TEXT DEFAULT ''")
+    try: c.execute("ALTER TABLE items ADD COLUMN kit_body TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE items ADD COLUMN kit_lens TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE items ADD COLUMN kit_flash TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE items ADD COLUMN kit_other TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
@@ -140,7 +149,21 @@ class ItemCreate(BaseModel):
     spot: str = ""
     min_stock: int = 0
     price: float = 0
-    kit: str = ""
+    kit_body: str = ""
+    kit_lens: str = ""
+    kit_flash: str = ""
+    kit_other: str = ""
+
+class ItemUpdate(BaseModel):
+    name: str
+    kind: str
+    location_id: int
+    spot: str
+    price: float
+    kit_body: str
+    kit_lens: str
+    kit_flash: str
+    kit_other: str
 
 class MoveRequest(BaseModel):
     code: str
@@ -156,6 +179,10 @@ class WriteoffRequest(BaseModel):
 
 class SpotCreate(BaseModel):
     name: str
+
+class SpotUpdate(BaseModel):
+    old_name: str
+    new_name: str
 
 class BookingRequest(BaseModel):
     code: str
@@ -244,6 +271,17 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
     conn.close()
     return {"status": "ok"}
 
+@app.put("/api/spots")
+def update_spot(req: SpotUpdate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    # Обновляем полку в таблице spots
+    conn.execute("UPDATE spots SET name = ? WHERE name = ?", (req.new_name.strip(), req.old_name))
+    # Обновляем привязку в stock
+    conn.execute("UPDATE stock SET spot = ? WHERE spot = ?", (req.new_name.strip(), req.old_name))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
@@ -276,7 +314,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         
         item_data = {
             "code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"], "needs_repair": it["needs_repair"],
-            "kit": it["kit"],
+            "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "kit_other": it["kit_other"],
             "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable",
             "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders],
         }
@@ -305,13 +343,32 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     
     result = {
         "code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "needs_repair": item["needs_repair"], 
-        "kit": item["kit"],
+        "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_other": item["kit_other"],
         "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]
     }
     if is_admin:
         result["price"] = item["price"]
         
     return result
+
+@app.put("/api/items/{code}")
+def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    
+    # Обновляем товар
+    conn.execute("""UPDATE items SET name=?, kind=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, kit_other=? WHERE code=?""",
+                 (req.name, req.kind, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.kit_other, code))
+    
+    # Обновляем локацию и полку в stock (только для первой записи, так как перемещение сложнее)
+    # Для простоты обновляем только полку, если она есть
+    if req.spot:
+        conn.execute("UPDATE stock SET spot=? WHERE item_code=?", (req.spot, code))
+    else:
+        conn.execute("UPDATE stock SET spot='' WHERE item_code=?", (code,))
+        
+    conn.commit(); conn.close()
+    return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
 def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
@@ -399,7 +456,8 @@ def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None
 async def create_item(
     code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(...),
     quantity: int = Form(0), spot: str = Form(""), min_stock: int = Form(0), 
-    price: float = Form(0), kit: str = Form(""), photo: Optional[UploadFile] = File(None),
+    price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_other: str = Form(""),
+    photo: Optional[UploadFile] = File(None),
     x_init_data: Optional[str] = Header(None)
 ):
     check_admin(x_init_data)
@@ -409,8 +467,8 @@ async def create_item(
         contents = await photo.read()
         photo_base64 = base64.b64encode(contents).decode("utf-8")
     try:
-        conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                     (code, name, kind, min_stock, photo_base64, price, kit))
+        conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, kit_other) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                     (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, kit_other))
     except sqlite3.IntegrityError:
         conn.close(); raise HTTPException(status_code=400, detail="Код уже существует")
     if spot:
