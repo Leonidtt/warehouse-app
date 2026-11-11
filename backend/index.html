@@ -78,7 +78,6 @@
 
         <button onclick="scanQr()">📷 Сканировать QR</button>
         
-        <!-- АДМИНСКИЕ КНОПКИ -->
         <div id="admin-buttons" class="hidden">
             <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
             <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
@@ -94,6 +93,8 @@
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         
         <div id="items-list"></div>
+        
+        <button class="danger" onclick="makeMeAdmin()" id="make-admin-btn" style="margin-top: 30px; font-size: 12px; padding: 10px;">🔑 Получить права администратора</button>
     </div>
 
     <div id="screen-users" class="hidden">
@@ -229,7 +230,6 @@
                 currentUser = await api("/api/me");
                 
                 if (!currentUser.full_name) {
-                    // Если имя пустое, просим ввести
                     const name = prompt("Пожалуйста, введите вашу Фамилию и Имя:");
                     if (name) {
                         await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
@@ -241,8 +241,10 @@
                 
                 if (currentUser.role === "admin") {
                     document.getElementById("admin-buttons").classList.remove("hidden");
+                    document.getElementById("make-admin-btn").classList.add("hidden");
                 } else {
                     document.getElementById("admin-buttons").classList.add("hidden");
+                    document.getElementById("make-admin-btn").classList.remove("hidden");
                 }
 
                 await loadLocations();
@@ -252,6 +254,14 @@
             } catch (e) {
                 notify("Ошибка инициализации: " + e.message);
             }
+        }
+
+        async function makeMeAdmin() {
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: currentUser.full_name || "Админ", force_admin: true }) });
+                notify("Готово! Теперь вы администратор. Приложение обновится.");
+                init();
+            } catch (e) { notify("Ошибка: " + e.message); }
         }
 
         async function loadUsers() {
@@ -444,13 +454,9 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
-                // Скрываем кнопки для расходников и не-админов
                 const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.kind === 'consumable') {
-                    repairBtn.style.display = 'none';
-                } else {
-                    repairBtn.style.display = 'block';
-                }
+                if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; }
+                else { repairBtn.style.display = 'block'; }
 
                 const delBtn = document.getElementById("delete-btn");
                 if (currentUser.role === 'admin') { delBtn.style.display = 'block'; }
