@@ -71,7 +71,7 @@
     </style>
 </head>
 <body>
-    <!-- ЭКРАН РЕГИСТРАЦИИ (показывается, если имя пустое) -->
+    <!-- ЭКРАН РЕГИСТРАЦИИ -->
     <div id="screen-register" class="hidden">
         <h1>Регистрация</h1>
         <div class="card" style="display:block;">
@@ -112,7 +112,7 @@
             <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
             <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
             <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
-            <button class="secondary" onclick="showSettings()">⚙️ Настройки</button>
+            <button class="secondary" onclick="showSettings()">⚙️ Настройки (Комнаты/Полки)</button>
             <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         </div>
 
@@ -335,7 +335,6 @@
             try {
                 currentUser = await api("/api/me");
                 
-                // Если имени нет или оно пустое - просим ввести
                 if (!currentUser.full_name || currentUser.full_name.trim() === "") {
                     showScreen("screen-register"); 
                     return; 
@@ -422,12 +421,31 @@
             list.innerHTML = "<p>Загрузка...</p>";
             try {
                 const users = await api("/api/users");
-                list.innerHTML = users.map(u => `<div class="card" style="justify-content:space-between; align-items:center;"><div><b>${u.full_name}</b><div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div></div><button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button></div>`).join("");
+                list.innerHTML = users.map(u => `
+                    <div class="card" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div style="flex:1; min-width:150px;">
+                            <b>${u.full_name}</b>
+                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
+                        </div>
+                        <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>
+                        <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserName(${u.tg_id}, '${u.full_name}')">✏️ Имя</button>
+                    </div>
+                `).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         async function toggleRole(id) {
             try { await api(`/api/users/${id}/role`, { method: "POST" }); loadUsers(); } catch (e) { notify(e.message); }
+        }
+
+        async function editUserName(tg_id, oldName) {
+            const newName = prompt("Новое Фамилия и Имя:", oldName);
+            if (!newName || newName === oldName) return;
+            try { 
+                await api(`/api/users/update_name`, { method: "POST", body: JSON.stringify({ tg_id, new_name: newName }) }); 
+                notify("Имя обновлено"); 
+                loadUsers(); 
+            } catch (e) { notify(e.message); }
         }
 
         function showUsers() { loadUsers(); showScreen("screen-users"); }
@@ -466,7 +484,12 @@
                 let placesHtml = i.stocks.map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join("");
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
-                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
+                
+                // Бюджет виден только админу
+                let budgetBadge = "";
+                if (currentUser.role === 'admin') {
+                    budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
+                }
 
                 return `
                 <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
@@ -593,7 +616,10 @@
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 let priceBadge = currentItem.price ? `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : "";
-                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : "";
+                let budgetText = "";
+                if (currentUser.role === 'admin' && currentItem.budget_tag) {
+                    budgetText = `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>`;
+                }
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : "";
 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
