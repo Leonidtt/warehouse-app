@@ -19,10 +19,9 @@ import base64
 from datetime import datetime, timedelta
 import os
 
-BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI" # ВСТАВЬТЕ СВОЙ ТОКЕН
 app = FastAPI()
 
-# Защита от спама
 request_history = {}
 def check_rate_limit(user_id: int):
     now = time.time()
@@ -31,7 +30,6 @@ def check_rate_limit(user_id: int):
             raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите.")
     request_history[user_id] = now
 
-# Перехватчик ошибок
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}")
@@ -54,7 +52,12 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
+    
+    # Добавляем колонку is_active (1 - активен, 0 - уволен/заблокирован)
+    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee', is_active INTEGER DEFAULT 1)""")
+    try: c.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+    except sqlite3.OperationalError: pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     
     c.execute("""CREATE TABLE IF NOT EXISTS items (
@@ -63,7 +66,6 @@ def init_db():
         kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT ''
     )""")
     
-    # Миграции
     migrations = [
         "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
@@ -118,11 +120,18 @@ def get_user(x_init_data: Optional[str]):
     check_rate_limit(user["id"])
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+    
     if not row:
         full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
         conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, 'employee')", (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+    
+    # ПРОВЕРКА НА БЛОКИРОВКУ
+    if row["is_active"] == 0:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Доступ заблокирован. Обратитесь к администратору.")
+        
     conn.close()
     return dict(row)
 
@@ -173,6 +182,9 @@ class ItemUpdate(BaseModel):
 class SpotUpdate(BaseModel):
     old_name: str; new_name: str
 
+class UserRoleUpdate(BaseModel):
+    role: str
+
 # --- ЭНДПОИНТЫ ---
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
@@ -208,7 +220,7 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    conn = get_conn(); rows = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall(); conn.close()
+    conn = get_conn(); rows = conn.execute("SELECT tg_id, full_name, role, is_active FROM users ORDER BY role DESC, is_active DESC, full_name").fetchall(); conn.close()
     return [dict(r) for r in rows]
 
 @app.post("/api/users/{tg_id}/role")
@@ -218,6 +230,21 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     new_role = "employee" if current["role"] == "admin" else "admin"
     conn.execute("UPDATE users SET role = ? WHERE tg_id = ?", (new_role, tg_id)); conn.commit(); conn.close()
     return {"status": "ok"}
+
+# НОВЫЙ ЭНДПОИНТ ДЛЯ БЛОКИРОВКИ
+@app.post("/api/users/{tg_id}/block")
+def block_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    current = conn.execute("SELECT is_active FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
+    if current["is_active"] == 1:
+        conn.execute("UPDATE users SET is_active = 0 WHERE tg_id = ?", (tg_id,))
+        msg = "Сотрудник заблокирован"
+    else:
+        conn.execute("UPDATE users SET is_active = 1 WHERE tg_id = ?", (tg_id,))
+        msg = "Сотрудник разблокирован"
+    conn.commit(); conn.close()
+    return {"status": "ok", "message": msg}
 
 @app.get("/api/locations")
 def list_locations():
