@@ -38,20 +38,18 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '')""")
+    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0)""")
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     
     try:
         c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
         c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
+        c.execute("ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0")
     except sqlite3.OperationalError: pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, spot TEXT DEFAULT '', PRIMARY KEY (item_code, location_id))""")
-    c.execute("""CREATE TABLE IF NOT EXISTS checkouts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, location_id INTEGER NOT NULL,
-        taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, returned_at TIMESTAMP, returned_by INTEGER, taken_for TEXT DEFAULT ''
-    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS checkouts (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, location_id INTEGER NOT NULL, taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, returned_at TIMESTAMP, returned_by INTEGER, taken_for TEXT DEFAULT '')""")
     try: c.execute("ALTER TABLE checkouts ADD COLUMN returned_by INTEGER")
     except sqlite3.OperationalError: pass
     try: c.execute("ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''")
@@ -59,6 +57,7 @@ def init_db():
 
     c.execute("""CREATE TABLE IF NOT EXISTS movements (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, from_location INTEGER, to_location INTEGER, to_spot TEXT DEFAULT '', user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS writeoffs (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, location_id INTEGER, user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS lost_items (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     
     c.execute("SELECT COUNT(*) FROM locations")
     if c.fetchone()[0] == 0:
@@ -93,6 +92,16 @@ def get_user(x_init_data: Optional[str]):
     conn.commit(); conn.close()
     return user
 
+async def send_notification(message: str):
+    conn = get_conn()
+    users = conn.execute("SELECT tg_id FROM users").fetchall()
+    conn.close()
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    async with httpx.AsyncClient() as client:
+        for u in users:
+            try: await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
+            except: pass
+
 async def send_low_stock_alert(item_code: str):
     conn = get_conn()
     item = conn.execute("SELECT name, min_stock, kind FROM items WHERE code = ?", (item_code,)).fetchone()
@@ -101,13 +110,8 @@ async def send_low_stock_alert(item_code: str):
     stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (item_code,)).fetchall()
     total = sum(s["quantity"] for s in stocks)
     if total <= item["min_stock"]:
-        users = conn.execute("SELECT tg_id FROM users").fetchall()
         message = f"⚠️ <b>Внимание! Заканчивается товар:</b>\n\n🔴 {item['name']} ({item_code})\nОсталось: {total} шт. (минимум: {item['min_stock']})"
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        async with httpx.AsyncClient() as client:
-            for u in users:
-                try: await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
-                except: pass
+        await send_notification(message)
     conn.close()
 
 class ItemCreate(BaseModel):
@@ -177,7 +181,6 @@ def room_detail(location_id: int):
     items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
     item_names = {i["code"]: i["name"] for i in conn.execute("SELECT code, name FROM items").fetchall()}
     conn.close()
-    
     shelves = {}
     no_shelf = []
     for item in items:
@@ -233,30 +236,68 @@ def get_next_code():
 @app.get("/api/items")
 def list_items():
     conn = get_conn()
-    items = conn.execute("SELECT code, name, kind, min_stock, photo FROM items ORDER BY name").fetchall()
+    items = conn.execute("SELECT code, name, kind, min_stock, photo, needs_repair FROM items ORDER BY name").fetchall()
     result = []
     for it in items:
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.first_name, u.username, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
         result.append({
-            "code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"],
+            "code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"], "needs_repair": it["needs_repair"],
             "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable",
             "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders],
         })
     conn.close()
     return result
 
+@app.get("/api/my_items")
+def my_items(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT c.item_code, i.name, c.taken_at, c.taken_for
+        FROM checkouts c JOIN items i ON i.code = c.item_code
+        WHERE c.user_id = ? AND c.returned_at IS NULL
+    """, (user["id"],)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 @app.get("/api/items/{code}")
 def get_item(code: str):
     conn = get_conn()
-    item = conn.execute("SELECT code, name, kind, min_stock, photo FROM items WHERE code = ?", (code,)).fetchone()
+    item = conn.execute("SELECT code, name, kind, min_stock, photo, needs_repair FROM items WHERE code = ?", (code,)).fetchone()
     if not item:
         conn.close(); raise HTTPException(status_code=404, detail="Товар не найден")
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.first_name, u.username, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    return {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    return {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "needs_repair": item["needs_repair"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+
+@app.post("/api/items/{code}/repair")
+def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    item = conn.execute("SELECT needs_repair, name FROM items WHERE code = ?", (code,)).fetchone()
+    if not item:
+        conn.close(); raise HTTPException(404, "Товар не найден")
+    new_status = 0 if item["needs_repair"] else 1
+    conn.execute("UPDATE items SET needs_repair = ? WHERE code = ?", (new_status, code))
+    conn.commit(); conn.close()
+    status_text = "отправлен в ремонт" if new_status else "возвращен в строй"
+    return {"status": "ok", "needs_repair": new_status, "message": f"Товар {item['name']} {status_text}"}
+
+@app.post("/api/items/{code}/lost")
+async def mark_lost(code: str, background_tasks: BackgroundTasks, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
+    if not item:
+        conn.close(); raise HTTPException(404, "Товар не найден")
+    conn.execute("INSERT INTO lost_items (item_code, user_id) VALUES (?, ?)", (code, user["id"]))
+    conn.commit(); conn.close()
+    msg = f"🚨 <b>Тревога!</b>\nСотрудник {user['first_name']} не нашел на месте: <b>{item['name']}</b> ({code})."
+    background_tasks.add_task(send_notification, msg)
+    return {"status": "ok", "message": "Уведомление отправлено"}
 
 @app.delete("/api/items/{code}")
 def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
@@ -269,6 +310,7 @@ def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
     conn.execute("DELETE FROM stock WHERE item_code = ?", (code,))
     conn.execute("DELETE FROM bookings WHERE item_code = ?", (code,))
     conn.execute("DELETE FROM comments WHERE item_code = ?", (code,))
+    conn.execute("DELETE FROM lost_items WHERE item_code = ?", (code,))
     conn.commit(); conn.close()
     return {"status": "ok"}
 
@@ -343,8 +385,10 @@ async def create_item(
 async def checkout(req: CheckoutRequest, background_tasks: BackgroundTasks, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    item = conn.execute("SELECT kind FROM items WHERE code = ?", (req.code,)).fetchone()
+    item = conn.execute("SELECT kind, needs_repair FROM items WHERE code = ?", (req.code,)).fetchone()
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
+    if item["needs_repair"]:
+        conn.close(); raise HTTPException(400, "Товар в ремонте, выдача запрещена")
     if item["kind"] != "equipment":
         conn.close(); raise HTTPException(400, "Это расходник, используйте списание")
     
@@ -362,10 +406,7 @@ async def checkout(req: CheckoutRequest, background_tasks: BackgroundTasks, x_in
     
     conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?, ?, ?, ?)", (req.code, user["id"], stock["location_id"], req.taken_for))
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
-    
-    # Удаляем запись, если остаток стал 0
     conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
-
     conn.commit(); conn.close()
     background_tasks.add_task(send_low_stock_alert, req.code)
     return {"status": "ok"}
@@ -397,8 +438,6 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         conn.close(); raise HTTPException(400, f"Недостаточно товара. В источнике: {row['quantity'] if row else 0} шт.")
     
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
-    
-    # Удаляем запись, если в источнике остаток стал 0
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
 
     if req.to_spot:
@@ -422,10 +461,7 @@ async def writeoff(req: WriteoffRequest, background_tasks: BackgroundTasks, x_in
     if not row or row["quantity"] < req.quantity:
         conn.close(); raise HTTPException(400, "Недостаточно товара")
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.location_id))
-    
-    # Удаляем запись, если остаток стал 0
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
-
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?, ?, ?, ?)", (req.code, req.quantity, req.location_id, user["id"]))
     conn.commit(); conn.close()
     background_tasks.add_task(send_low_stock_alert, req.code)
@@ -446,6 +482,9 @@ def get_history(limit: int = 50):
     UNION ALL
     SELECT 'writeoff', w.created_at, w.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), w.quantity, l.name, NULL
     FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id LEFT JOIN locations l ON l.id = w.location_id
+    UNION ALL
+    SELECT 'lost', l.created_at, l.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), 1, NULL, 'НЕ НАЙДЕН'
+    FROM lost_items l JOIN items i ON i.code = l.item_code LEFT JOIN users u ON u.tg_id = l.user_id
     ORDER BY date DESC LIMIT ?
     """
     rows = conn.execute(query, (limit,)).fetchall()
