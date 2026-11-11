@@ -333,6 +333,7 @@
         <div id="settings-spots-list"></div>
 
         <h2 style="font-size: 16px; margin-top: 30px; color: var(--danger);">Разработка</h2>
+        <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="clearDatabase()">🗑 Очистить базу товаров</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
@@ -537,6 +538,24 @@
 Вспышка,TT685iic,8000,133000
 T2,,,"></textarea>
             <button onclick="submitText()">Загрузить</button>
+        </div>
+    </div>
+
+    <div id="screen-terminal" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <div class="sticky-title">Терминал</div>
+            <div style="width: 80px;"></div>
+        </div>
+        
+        <div style="margin-top: 16px;">
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">
+                Внимание! Команды выполняются напрямую в базе данных. Будь осторожен.
+            </p>
+            <textarea id="terminal-sql" rows="6" placeholder="UPDATE items SET category = 'Фототехника' WHERE ..." style="font-family: monospace; font-size: 14px;"></textarea>
+            <button onclick="executeTerminal()">Выполнить</button>
+            
+            <div id="terminal-result" style="margin-top: 20px;"></div>
         </div>
     </div>
 
@@ -946,9 +965,49 @@ T2,,,"></textarea>
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         function downloadHistory() { window.open("/api/export_history", "_blank"); }
+
+        function showTerminal() {
+            document.getElementById("terminal-sql").value = "";
+            document.getElementById("terminal-result").innerHTML = "";
+            showScreen("screen-terminal");
+        }
+
+        async function executeTerminal() {
+            const sql = document.getElementById("terminal-sql").value.trim();
+            if (!sql) return;
+            
+            const resBox = document.getElementById("terminal-result");
+            resBox.innerHTML = "<p>Выполняется...</p>";
+            
+            try {
+                const res = await api("/api/execute_sql", { 
+                    method: "POST", 
+                    body: JSON.stringify({ sql: sql }) 
+                });
+                
+                if (res.type === "select") {
+                    if (!res.data.length) {
+                        resBox.innerHTML = "<p>Запрос выполнен. Данных нет.</p>";
+                    } else {
+                        let html = `<div style="overflow-x: auto; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 10px;"><table style="width: 100%; border-collapse: collapse;">`;
+                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th style="text-align: left; border-bottom: 1px solid var(--border); padding: 4px;">${k}</th>`).join("") + `</tr>`;
+                        res.data.forEach(row => {
+                            html += `<tr>` + Object.values(row).map(v => `<td style="border-bottom: 1px solid var(--border); padding: 4px;">${v}</td>`).join("") + `</tr>`;
+                        });
+                        html += `</table></div>`;
+                        resBox.innerHTML = html;
+                    }
+                } else {
+                    resBox.innerHTML = `<div class="status-badge status-free">${res.message}</div>`;
+                    loadStats();
+                }
+            } catch (e) {
+                resBox.innerHTML = `<div class="status-badge status-broken">Ошибка: ${e.message}</div>`;
+            }
+        }
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
