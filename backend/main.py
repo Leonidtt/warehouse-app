@@ -92,7 +92,7 @@ def get_user(x_init_data: Optional[str]):
     
     if not row:
         # Если пользователя нет, создаем его со статусом pending
-        conn.execute("INSERT INTO users (tg_id, first_name, username, role) VALUES (?, ?, ?, 'pending')", (user["id"], user.get("first_name", ""), user.get("username", "")))
+        conn.execute("INSERT INTO users (tg_id, first_name, username, role) VALUES (?, ?, ?, 'admin')", (user["id"], user.get("first_name", ""), user.get("username", "")))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     
