@@ -19,6 +19,8 @@ from datetime import datetime
 import os
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+ADMIN_USERNAME = "leondtt"
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -36,8 +38,10 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '')""")
+    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
     try: c.execute("ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'")
     except sqlite3.OperationalError: pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
@@ -85,16 +89,35 @@ def verify_init_data(init_data: str) -> dict:
 def get_user(x_init_data: Optional[str]):
     if not x_init_data: raise HTTPException(status_code=401, detail="Нет авторизации")
     user = verify_init_data(x_init_data)
+    tg_username = user.get("username", "")
+    
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+    
     if not row:
+        # Новый пользователь: если ваш логин - админ, иначе - сотрудник
+        role = "admin" if tg_username == ADMIN_USERNAME else "employee"
         full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
-        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name) VALUES (?, ?, ?, ?)", 
-                     (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
+        
+        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, ?)", 
+                     (user["id"], user.get("first_name", ""), tg_username, full_name, role))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+    else:
+        # Если пользователь есть, но логин изменился, обновляем
+        if row["username"] != tg_username:
+            conn.execute("UPDATE users SET username = ? WHERE tg_id = ?", (tg_username, user["id"]))
+            conn.commit()
+            row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+
     conn.close()
     return dict(row)
+
+def check_admin(x_init_data: Optional[str]):
+    user = get_user(x_init_data)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Доступ только для администратора")
+    return user
 
 async def send_notification(message: str):
     conn = get_conn()
@@ -146,9 +169,38 @@ class CheckoutRequest(BaseModel):
     code: str
     taken_for: str = ""
 
+class RegisterRequest(BaseModel):
+    full_name: str
+
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)):
     return get_user(x_init_data)
+
+@app.post("/api/register")
+def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    conn = get_conn()
+    conn.execute("UPDATE users SET full_name = ? WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"]))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
+@app.get("/api/users")
+def list_users(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    rows = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC, full_name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/users/{tg_id}/role")
+def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    current = conn.execute("SELECT role FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
+    new_role = "employee" if current["role"] == "admin" else "admin"
+    conn.execute("UPDATE users SET role = ? WHERE tg_id = ?", (new_role, tg_id))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
 
 @app.get("/api/locations")
 def list_locations():
@@ -195,7 +247,7 @@ def list_spots():
 
 @app.post("/api/spots")
 def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     try:
         conn.execute("INSERT INTO spots (name) VALUES (?)", (spot.name.strip(),))
@@ -207,7 +259,7 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
 
 @app.delete("/api/spots/{spot_name}")
 def delete_spot(spot_name: str, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     check = conn.execute("SELECT COUNT(*) FROM stock WHERE spot = ? AND quantity > 0", (spot_name,)).fetchone()[0]
     if check > 0:
@@ -218,7 +270,7 @@ def delete_spot(spot_name: str, x_init_data: Optional[str] = Header(None)):
 
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
     max_num = 0
@@ -298,7 +350,7 @@ async def mark_lost(code: str, background_tasks: BackgroundTasks, x_init_data: O
 
 @app.delete("/api/items/{code}")
 def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     holder = conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if holder:
@@ -361,7 +413,7 @@ async def create_item(
     quantity: int = Form(0), spot: str = Form(""), min_stock: int = Form(0), photo: Optional[UploadFile] = File(None),
     x_init_data: Optional[str] = Header(None)
 ):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     photo_base64 = ""
     if photo:
@@ -488,7 +540,7 @@ def get_history(limit: int = 50):
 
 @app.get("/api/export_history")
 def export_history(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    check_admin(x_init_data)
     conn = get_conn()
     query = """
     SELECT 'Выдача' as type, c.taken_at as date, c.item_code as code, i.name, u.full_name as user_name, 1 as quantity, '' as from_loc, c.taken_for as to_loc
