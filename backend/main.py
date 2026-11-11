@@ -36,15 +36,7 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
-    
-    # ОБНОВЛЕННАЯ ТАБЛИЦА ПОЛЬЗОВАТЕЛЕЙ
-    c.execute("""CREATE TABLE IF NOT EXISTS users (
-        tg_id INTEGER PRIMARY KEY, 
-        first_name TEXT, 
-        username TEXT,
-        full_name TEXT DEFAULT '',
-        role TEXT DEFAULT 'pending'
-    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'pending')""")
     try: c.execute("ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass
     try: c.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'pending'")
@@ -99,6 +91,7 @@ def get_user(x_init_data: Optional[str]):
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     
     if not row:
+        # Если пользователя нет, создаем его со статусом pending
         conn.execute("INSERT INTO users (tg_id, first_name, username, role) VALUES (?, ?, ?, 'pending')", (user["id"], user.get("first_name", ""), user.get("username", "")))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
@@ -165,18 +158,30 @@ class CheckoutRequest(BaseModel):
 class RegisterRequest(BaseModel):
     full_name: str
 
-# --- ПОЛЬЗОВАТЕЛИ ---
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)):
     return get_user(x_init_data)
 
+# ОБНОВЛЕННАЯ РЕГИСТРАЦИЯ: первый становится админом
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    conn.execute("UPDATE users SET full_name = ?, role = 'employee' WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"]))
+    
+    # Проверяем, есть ли уже админы в базе
+    admin_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0]
+    
+    if admin_count == 0:
+        # Если админов нет, этот пользователь становится админом
+        new_role = "admin"
+        notify_msg = "Вы зарегистрированы как Администратор (первый пользователь)!"
+    else:
+        new_role = "employee"
+        notify_msg = "Вы успешно зарегистрированы как Сотрудник."
+
+    conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name.strip(), new_role, user["tg_id"]))
     conn.commit(); conn.close()
-    return {"status": "ok"}
+    return {"status": "ok", "message": notify_msg, "role": new_role}
 
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
@@ -196,7 +201,6 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     conn.commit(); conn.close()
     return {"status": "ok"}
 
-# --- ОСТАЛЬНЫЕ API ---
 @app.get("/api/locations")
 def list_locations():
     conn = get_conn()
