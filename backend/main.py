@@ -19,8 +19,6 @@ from datetime import datetime
 import os
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-ADMIN_USERNAME = "leondtt"
-
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -89,27 +87,16 @@ def verify_init_data(init_data: str) -> dict:
 def get_user(x_init_data: Optional[str]):
     if not x_init_data: raise HTTPException(status_code=401, detail="Нет авторизации")
     user = verify_init_data(x_init_data)
-    tg_username = user.get("username", "")
-    
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     
     if not row:
-        # Новый пользователь: если ваш логин - админ, иначе - сотрудник
-        role = "admin" if tg_username == ADMIN_USERNAME else "employee"
         full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
-        
-        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, ?)", 
-                     (user["id"], user.get("first_name", ""), tg_username, full_name, role))
+        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, 'employee')", 
+                     (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
-    else:
-        # Если пользователь есть, но логин изменился, обновляем
-        if row["username"] != tg_username:
-            conn.execute("UPDATE users SET username = ? WHERE tg_id = ?", (tg_username, user["id"]))
-            conn.commit()
-            row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
-
+    
     conn.close()
     return dict(row)
 
@@ -171,6 +158,7 @@ class CheckoutRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     full_name: str
+    force_admin: bool = False
 
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)):
@@ -180,7 +168,10 @@ def get_me(x_init_data: Optional[str] = Header(None)):
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    conn.execute("UPDATE users SET full_name = ? WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"]))
+    role = user["role"]
+    if req.force_admin:
+        role = "admin"
+    conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name.strip(), role, user["tg_id"]))
     conn.commit(); conn.close()
     return {"status": "ok"}
 
