@@ -32,6 +32,8 @@
         .badge.eq { background: #e3f2fd; color: #1565c0; }
         .badge.cons { background: #fff3e0; color: #e65100; }
         .badge.price { background: #e8f5e9; color: #2e7d32; font-weight: bold; }
+        .badge.budget-kc { background: #ffebee; color: #c62828; font-weight: bold; border: 1px solid #ffcdd2; }
+        .badge.budget-tx { background: #e8f5e9; color: #2e7d32; font-weight: bold; border: 1px solid #c8e6c9; }
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
@@ -69,7 +71,6 @@
     </style>
 </head>
 <body>
-    <!-- ЭКРАН РЕГИСТРАЦИИ (Скрыт по умолчанию) -->
     <div id="screen-register" class="hidden">
         <h1>Регистрация</h1>
         <div class="card" style="display:block;">
@@ -82,7 +83,6 @@
         <button onclick="doRegister()">Зарегистрироваться</button>
     </div>
 
-    <!-- ГЛАВНЫЙ ЭКРАН -->
     <div id="screen-main" class="hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <h1 style="margin:0;">Учёт</h1>
@@ -114,7 +114,6 @@
         <div id="items-list"></div>
     </div>
 
-    <!-- ЭКРАН РЕДАКТИРОВАНИЯ -->
     <div id="screen-edit-item" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="openItem(currentItem.code)">← Назад</button></div>
         <h1>Редактирование</h1>
@@ -129,6 +128,15 @@
         </div>
         <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
         
+        <div class="input-group">
+            <label>Бюджет (для админа)</label>
+            <select id="edit-budget-tag">
+                <option value="">Не указан</option>
+                <option value="КЦ">КЦ (Красный)</option>
+                <option value="ТХ">ТХ (Зеленый)</option>
+            </select>
+        </div>
+
         <h2>Комплектация (Оборудование)</h2>
         <div class="input-group"><label>Тушка / Корпус</label><input id="edit-kit-body" placeholder="Например, Canon R6"></div>
         <div class="input-group"><label>Объектив</label><input id="edit-kit-lens" placeholder="Например, 24-105 F4"></div>
@@ -142,7 +150,6 @@
         <button class="danger" onclick="deleteItemFromEdit()" style="margin-top:20px;">🗑 Удалить товар</button>
     </div>
 
-    <!-- ЭКРАН НАСТРОЕК -->
     <div id="screen-settings" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Настройки</h1>
@@ -156,35 +163,30 @@
         <div id="settings-spots-list"></div>
     </div>
 
-    <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
     <div id="screen-users" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Пользователи</h1>
         <div id="users-list"></div>
     </div>
 
-    <!-- ЭКРАН КОМНАТ -->
     <div id="screen-rooms" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Комнаты</h1>
         <div id="rooms-list"></div>
     </div>
 
-    <!-- ЭКРАН ПРОСМОТРА КОМНАТЫ -->
     <div id="screen-room-view" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1 id="room-title">Комната</h1>
         <div id="room-items"></div>
     </div>
 
-    <!-- ЭКРАН НА РУКАХ -->
     <div id="screen-on-hand" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Все на руках</h1>
         <div id="on-hand-list"></div>
     </div>
 
-    <!-- КАРТОЧКА ТОВАРА -->
     <div id="screen-item" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 id="item-title">Товар</h1>
@@ -220,7 +222,6 @@
         <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
     </div>
 
-    <!-- ЭКРАН ДОБАВЛЕНИЯ -->
     <div id="screen-add" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Новый товар</h1>
@@ -238,6 +239,15 @@
         
         <div class="input-group"><label>Стоимость (для админа)</label><input id="add-price" type="number" placeholder="0" value="0"></div>
         
+        <div class="input-group">
+            <label>Бюджет (для админа)</label>
+            <select id="add-budget-tag">
+                <option value="">Не указан</option>
+                <option value="КЦ">КЦ (Красный)</option>
+                <option value="ТХ">ТХ (Зеленый)</option>
+            </select>
+        </div>
+
         <h2>Комплектация</h2>
         <div class="input-group"><label>Тушка / Корпус</label><input id="add-kit-body" placeholder="Например, Canon R6"></div>
         <div class="input-group"><label>Объектив</label><input id="add-kit-lens" placeholder="Например, 24-105 F4"></div>
@@ -251,7 +261,6 @@
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
-    <!-- ЭКРАН ИМПОРТА -->
     <div id="screen-import" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Импорт данных</h1>
@@ -263,7 +272,6 @@
         <button onclick="submitText()">Загрузить</button>
     </div>
 
-    <!-- ЭКРАН СОЗДАНИЯ ПОЛКИ -->
     <div id="screen-spot-qr" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Создать полку</h1>
@@ -273,7 +281,6 @@
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
     </div>
 
-    <!-- ЭКРАН ИСТОРИИ -->
     <div id="screen-history" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>История</h1>
@@ -468,7 +475,12 @@
                 }
 
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
+                
+                // Бейджики для админа: Цена и Бюджет
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
+                let budgetBadge = "";
+                if (i.budget_tag === 'КЦ') budgetBadge = `<span class="badge budget-kc">КЦ</span>`;
+                else if (i.budget_tag === 'ТХ') budgetBadge = `<span class="badge budget-tx">ТХ</span>`;
 
                 return `
                 <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
@@ -477,6 +489,7 @@
                         <div class="name">${i.name}
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
                             ${priceBadge}
+                            ${budgetBadge}
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                             ${brokenBadge}
                         </div>
@@ -583,6 +596,12 @@
                 if (currentItem.price && currentItem.price > 0) {
                     priceBadge = `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>`;
                 }
+                
+                let budgetText = "";
+                if (currentItem.budget_tag) {
+                    let color = currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32';
+                    budgetText = `<div class="meta" style="color:${color}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>`;
+                }
 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
                     document.getElementById("kit-box").classList.remove("hidden");
@@ -616,6 +635,7 @@
                     <div class="meta">Код: ${currentItem.code}</div>
                     <div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>
                     ${priceBadge}
+                    ${budgetText}
                     ${minStockText}
                     ${statusHtml}
                 `;
@@ -634,6 +654,7 @@
             document.getElementById("edit-name").value = currentItem.name;
             document.getElementById("edit-kind").value = currentItem.kind;
             document.getElementById("edit-price").value = currentItem.price || 0;
+            document.getElementById("edit-budget-tag").value = currentItem.budget_tag || "";
             document.getElementById("edit-kit-body").value = currentItem.kit_body || "";
             document.getElementById("edit-kit-lens").value = currentItem.kit_lens || "";
             document.getElementById("edit-kit-flash").value = currentItem.kit_flash || "";
@@ -661,6 +682,7 @@
             const name = document.getElementById("edit-name").value.trim();
             const kind = document.getElementById("edit-kind").value;
             const price = parseFloat(document.getElementById("edit-price").value) || 0;
+            const budget_tag = document.getElementById("edit-budget-tag").value;
             const kit_body = document.getElementById("edit-kit-body").value.trim();
             const kit_lens = document.getElementById("edit-kit-lens").value.trim();
             const kit_flash = document.getElementById("edit-kit-flash").value.trim();
@@ -669,7 +691,7 @@
             try {
                 await api(`/api/items/${currentItem.code}/update`, {
                     method: "POST",
-                    body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash })
+                    body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag })
                 });
                 notify("Сохранено");
                 openItem(currentItem.code);
@@ -888,6 +910,7 @@
             try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) { document.getElementById("add-code").value = "ITEM-1"; }
             document.getElementById("add-kind").value = "equipment";
             document.getElementById("add-price").value = "0";
+            document.getElementById("add-budget-tag").value = "";
             document.getElementById("add-kit-body").value = "";
             document.getElementById("add-kit-lens").value = "";
             document.getElementById("add-kit-flash").value = "";
@@ -902,6 +925,7 @@
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
             const price = parseFloat(document.getElementById("add-price").value) || 0;
+            const budget_tag = document.getElementById("add-budget-tag").value;
             const kit_body = document.getElementById("add-kit-body").value.trim();
             const kit_lens = document.getElementById("add-kit-lens").value.trim();
             const kit_flash = document.getElementById("add-kit-flash").value.trim();
@@ -915,6 +939,7 @@
             formData.append("location_id", loc); formData.append("quantity", qty); formData.append("spot", spot);
             formData.append("min_stock", minStock);
             formData.append("price", price);
+            formData.append("budget_tag", budget_tag);
             formData.append("kit_body", kit_body);
             formData.append("kit_lens", kit_lens);
             formData.append("kit_flash", kit_flash);
