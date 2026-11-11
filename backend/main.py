@@ -18,14 +18,9 @@ import base64
 from datetime import datetime
 import os
 
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 DB_PATH = "/data/warehouse.db"
 
@@ -47,14 +42,17 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     
-    try:
-        c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
-        c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
-        c.execute("ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0")
+    # --- БЕЗОПАСНАЯ МИГРАЦИЯ ДЛЯ СТАРЫХ БАЗ ---
+    try: c.execute("ALTER TABLE items ADD COLUMN min_stock INTEGER DEFAULT 0")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE items ADD COLUMN photo TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0")
     except sqlite3.OperationalError: pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, spot TEXT DEFAULT '', PRIMARY KEY (item_code, location_id))""")
     c.execute("""CREATE TABLE IF NOT EXISTS checkouts (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, location_id INTEGER NOT NULL, taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, returned_at TIMESTAMP, returned_by INTEGER, taken_for TEXT DEFAULT '')""")
+    
     try: c.execute("ALTER TABLE checkouts ADD COLUMN returned_by INTEGER")
     except sqlite3.OperationalError: pass
     try: c.execute("ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''")
