@@ -93,19 +93,13 @@ def get_user(x_init_data: Optional[str]):
     conn.commit(); conn.close()
     return user
 
-# ОБНОВЛЕННАЯ ФУНКЦИЯ ОПОВЕЩЕНИЯ (только для расходников)
 async def send_low_stock_alert(item_code: str):
     conn = get_conn()
     item = conn.execute("SELECT name, min_stock, kind FROM items WHERE code = ?", (item_code,)).fetchone()
-    
-    # Если товар не найден или это ОБОРУДОВАНИЕ, то не отправляем оповещение
     if not item or item["kind"] != "consumable": 
-        conn.close()
-        return
-    
+        conn.close(); return
     stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (item_code,)).fetchall()
     total = sum(s["quantity"] for s in stocks)
-    
     if total <= item["min_stock"]:
         users = conn.execute("SELECT tg_id FROM users").fetchall()
         message = f"⚠️ <b>Внимание! Заканчивается товар:</b>\n\n🔴 {item['name']} ({item_code})\nОсталось: {total} шт. (минимум: {item['min_stock']})"
@@ -242,7 +236,7 @@ def list_items():
     items = conn.execute("SELECT code, name, kind, min_stock, photo FROM items ORDER BY name").fetchall()
     result = []
     for it in items:
-        stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ?", (it["code"],)).fetchall()
+        stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.first_name, u.username, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
         result.append({
@@ -259,7 +253,7 @@ def get_item(code: str):
     item = conn.execute("SELECT code, name, kind, min_stock, photo FROM items WHERE code = ?", (code,)).fetchone()
     if not item:
         conn.close(); raise HTTPException(status_code=404, detail="Товар не найден")
-    stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ?", (code,)).fetchall()
+    stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.first_name, u.username, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
     return {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
@@ -368,6 +362,10 @@ async def checkout(req: CheckoutRequest, background_tasks: BackgroundTasks, x_in
     
     conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?, ?, ?, ?)", (req.code, user["id"], stock["location_id"], req.taken_for))
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
+    
+    # Удаляем запись, если остаток стал 0
+    conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
+
     conn.commit(); conn.close()
     background_tasks.add_task(send_low_stock_alert, req.code)
     return {"status": "ok"}
@@ -397,7 +395,12 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity:
         conn.close(); raise HTTPException(400, f"Недостаточно товара. В источнике: {row['quantity'] if row else 0} шт.")
+    
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
+    
+    # Удаляем запись, если в источнике остаток стал 0
+    conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
+
     if req.to_spot:
         try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
         except: pass
@@ -406,6 +409,7 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
         conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, req.to_spot, req.code, req.to_location))
     else:
         conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, ?, ?)", (req.code, req.to_location, req.quantity, req.to_spot))
+    
     conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?, ?, ?, ?, ?, ?)", (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["id"]))
     conn.commit(); conn.close()
     return {"status": "ok"}
@@ -418,6 +422,10 @@ async def writeoff(req: WriteoffRequest, background_tasks: BackgroundTasks, x_in
     if not row or row["quantity"] < req.quantity:
         conn.close(); raise HTTPException(400, "Недостаточно товара")
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.location_id))
+    
+    # Удаляем запись, если остаток стал 0
+    conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
+
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?, ?, ?, ?)", (req.code, req.quantity, req.location_id, user["id"]))
     conn.commit(); conn.close()
     background_tasks.add_task(send_low_stock_alert, req.code)
