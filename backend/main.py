@@ -19,6 +19,7 @@ import base64
 from datetime import datetime, timedelta
 import os
 
+# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 app = FastAPI()
 
@@ -27,22 +28,17 @@ request_history = {}
 def check_rate_limit(user_id: int):
     now = time.time()
     if user_id in request_history:
-        if now - request_history[user_id] < 1.0:
-            raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите секунду.")
+        if now - request_history[user_id] < 0.5: # Не чаще 1 раза в 0.5 сек
+            raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите.")
     request_history[user_id] = now
 
+# Глобальный перехватчик ошибок (чтобы не было белого экрана)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера. Попробуйте позже."})
 
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["*"], 
-    allow_credentials=True, 
-    allow_methods=["*"], 
-    allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 DB_PATH = "/data/warehouse.db"
 
@@ -52,7 +48,7 @@ def get_conn():
         except: pass
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA journal_mode=WAL;") # Надежная работа с базой
     return conn
 
 def init_db():
@@ -68,6 +64,7 @@ def init_db():
         kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT ''
     )""")
     
+    # Безопасные миграции (добавляем колонки, если их нет)
     migrations = [
         "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
@@ -104,10 +101,8 @@ def init_db():
 init_db()
 
 def verify_init_data(init_data: str) -> dict:
-    try:
-        pairs = dict(parse_qsl(init_data, keep_blank_values=True))
-    except Exception:
-        raise HTTPException(status_code=401, detail="Некорректный initData")
+    try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+    except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
     received_hash = pairs.pop("hash", None)
     if not received_hash: raise HTTPException(status_code=401, detail="Нет подписи")
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
@@ -129,15 +124,14 @@ def get_user(x_init_data: Optional[str]):
         conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, 'employee')", (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
-    conn.close()
-    return dict(row)
+    conn.close(); return dict(row)
 
 def check_admin(x_init_data: Optional[str]):
     user = get_user(x_init_data)
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
-# --- МОДЕЛИ ---
+# --- МОДЕЛИ ДАННЫХ ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0
@@ -152,7 +146,6 @@ class BatchMoveRequest(BaseModel):
 
 class WriteoffRequest(BaseModel):
     code: str; location_id: int; quantity: int
-
 class SpotCreate(BaseModel): name: str
 class BookingRequest(BaseModel): code: str; date_from: str; date_to: str
 class CommentRequest(BaseModel): code: str; text: str
@@ -163,6 +156,7 @@ class LocationUpdate(BaseModel): id: int; name: str
 class ItemUpdate(BaseModel):
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str
 class SpotUpdate(BaseModel): old_name: str; new_name: str
+class UserUpdate(BaseModel): tg_id: int; new_name: str
 
 # --- ЭНДПОИНТЫ ---
 
@@ -171,15 +165,13 @@ def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_da
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data)
-    conn = get_conn()
+    user = get_user(x_init_data); conn = get_conn()
     rows = conn.execute("SELECT b.*, i.name FROM bookings b JOIN items i ON i.code = b.item_code WHERE b.user_id = ? AND b.date_to >= date('now') ORDER BY b.date_from", (user["tg_id"],)).fetchall()
     conn.close(); return [dict(r) for r in rows]
 
 @app.get("/api/daily_report")
 def get_daily_report(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
-    conn = get_conn()
+    get_user(x_init_data); conn = get_conn()
     today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute("SELECT report_text FROM daily_reports WHERE date = ?", (today,)).fetchone()
     if not row:
@@ -210,10 +202,17 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     conn.execute("UPDATE users SET role = ? WHERE tg_id = ?", (new_role, tg_id)); conn.commit(); conn.close()
     return {"status": "ok"}
 
+@app.post("/api/users/update_name")
+def update_user_name(req: UserUpdate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    conn.execute("UPDATE users SET full_name = ? WHERE tg_id = ?", (req.new_name.strip(), req.tg_id))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
 @app.get("/api/locations")
 def list_locations():
-    conn = get_conn(); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close()
-    return [dict(r) for r in rows]
+    conn = get_conn(); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close(); return [dict(r) for r in rows]
 
 @app.post("/api/locations")
 def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(None)):
@@ -231,8 +230,7 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
 
 @app.get("/api/spots")
 def list_spots():
-    conn = get_conn(); rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall(); conn.close()
-    return [dict(r) for r in rows]
+    conn = get_conn(); rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall(); conn.close(); return [dict(r) for r in rows]
 
 @app.post("/api/spots")
 def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
@@ -258,9 +256,7 @@ def get_next_code(x_init_data: Optional[str] = Header(None)):
 
 @app.get("/api/locations_view")
 def locations_view():
-    conn = get_conn()
-    locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall()
-    result = []
+    conn = get_conn(); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
     for loc in locations:
         spots = conn.execute("SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''", (loc["id"],)).fetchall()
         result.append({"id": loc["id"], "name": loc["name"], "spots": [s["spot"] for s in spots]})
@@ -268,13 +264,11 @@ def locations_view():
 
 @app.get("/api/room_detail/{location_id}")
 def room_detail(location_id: int):
-    conn = get_conn()
-    location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
+    conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
     items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
     item_names = {i["code"]: i["name"] for i in conn.execute("SELECT code, name FROM items").fetchall()}
-    conn.close()
-    shelves = {}; no_shelf = []
+    conn.close(); shelves = {}; no_shelf = []
     for item in items:
         data = {"code": item["item_code"], "name": item_names.get(item["item_code"], "—"), "quantity": item["quantity"]}
         spot = item["spot"].strip() if item["spot"] else ""
@@ -340,8 +334,7 @@ async def create_item(
     kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), budget_tag: str = Form(""), serial_number: str = Form(""),
     photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)
 ):
-    check_admin(x_init_data); conn = get_conn()
-    photo_base64 = ""
+    check_admin(x_init_data); conn = get_conn(); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     try:
         conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number))
@@ -380,8 +373,7 @@ def return_item(code: str, x_init_data: Optional[str] = Header(None)):
 def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
-    conn = get_conn()
-    row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
+    conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
@@ -423,6 +415,12 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?,?,?,?)", (req.code, req.quantity, req.location_id, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
+
+@app.get("/api/on_hand")
+def on_hand():
+    conn = get_conn()
+    rows = conn.execute("SELECT c.item_code, i.name, u.full_name, c.taken_at, c.taken_for FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NULL").fetchall()
+    conn.close(); return [dict(r) for r in rows]
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
