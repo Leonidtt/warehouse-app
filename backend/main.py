@@ -44,7 +44,6 @@ def init_db():
 
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     
-    # Таблица items: добавлены price, kit_body, kit_lens, kit_flash, budget_tag
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         code TEXT UNIQUE NOT NULL, 
@@ -75,11 +74,26 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, spot TEXT DEFAULT '', PRIMARY KEY (item_code, location_id))""")
-    c.execute("""CREATE TABLE IF NOT EXISTS checkouts (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, location_id INTEGER NOT NULL, taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, returned_at TIMESTAMP, returned_by INTEGER, taken_for TEXT DEFAULT '')""")
+    
+    # Таблица выдач с запоминанием полки (taken_spot)
+    c.execute("""CREATE TABLE IF NOT EXISTS checkouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        item_code TEXT NOT NULL, 
+        user_id INTEGER NOT NULL, 
+        location_id INTEGER NOT NULL, 
+        taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+        returned_at TIMESTAMP, 
+        returned_by INTEGER, 
+        taken_for TEXT DEFAULT '',
+        taken_spot TEXT DEFAULT ''
+    )""")
     try: c.execute("ALTER TABLE checkouts ADD COLUMN returned_by INTEGER")
     except sqlite3.OperationalError: pass
     try: c.execute("ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE checkouts ADD COLUMN taken_spot TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS movements (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, from_location INTEGER, to_location INTEGER, to_spot TEXT DEFAULT '', user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS writeoffs (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, location_id INTEGER, user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS lost_items (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
@@ -140,6 +154,7 @@ async def send_notification(message: str):
             try: await client.post(url, json={"chat_id": u["tg_id"], "text": message, "parse_mode": "HTML"})
             except: pass
 
+# --- МОДЕЛИ ДАННЫХ ---
 class ItemCreate(BaseModel):
     code: str
     name: str
@@ -202,6 +217,7 @@ class SpotUpdate(BaseModel):
     old_name: str
     new_name: str
 
+# --- ПОЛЬЗОВАТЕЛИ ---
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)):
     return get_user(x_init_data)
@@ -232,6 +248,7 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- ЛОКАЦИИ И КОМНАТЫ ---
 @app.get("/api/locations")
 def list_locations():
     conn = get_conn()
@@ -251,6 +268,37 @@ def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(Non
     conn.close()
     return {"status": "ok"}
 
+@app.get("/api/locations_view")
+def locations_view():
+    conn = get_conn()
+    locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall()
+    result = []
+    for loc in locations:
+        spots = conn.execute("SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''", (loc["id"],)).fetchall()
+        result.append({"id": loc["id"], "name": loc["name"], "spots": [s["spot"] for s in spots]})
+    conn.close()
+    return result
+
+@app.get("/api/room_detail/{location_id}")
+def room_detail(location_id: int):
+    conn = get_conn()
+    location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not location:
+        conn.close(); raise HTTPException(404, "Комната не найдена")
+    items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
+    item_names = {i["code"]: i["name"] for i in conn.execute("SELECT code, name FROM items").fetchall()}
+    conn.close()
+    
+    shelves = {}
+    no_shelf = []
+    for item in items:
+        data = {"code": item["item_code"], "name": item_names.get(item["item_code"], "—"), "quantity": item["quantity"]}
+        spot = item["spot"].strip() if item["spot"] else ""
+        if spot: shelves.setdefault(spot, []).append(data)
+        else: no_shelf.append(data)
+    return {"location_name": location["name"], "shelves": shelves, "no_shelf": no_shelf}
+
+# --- ПОЛКИ ---
 @app.get("/api/spots")
 def list_spots():
     conn = get_conn()
@@ -283,6 +331,7 @@ def update_spot(req: SpotUpdate, x_init_data: Optional[str] = Header(None)):
     conn.close()
     return {"status": "ok"}
 
+# --- ТОВАРЫ ---
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
@@ -410,6 +459,7 @@ def on_hand():
     conn.close()
     return [dict(r) for r in rows]
 
+# --- БРОНИРОВАНИЕ ---
 @app.get("/api/bookings/{code}")
 def get_bookings(code: str):
     conn = get_conn()
@@ -428,6 +478,7 @@ def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- КОММЕНТАРИИ ---
 @app.get("/api/comments/{code}")
 def get_comments(code: str):
     conn = get_conn()
@@ -443,6 +494,7 @@ def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- СОЗДАНИЕ ТОВАРА ---
 @app.post("/api/items")
 async def create_item(
     code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(...),
@@ -468,6 +520,7 @@ async def create_item(
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- ВЫДАЧА (С ЗАПОМИНАНИЕМ ПОЛКИ) ---
 @app.post("/api/checkout")
 async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
@@ -482,29 +535,39 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
     existing = conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (req.code,)).fetchone()
     if existing:
         conn.close(); raise HTTPException(400, "Уже выдано")
-    stock = conn.execute("SELECT location_id, quantity FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (req.code,)).fetchone()
+    
+    # Берем остаток с полки и запоминаем её
+    stock = conn.execute("SELECT location_id, quantity, spot FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (req.code,)).fetchone()
     if not stock:
         conn.close(); raise HTTPException(400, "Нет в наличии")
     
-    conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?, ?, ?, ?)", (req.code, user["tg_id"], stock["location_id"], req.taken_for))
+    conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_spot, taken_for) VALUES (?, ?, ?, ?, ?)", 
+                 (req.code, user["tg_id"], stock["location_id"], stock["spot"], req.taken_for))
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- ВОЗВРАТ (НА ТУ ЖЕ ПОЛКУ) ---
 @app.post("/api/return")
 def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    co = conn.execute("SELECT id, user_id, location_id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
+    co = conn.execute("SELECT id, user_id, location_id, taken_spot FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if not co:
         conn.close(); raise HTTPException(400, "Не выдано")
+    
     conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["tg_id"], co["id"]))
+    
+    # Возвращаем на ту полку, откуда взяли
     existing = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone()
     if existing:
-        conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, co["location_id"]))
+        conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", 
+                     (co["taken_spot"], code, co["location_id"]))
     else:
-        conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?, ?, 1)", (code, co["location_id"]))
+        conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?, ?, 1, ?)", 
+                     (code, co["location_id"], co["taken_spot"]))
+    
     conn.commit(); conn.close()
     return {"status": "ok"}
 
@@ -547,6 +610,7 @@ async def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(Non
     conn.commit(); conn.close()
     return {"status": "ok"}
 
+# --- ИСТОРИЯ ---
 @app.get("/api/history")
 def get_history(limit: int = 50):
     conn = get_conn()
