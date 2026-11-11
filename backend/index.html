@@ -57,8 +57,8 @@
         }
         
         .item-card { cursor: pointer; }
-        .item-card .name { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; }
-        .item-card .meta { font-size: 12px; color: var(--text-muted); }
+        .item-card .name { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; word-break: break-word; }
+        .item-card .meta { font-size: 12px; color: var(--text-muted); word-break: break-word; }
         
         .thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; background: #eee; margin-bottom: 10px; }
 
@@ -171,9 +171,12 @@
         
         .search-box { margin-bottom: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); font-size: 15px; background: #fff; }
 
+        .filters { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+        .filters select { padding: 10px 12px; font-size: 14px; border-radius: 10px; flex: 1; min-width: 100px; }
+
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .room-title { font-weight: 700; font-size: 16px; }
-        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        .room-title { font-weight: 700; font-size: 16px; word-break: break-word; }
+        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; word-break: break-word; white-space: normal; }
 
         .shelf-header { 
             background: var(--primary); color: white; padding: 14px 16px; border-radius: 12px; 
@@ -234,11 +237,22 @@
 
         <button onclick="scanQr()" style="background: linear-gradient(135deg, #2AABEE, #1e8fcf);">📷 Сканировать QR</button>
 
+        <div class="filters">
+            <select id="filter-location" onchange="updateFilterSpots(); filterItems()"><option value="">Все комнаты</option></select>
+            <select id="filter-spot" onchange="filterItems()"><option value="">Все полки</option></select>
+            <select id="filter-kind" onchange="filterItems()">
+                <option value="">Все типы</option>
+                <option value="equipment">Оборудование</option>
+                <option value="consumable">Расходники</option>
+            </select>
+        </div>
+
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию, коду или S/N..." oninput="filterItems()">
         
         <div id="items-list" class="grid-container"></div>
     </div>
 
+    <!-- ЭКРАН НАСТРОЕК (Админ) -->
     <div id="screen-settings" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Настройки</h1>
@@ -260,6 +274,7 @@
         <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
     </div>
 
+    <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
     <div id="screen-users" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Пользователи</h1>
@@ -274,7 +289,7 @@
 
     <div id="screen-room-view" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
-        <h1 id="room-title" style="font-size: 22px; margin-bottom: 20px;">Комната</h1>
+        <h1 id="room-title" style="font-size: 22px; margin-bottom: 20px; word-break: break-word;">Комната</h1>
         
         <div id="batch-actions" class="hidden" style="background:#fff; padding:16px; border-radius:12px; margin-bottom:16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <p style="margin:0 0 12px 0; font-size: 14px;">Выбрано: <b id="selected-count">0</b></p>
@@ -292,7 +307,7 @@
 
     <div id="screen-item" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
-        <h1 id="item-title" style="font-size: 22px; margin-bottom: 20px;">Товар</h1>
+        <h1 id="item-title" style="font-size: 22px; margin-bottom: 20px; word-break: break-word;">Товар</h1>
         
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         <button class="ok" onclick="showEditForm()" id="edit-btn">✏️ Редактировать</button>
@@ -468,22 +483,14 @@ T2,,,"></textarea>
         }
 
         function openDevConsole() {
-            if (window.eruda) {
-                window.eruda.init();
-                window.eruda.show();
-            } else {
-                notify("Консоль не загрузилась. Проверьте интернет.");
-            }
+            if (window.eruda) { window.eruda.init(); window.eruda.show(); }
+            else { notify("Консоль не загрузилась. Проверьте интернет."); }
         }
 
         async function clearDatabase() {
             if (!confirm("Вы уверены, что хотите УДАЛИТЬ ВСЕ ТОВАРЫ, ИСТОРИЮ И БРОНИ? Комнаты и пользователи останутся.")) return;
             if (!confirm("Это действие необратимо. Точно продолжить?")) return;
-            try {
-                await api("/api/clear_database", { method: "POST" });
-                notify("База товаров очищена.");
-                loadItems();
-            } catch (e) { notify("Ошибка: " + e.message); }
+            try { await api("/api/clear_database", { method: "POST" }); notify("База товаров очищена."); loadItems(); } catch (e) { notify("Ошибка: " + e.message); }
         }
 
         async function api(path, options = {}) {
@@ -510,23 +517,107 @@ T2,,,"></textarea>
         async function doRegister() { const name = document.getElementById("reg-name").value.trim(); if (name.length < 3) { notify("Введите Фамилию и Имя"); return; } try { await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) }); init(); } catch (e) { notify(e.message); } }
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
         async function loadMyBookings() { try { const rows = await api("/api/my_bookings"); if (!rows.length) return; document.getElementById("my-bookings-section").classList.remove("hidden"); document.getElementById("my-bookings-list").innerHTML = rows.map(r => `<div class="booking-item"><b>${r.name}</b><div style="font-size:12px; color:var(--text-muted);">${r.date_from} — ${r.date_to}</div></div>`).join(""); } catch (e) { console.log(e); } }
-        async function loadLocations() { locations = await api("/api/locations"); document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); const list = document.getElementById("locations-list"); if (list) { list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">✏️</button></div>`).join(""); } }
+        async function loadLocations() { 
+            locations = await api("/api/locations"); 
+            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
+            document.getElementById("filter-location").innerHTML = `<option value="">Все комнаты</option>` + locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+            const list = document.getElementById("locations-list"); 
+            if (list) { 
+                list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">✏️</button></div>`).join(""); 
+            } 
+        }
         async function createLocation() { const name = document.getElementById("new-location-name").value.trim(); if (!name) return; try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); notify("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); } }
         async function renameLocation(id, oldName) { const newName = prompt("Новое название комнаты:", oldName); if (!newName || newName === oldName) return; try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); loadLocations(); } catch (e) { notify(e.message); } }
-        async function loadSpots() { spots = await api("/api/spots"); document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); const list = document.getElementById("settings-spots-list"); if (list) { list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">✏️</button></div>`).join(""); } }
+        
+        async function loadSpots() { 
+            spots = await api("/api/spots"); 
+            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); 
+            const list = document.getElementById("settings-spots-list"); 
+            if (list) { 
+                list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">✏️</button></div>`).join(""); 
+            } 
+        }
         async function renameSpot(oldName) { const newName = prompt("Новое название полки:", oldName); if (!newName || newName === oldName) return; try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); notify("Обновлено"); loadSpots(); } catch (e) { notify(e.message); } }
+        
+        function updateFilterSpots() {
+            const locId = parseInt(document.getElementById("filter-location").value);
+            const spotSelect = document.getElementById("filter-spot");
+            spotSelect.innerHTML = `<option value="">Все полки</option>`;
+            if (locId) {
+                const locSpots = allItems.filter(i => i.stocks.some(s => s.location_id === locId)).map(i => i.stocks.filter(s => s.location_id === locId).map(s => s.spot)).flat();
+                const uniqueSpots = [...new Set(locSpots)].filter(s => s);
+                spotSelect.innerHTML += uniqueSpots.map(s => `<option value="${s}">${s}</option>`).join("");
+            }
+        }
+
         function showSettings() { loadLocations(); loadSpots(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
-        async function loadUsers() { const list = document.getElementById("users-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const users = await api("/api/users"); list.innerHTML = users.map(u => `<div class="card" style="justify-content:space-between; align-items:center;"><div><b>${u.full_name}</b><div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div></div><button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять' : 'Сделать админом'}</button></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
-        async function toggleRole(id) { try { await api(`/api/users/${id}/role`, { method: "POST" }); loadUsers(); } catch (e) { notify(e.message); } }
+        async function loadUsers() { 
+            const list = document.getElementById("users-list"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const users = await api("/api/users"); 
+                list.innerHTML = users.map(u => `
+                    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <b>${u.full_name}</b>
+                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
+                        </div>
+                        <button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="editUser(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
+                    </div>
+                `).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
+        
+        function editUser(tg_id, full_name, role) {
+            const newName = prompt("Фамилия и Имя пользователя:", full_name);
+            if (newName === null) return;
+            const newRole = prompt("Роль (admin или employee):", role);
+            if (newRole === null || (newRole !== 'admin' && newRole !== 'employee')) { notify("Некорректная роль"); return; }
+            api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: newName, role: newRole }) })
+                .then(() => { notify("Сохранено"); loadUsers(); })
+                .catch(e => notify(e.message));
+        }
+
         function showUsers() { loadUsers(); showScreen("screen-users"); }
-        async function loadItems() { const list = document.getElementById("items-list"); list.innerHTML = "<p>Загрузка...</p>"; try { allItems = await api("/api/items"); filterItems(); loadMyItems(); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
-        async function loadMyItems() { try { const myItems = await api("/api/my_items"); const section = document.getElementById("my-items-section"); const list = document.getElementById("my-items-list"); if (!myItems.length) { section.classList.add("hidden"); return; } section.classList.remove("hidden"); list.innerHTML = myItems.map(i => `<div class="my-item-card"><div><div class="name" style="font-weight:bold;">${i.name}</div><div class="meta" style="font-size:12px;">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div></div><button class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</button></div>`).join(""); } catch (e) { console.log(e); } }
+        
+        async function loadItems() { 
+            const list = document.getElementById("items-list"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                allItems = await api("/api/items"); 
+                filterItems(); 
+                loadMyItems(); 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
+        
+        async function loadMyItems() { 
+            try { 
+                const myItems = await api("/api/my_items"); 
+                const section = document.getElementById("my-items-section"); 
+                const list = document.getElementById("my-items-list"); 
+                if (!myItems.length) { section.classList.add("hidden"); return; } 
+                section.classList.remove("hidden"); 
+                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div><div class="name" style="font-weight:bold;">${i.name}</div><div class="meta" style="font-size:12px;">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div></div><button class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</button></div>`).join(""); 
+            } catch (e) { console.log(e); } 
+        }
+        
         async function doReturnFromMain(code) { try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); } catch (e) { notify(e.message); } }
         
         function filterItems() { 
             const query = document.getElementById("search-input").value.toLowerCase(); 
+            const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
+            const filterSpot = document.getElementById("filter-spot").value;
+            const filterKind = document.getElementById("filter-kind").value;
+
             const list = document.getElementById("items-list"); 
-            const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query))); 
+            const filtered = allItems.filter(i => {
+                const matchesQuery = i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query));
+                const matchesLoc = !filterLoc || i.stocks.some(s => s.location_id === filterLoc);
+                const matchesSpot = !filterSpot || i.stocks.some(s => s.spot === filterSpot);
+                const matchesKind = !filterKind || i.kind === filterKind;
+                return matchesQuery && matchesLoc && matchesSpot && matchesKind;
+            });
+
             if (!filtered.length) { list.innerHTML = "<p style='grid-column: 1/-1; text-align:center; color:var(--text-muted);'>Ничего не найдено</p>"; return; } 
             
             list.innerHTML = filtered.map(i => { 
