@@ -45,11 +45,13 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment',
         min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0,
-        kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT ''
+        kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '',
+        category TEXT DEFAULT ''
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
@@ -61,7 +63,6 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS lost_items (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS daily_reports (date TEXT PRIMARY KEY, report_text TEXT)""")
 
-    # Миграции — ПОСЛЕ создания всех таблиц
     migrations = [
         "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
@@ -71,6 +72,7 @@ def init_db():
         "ALTER TABLE items ADD COLUMN budget_tag TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN serial_number TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
@@ -85,6 +87,13 @@ def init_db():
         c.execute("INSERT INTO locations (name, type) VALUES ('Мастерская', 'workshop')")
         c.execute("INSERT INTO locations (name, type) VALUES ('Склад', 'storage')")
         c.execute("INSERT INTO locations (name, type) VALUES ('Офис', 'office')")
+
+    c.execute("SELECT COUNT(*) FROM categories")
+    if c.fetchone()[0] == 0:
+        for name in ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]:
+            try: c.execute("INSERT INTO categories (name) VALUES (?)", (name,))
+            except sqlite3.IntegrityError: pass
+
     conn.commit(); conn.close()
 
 init_db()
@@ -124,6 +133,7 @@ class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
     kit_flash: str = ""; budget_tag: str = ""; serial_number: str = ""; buyout_status: str = ""
+    category: str = ""
 
 class MoveRequest(BaseModel):
     code: str; from_location: int; to_location: int; quantity: int; to_spot: str = ""
@@ -136,6 +146,12 @@ class WriteoffRequest(BaseModel):
 
 class SpotCreate(BaseModel):
     name: str
+
+class CategoryCreate(BaseModel):
+    name: str
+
+class CategoryUpdate(BaseModel):
+    id: int; name: str
 
 class BookingRequest(BaseModel):
     code: str; date_from: str; date_to: str
@@ -156,7 +172,7 @@ class LocationUpdate(BaseModel):
     id: int; name: str
 
 class ItemUpdate(BaseModel):
-    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str
+    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""
 
 class SpotUpdate(BaseModel):
     old_name: str; new_name: str
@@ -220,7 +236,6 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     conn = get_conn()
     rows = []
-    # Выдачи / возвраты
     co = conn.execute("""
         SELECT c.id, c.item_code, i.name, c.user_id, u.full_name,
                c.taken_at AS date, c.returned_at, c.taken_for
@@ -231,7 +246,6 @@ def get_history(x_init_data: Optional[str] = Header(None)):
         rows.append({"date": r["date"], "type": "checkout", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["full_name"] or "—"})
         if r["returned_at"]:
             rows.append({"date": r["returned_at"], "type": "return", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["full_name"] or "—"})
-    # Перемещения
     mv = conn.execute("""
         SELECT m.item_code, i.name, m.quantity, m.created_at AS date, u.full_name
         FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id
@@ -239,7 +253,6 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     """).fetchall()
     for r in mv:
         rows.append({"date": r["date"], "type": "move", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
-    # Списания
     wo = conn.execute("""
         SELECT w.item_code, i.name, w.quantity, w.created_at AS date, u.full_name
         FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id
@@ -342,6 +355,78 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
 
+# ---------- Категории ----------
+@app.get("/api/categories")
+def list_categories():
+    conn = get_conn(); rows = conn.execute("SELECT id, name FROM categories ORDER BY id").fetchall(); conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/categories")
+def create_category(req: CategoryCreate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    try: conn.execute("INSERT INTO categories (name) VALUES (?)", (req.name.strip(),)); conn.commit()
+    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая категория уже есть")
+    conn.close(); return {"status": "ok"}
+
+@app.post("/api/categories/update")
+def update_category(req: CategoryUpdate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    try:
+        old = conn.execute("SELECT name FROM categories WHERE id = ?", (req.id,)).fetchone()
+        if not old: conn.close(); raise HTTPException(404, "Категория не найдена")
+        old_name = old["name"]; new_name = req.name.strip()
+        conn.execute("UPDATE categories SET name = ? WHERE id = ?", (new_name, req.id))
+        conn.execute("UPDATE items SET category = ? WHERE category = ?", (new_name, old_name))
+        conn.commit()
+    except Exception as e: conn.close(); raise HTTPException(400, str(e))
+    conn.close(); return {"status": "ok"}
+
+@app.delete("/api/categories/{cat_id}")
+def delete_category(cat_id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    cat = conn.execute("SELECT name FROM categories WHERE id = ?", (cat_id,)).fetchone()
+    if not cat: conn.close(); raise HTTPException(404, "Категория не найдена")
+    conn.execute("UPDATE items SET category = '' WHERE category = ?", (cat["name"],))
+    conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+    conn.commit(); conn.close(); return {"status": "ok"}
+
+@app.get("/api/stats")
+def get_stats():
+    conn = get_conn()
+    cats = conn.execute("SELECT name FROM categories ORDER BY id").fetchall()
+    result = []
+    for c in cats:
+        name = c["name"]
+        total_qty = conn.execute("""
+            SELECT COALESCE(SUM(s.quantity), 0) AS q
+            FROM stock s JOIN items i ON i.code = s.item_code
+            WHERE i.category = ?
+        """, (name,)).fetchone()["q"]
+        in_work = conn.execute("""
+            SELECT COUNT(*) AS q
+            FROM checkouts c JOIN items i ON i.code = c.item_code
+            WHERE i.category = ? AND c.returned_at IS NULL
+        """, (name,)).fetchone()["q"]
+        on_stock = total_qty
+        total = on_stock + in_work
+        result.append({"name": name, "total": total, "on_stock": on_stock, "in_work": in_work})
+    no_cat_total = conn.execute("""
+        SELECT COALESCE(SUM(s.quantity), 0) AS q
+        FROM stock s JOIN items i ON i.code = s.item_code
+        WHERE i.category = '' OR i.category IS NULL
+    """).fetchone()["q"]
+    no_cat_work = conn.execute("""
+        SELECT COUNT(*) AS q
+        FROM checkouts c JOIN items i ON i.code = c.item_code
+        WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL
+    """).fetchone()["q"]
+    if no_cat_total + no_cat_work > 0:
+        result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
+    conn.close(); return result
+
 @app.get("/api/spots")
 def list_spots():
     conn = get_conn(); rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall(); conn.close()
@@ -380,7 +465,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"] if "category" in it.keys() else "", "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         if is_admin: item_data["price"] = it["price"]
         result.append(item_data)
     conn.close(); return result
@@ -395,7 +480,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"] if "category" in item.keys() else "", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
     if is_admin: result["price"] = item["price"]
     return result
 
@@ -403,7 +488,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
 def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     conn = get_conn()
-    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, code))
+    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=?, category=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, req.category, code))
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
@@ -438,18 +523,18 @@ def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
 async def create_item(
     code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(...),
     quantity: int = Form(0), spot: str = Form(""), min_stock: int = Form(0), price: float = Form(0),
-    kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""),
+    kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""),
     photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)
 ):
     check_admin(x_init_data)
     conn = get_conn()
     photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
-    try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status))
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
     if spot:
-        try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (spot,))
-        except: pass
+        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (spot,)).fetchone()
+        if not exists: spot = ""
+    try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category))
+    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
     conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (code, location_id, quantity, spot))
     conn.commit(); conn.close(); return {"status": "ok"}
 
@@ -484,14 +569,15 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
     conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
+    to_spot = req.to_spot
+    if to_spot:
+        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (to_spot,)).fetchone()
+        if not exists: to_spot = ""
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
-    if req.to_spot:
-        try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
-        except: pass
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, req.to_spot, req.code, req.to_location))
-    else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (req.code, req.to_location, req.quantity, req.to_spot))
-    conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
+    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, to_spot, req.code, req.to_location))
+    else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (req.code, req.to_location, req.quantity, to_spot))
+    conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, to_spot, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/move_batch")
@@ -499,17 +585,18 @@ def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None))
     user = get_user(x_init_data)
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
     conn = get_conn()
+    to_spot = req.to_spot
+    if to_spot:
+        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (to_spot,)).fetchone()
+        if not exists: to_spot = ""
     for code in req.codes:
         row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.from_location)).fetchone()
         if row and row["quantity"] > 0:
             conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, req.from_location))
             conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (code, req.from_location))
-            if req.to_spot:
-                try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
-                except: pass
-            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.to_spot, code, req.to_location))
-            else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, req.to_spot))
-            conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,1,?,?,?,?)", (code, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
+            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (to_spot, code, req.to_location))
+            else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, to_spot))
+            conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,1,?,?,?,?)", (code, req.from_location, req.to_location, to_spot, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/writeoff")
@@ -522,7 +609,6 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?,?,?,?)", (req.code, req.quantity, req.location_id, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
 
-# ---------- Брони ----------
 @app.get("/api/bookings/{code}")
 def get_bookings(code: str, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
@@ -542,7 +628,6 @@ def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None
     conn.execute("INSERT INTO bookings (item_code, user_id, date_from, date_to) VALUES (?,?,?,?)", (req.code, user["tg_id"], req.date_from, req.date_to))
     conn.commit(); conn.close(); return {"status": "ok"}
 
-# ---------- Комментарии ----------
 @app.get("/api/comments/{code}")
 def get_comments(code: str, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
