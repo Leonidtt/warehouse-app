@@ -27,16 +27,12 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
-# ПУТЬ К ПОСТОЯННОМУ ДИСКУ
 DB_PATH = "/data/warehouse.db"
 
 def get_conn():
-    # Проверяем, существует ли папка /data, если нет - создаем
     if not os.path.exists("/data"):
-        try:
-            os.makedirs("/data")
-        except:
-            pass
+        try: os.makedirs("/data")
+        except: pass
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -101,8 +97,15 @@ def init_db():
         user_id INTEGER NOT NULL,
         location_id INTEGER NOT NULL,
         taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        returned_at TIMESTAMP
+        returned_at TIMESTAMP,
+        returned_by INTEGER
     )""")
+    # Миграция для возврата другим человеком
+    try:
+        c.execute("ALTER TABLE checkouts ADD COLUMN returned_by INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS movements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         item_code TEXT NOT NULL,
@@ -167,8 +170,7 @@ async def send_low_stock_alert(item_code: str):
     conn = get_conn()
     item = conn.execute("SELECT name, min_stock FROM items WHERE code = ?", (item_code,)).fetchone()
     if not item: 
-        conn.close()
-        return
+        conn.close(); return
     
     stocks = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (item_code,)).fetchall()
     total = sum(s["quantity"] for s in stocks)
@@ -229,6 +231,47 @@ def list_locations():
     conn.close()
     return [dict(r) for r in rows]
 
+# --- ПРОСМОТР ПО КОМНАТАМ ---
+@app.get("/api/locations_view")
+def locations_view():
+    conn = get_conn()
+    locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall()
+    result = []
+    for loc in locations:
+        # Получаем все полки в этой локации (где есть остатки)
+        spots = conn.execute(
+            "SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''",
+            (loc["id"],)
+        ).fetchall()
+        result.append({
+            "id": loc["id"],
+            "name": loc["name"],
+            "spots": [s["spot"] for s in spots]
+        })
+    conn.close()
+    return result
+
+@app.get("/api/stock_view")
+def stock_view(location_id: int, spot: Optional[str] = None):
+    conn = get_conn()
+    query = """
+        SELECT s.item_code, i.name, s.quantity, s.spot, s.location_id, l.name as location_name
+        FROM stock s 
+        JOIN items i ON i.code = s.item_code 
+        JOIN locations l ON l.id = s.location_id
+        WHERE s.location_id = ? AND s.quantity > 0
+    """
+    params = [location_id]
+    if spot:
+        query += " AND s.spot = ?"
+        params.append(spot)
+    query += " ORDER BY s.spot, i.name"
+    
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+# ---------------------------
+
 @app.get("/api/spots")
 def list_spots():
     conn = get_conn()
@@ -246,6 +289,21 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(status_code=400, detail="Такая полка уже есть")
+    conn.close()
+    return {"status": "ok"}
+
+@app.delete("/api/spots/{spot_name}")
+def delete_spot(spot_name: str, x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    conn = get_conn()
+    # Проверяем, есть ли товары на этой полке
+    check = conn.execute("SELECT COUNT(*) FROM stock WHERE spot = ? AND quantity > 0", (spot_name,)).fetchone()[0]
+    if check > 0:
+        conn.close()
+        raise HTTPException(400, "Нельзя удалить полку, на ней есть товары. Сначала переместите их.")
+    
+    conn.execute("DELETE FROM spots WHERE name = ?", (spot_name,))
+    conn.commit()
     conn.close()
     return {"status": "ok"}
 
@@ -317,6 +375,25 @@ def get_item(code: str):
         "holders": [dict(h) for h in holders],
     }
 
+@app.delete("/api/items/{code}")
+def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    conn = get_conn()
+    
+    # Проверяем, не на руках ли вещь
+    holder = conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
+    if holder:
+        conn.close()
+        raise HTTPException(400, "Нельзя удалить вещь, которая сейчас на руках у сотрудника")
+
+    conn.execute("DELETE FROM items WHERE code = ?", (code,))
+    conn.execute("DELETE FROM stock WHERE item_code = ?", (code,))
+    conn.execute("DELETE FROM bookings WHERE item_code = ?", (code,))
+    conn.execute("DELETE FROM comments WHERE item_code = ?", (code,))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
 @app.get("/api/on_hand")
 def on_hand():
     conn = get_conn()
@@ -356,14 +433,6 @@ def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None
         "INSERT INTO bookings (item_code, user_id, date_from, date_to) VALUES (?, ?, ?, ?)",
         (req.code, user["id"], req.date_from, req.date_to)
     )
-    conn.commit(); conn.close()
-    return {"status": "ok"}
-
-@app.delete("/api/bookings/{booking_id}")
-def delete_booking(booking_id: int, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data)
-    conn = get_conn()
-    conn.execute("DELETE FROM bookings WHERE id = ? AND user_id = ?", (booking_id, user["id"]))
     conn.commit(); conn.close()
     return {"status": "ok"}
 
@@ -476,9 +545,10 @@ def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     ).fetchone()
     if not co:
         conn.close(); raise HTTPException(400, "Не выдано")
-    if co["user_id"] != user["id"]:
-        conn.close(); raise HTTPException(403, "Эту вещь держит другой сотрудник")
-    conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP WHERE id = ?", (co["id"],))
+    
+    # Разрешаем возвращать любому
+    conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["id"], co["id"]))
+    
     existing = conn.execute(
         "SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?",
         (code, co["location_id"])
@@ -571,8 +641,14 @@ def get_history(limit: int = 50):
     SELECT 'checkout' as type, c.taken_at as date, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, '') as user_name, 1 as quantity, NULL as from_loc, NULL as to_loc
     FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id
     UNION ALL
-    SELECT 'return', c.returned_at, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), 1, NULL, NULL
-    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NOT NULL
+    SELECT 'return', c.returned_at, c.item_code, i.name, 
+    COALESCE(ru.first_name, 'Неизвестно') || ' (вернул за ' || COALESCE(u.first_name, 'Неизвестно') || ')', 
+    1, NULL, NULL
+    FROM checkouts c 
+    JOIN items i ON i.code = c.item_code 
+    LEFT JOIN users u ON u.tg_id = c.user_id
+    LEFT JOIN users ru ON ru.tg_id = c.returned_by
+    WHERE c.returned_at IS NOT NULL
     UNION ALL
     SELECT 'move', m.created_at, m.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), m.quantity, l1.name, l2.name
     FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id LEFT JOIN locations l1 ON l1.id = m.from_location LEFT JOIN locations l2 ON l2.id = m.to_location
@@ -593,8 +669,14 @@ def export_history(x_init_data: Optional[str] = Header(None)):
     SELECT 'Выдача' as type, c.taken_at as date, c.item_code as code, i.name, u.first_name || ' ' || COALESCE(u.username, '') as user_name, 1 as quantity, '' as from_loc, '' as to_loc
     FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id
     UNION ALL
-    SELECT 'Возврат', c.returned_at, c.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), 1, '', ''
-    FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NOT NULL
+    SELECT 'Возврат', c.returned_at, c.item_code, i.name, 
+    COALESCE(ru.first_name, 'Неизвестно') || ' (вернул за ' || COALESCE(u.first_name, 'Неизвестно') || ')', 
+    1, '', ''
+    FROM checkouts c 
+    JOIN items i ON i.code = c.item_code 
+    LEFT JOIN users u ON u.tg_id = c.user_id
+    LEFT JOIN users ru ON ru.tg_id = c.returned_by
+    WHERE c.returned_at IS NOT NULL
     UNION ALL
     SELECT 'Перемещение', m.created_at, m.item_code, i.name, u.first_name || ' ' || COALESCE(u.username, ''), m.quantity, l1.name, l2.name
     FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id LEFT JOIN locations l1 ON l1.id = m.from_location LEFT JOIN locations l2 ON l2.id = m.to_location
@@ -647,34 +729,4 @@ def generate_qr(code: str):
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
-# ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ НАЗВАНИЙ (ВЫЗВАТЬ ОДИН РАЗ)
-@app.get("/api/update_locations")
-def update_locations():
-    conn = get_conn()
-    try:
-        conn.execute("UPDATE locations SET name = 'Офис7' WHERE name = 'Офис'")
-        conn.execute("UPDATE locations SET name = 'Склад11' WHERE name = 'Склад'")
-        conn.execute("UPDATE locations SET name = 'Этаж2' WHERE name = 'Мастерская'")
-        conn.commit()
-    except Exception as e:
-        conn.close()
-        return {"status": "error", "message": str(e)}
-    conn.close()
-    return {"status": "ok", "message": "Локации успешно переименованы!"}
-
-@app.get("/api/force_locations")
-def force_locations():
-    conn = get_conn()
-    try:
-        # Полностью очищаем список локаций и создаем три нужные
-        conn.execute("DELETE FROM locations")
-        conn.execute("INSERT INTO locations (id, name, type) VALUES (1, 'Этаж2', 'workshop')")
-        conn.execute("INSERT INTO locations (id, name, type) VALUES (2, 'Склад11', 'storage')")
-        conn.execute("INSERT INTO locations (id, name, type) VALUES (3, 'Офис7', 'office')")
-        conn.commit()
-    except Exception as e:
-        conn.close()
-        return {"status": "error", "message": str(e)}
-    conn.close()
-    return {"status": "ok", "message": "Локации принудительно заменены на Этаж2, Склад11, Офис7!"}
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
