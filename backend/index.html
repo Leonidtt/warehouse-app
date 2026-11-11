@@ -129,6 +129,7 @@
         .badge.buyout { background: var(--purple); color: white; }
         .badge.repair { background: var(--danger); color: white; }
         .badge.low { background: var(--warning); color: white; }
+        .badge.cat { background: #ede7f6; color: #4527a0; }
 
         .bottom-nav {
             position: fixed;
@@ -228,6 +229,12 @@
 
         .comment-box { background: #f9f9f9; padding: 12px; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid var(--primary); font-size: 14px; }
         .booking-item { background: #fff3e0; padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; }
+
+        .stats-box { background: #fff; border-radius: 14px; padding: 14px 16px; margin: 12px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .stats-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .stats-row:last-child { border-bottom: none; }
+        .stats-row .stats-name { font-weight: 600; flex: 1; }
+        .stats-row .stats-detail { color: var(--text-muted); font-size: 12px; margin-left: 8px; }
     </style>
 </head>
 <body>
@@ -248,6 +255,8 @@
             <div class="sticky-title" id="user-info">Учёт</div>
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
+
+        <div id="stats-box" class="stats-box hidden"></div>
 
         <div id="daily-report-box" class="report-box hidden">
             <b>📊 Сводка за вчера:</b>
@@ -294,6 +303,11 @@
         <h2 style="font-size: 16px; margin-top: 30px;">Полки</h2>
         <div id="settings-spots-list"></div>
 
+        <h2 style="font-size: 16px; margin-top: 30px;">Категории</h2>
+        <div class="input-group"><input id="new-category-name" placeholder="Название новой категории"></div>
+        <button onclick="createCategory()" class="secondary">Добавить категорию</button>
+        <div id="categories-list"></div>
+
         <h2 style="font-size: 16px; margin-top: 30px; color: var(--danger);">Разработка</h2>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="clearDatabase()">🗑 Очистить базу товаров</button>
@@ -328,9 +342,11 @@
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
         
-        <div id="batch-actions" class="hidden" style="background:#fff; padding:16px; border-radius:12px; margin-bottom:16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-top: 16px;">
+        <div id="batch-actions" style="background:#fff; padding:16px; border-radius:12px; margin-bottom:16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-top: 16px;">
             <p style="margin:0 0 12px 0; font-size: 14px;">Выбрано: <b id="selected-count">0</b></p>
-            <button class="secondary" onclick="showBatchMoveForm()">📦 Переместить выбранные</button>
+            <button class="secondary" onclick="selectAllInRoom()" id="select-all-btn">☑️ Выделить все</button>
+            <button class="secondary" onclick="deselectAllInRoom()" id="deselect-all-btn" style="display:none;">⬜ Снять выделение</button>
+            <button class="secondary" onclick="showBatchMoveForm()" id="batch-move-btn" style="display:none;">📦 Переместить выбранные</button>
         </div>
 
         <div id="room-items"></div>
@@ -407,6 +423,7 @@
         <div style="margin-top: 16px;">
             <div class="input-group"><label>Название</label><input id="edit-name"></div>
             <div class="input-group"><label>Тип</label><select id="edit-kind" onchange="toggleEditFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
+            <div class="input-group"><label>Категория</label><select id="edit-category"></select></div>
             <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
             <div class="input-group">
                 <label>Бюджет (для админа)</label>
@@ -444,6 +461,7 @@
             <div class="input-group"><label>Код</label><input id="add-code" placeholder="Например, ITEM-1"></div>
             <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
             <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
+            <div class="input-group"><label>Категория</label><select id="add-category"></select></div>
             <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
             <div class="input-group"><label>Место</label><select id="add-spot"><option value="">Без места</option></select></div>
             <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
@@ -455,7 +473,7 @@
                     <option value="ТХ">ТХ</option>
                 </select>
             </div>
-            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например, Мартемьянов"></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
 
             <h2 style="font-size: 16px; margin: 24px 0 10px;">Комплектация</h2>
@@ -528,7 +546,7 @@ T2,,,"></textarea>
         
         <div style="margin-top: 16px;">
             <div class="input-group"><label>Куда</label><select id="batch-to-location"></select></div>
-            <div class="input-group"><label>Место</label><select id="batch-to-spot"><option value="">Без места</option></select></div>
+            <div class="input-group"><label>Место (только существующие полки)</label><select id="batch-to-spot"><option value="">Без места</option></select></div>
             <button onclick="executeBatchMove()">Переместить выбранные</button>
         </div>
     </div>
@@ -560,7 +578,7 @@ T2,,,"></textarea>
         };
         tg.ready(); tg.expand();
 
-        let currentItem = null, locations = [], allItems = [], spots = [], currentUser = null, selectedItems = [], currentRoomId = null;
+        let currentItem = null, locations = [], allItems = [], spots = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
@@ -606,7 +624,7 @@ T2,,,"></textarea>
                     const navSettings = document.getElementById("nav-settings");
                     if (navSettings) navSettings.classList.remove("hidden"); 
                 }
-                await loadLocations(); await loadSpots(); await loadItems(); await loadDailyReport(); await loadMyBookings();
+                await loadLocations(); await loadSpots(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
         }
@@ -614,6 +632,19 @@ T2,,,"></textarea>
         async function doRegister() { const name = document.getElementById("reg-name").value.trim(); if (name.length < 3) { notify("Введите Фамилию и Имя"); return; } try { await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) }); init(); } catch (e) { notify(e.message); } }
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
         async function loadMyBookings() { try { const rows = await api("/api/my_bookings"); if (!rows.length) return; document.getElementById("my-bookings-section").classList.remove("hidden"); document.getElementById("my-bookings-list").innerHTML = rows.map(r => `<div class="booking-item"><b>${r.name}</b><div style="font-size:12px; color:var(--text-muted);">${r.date_from} — ${r.date_to}</div></div>`).join(""); } catch (e) { console.log(e); } }
+        
+        async function loadStats() {
+            try {
+                const rows = await api("/api/stats");
+                const box = document.getElementById("stats-box");
+                if (!rows || !rows.length) { box.classList.add("hidden"); return; }
+                box.classList.remove("hidden");
+                box.innerHTML = rows.map(r => {
+                    return `<div class="stats-row"><span class="stats-name">${r.name}</span><span><b>${r.total}</b> <span class="stats-detail">склад ${r.on_stock} · работа ${r.in_work}</span></span></div>`;
+                }).join("");
+            } catch (e) { console.log(e); }
+        }
+
         async function loadLocations() { 
             locations = await api("/api/locations"); 
             document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
@@ -636,6 +667,23 @@ T2,,,"></textarea>
         }
         async function renameSpot(oldName) { const newName = prompt("Новое название полки:", oldName); if (!newName || newName === oldName) return; try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); notify("Обновлено"); loadSpots(); } catch (e) { notify(e.message); } }
         
+        async function loadCategories() {
+            try {
+                categories = await api("/api/categories");
+                const addSel = document.getElementById("add-category");
+                if (addSel) addSel.innerHTML = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+                const editSel = document.getElementById("edit-category");
+                if (editSel) editSel.innerHTML = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+                const list = document.getElementById("categories-list");
+                if (list) {
+                    list.innerHTML = categories.map(c => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${c.name}</b></div><div><button class="secondary" style="width:auto; padding:8px 12px; margin:0 4px 0 0; font-size:12px;" onclick="renameCategory(${c.id}, '${c.name.replace(/'/g, "\\'")}')">✏️</button><button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="deleteCategory(${c.id}, '${c.name.replace(/'/g, "\\'")}')">🗑</button></div></div>`).join("");
+                }
+            } catch (e) { console.log(e); }
+        }
+        async function createCategory() { const name = document.getElementById("new-category-name").value.trim(); if (!name) return; try { await api("/api/categories", { method: "POST", body: JSON.stringify({ name }) }); notify("Добавлено"); document.getElementById("new-category-name").value = ""; await loadCategories(); await loadStats(); } catch (e) { notify(e.message); } }
+        async function renameCategory(id, oldName) { const newName = prompt("Новое название категории:", oldName); if (!newName || newName === oldName) return; try { await api("/api/categories/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); await loadCategories(); await loadStats(); } catch (e) { notify(e.message); } }
+        async function deleteCategory(id, name) { if (!confirm(`Удалить категорию "${name}"? У товаров этой категории она сбросится в "Без категории".`)) return; try { await api(`/api/categories/${id}`, { method: "DELETE" }); notify("Удалено"); await loadCategories(); await loadStats(); } catch (e) { notify(e.message); } }
+
         function updateFilterSpots() {
             const locId = parseInt(document.getElementById("filter-location").value);
             const spotSelect = document.getElementById("filter-spot");
@@ -647,7 +695,7 @@ T2,,,"></textarea>
             }
         }
 
-        function showSettings() { loadLocations(); loadSpots(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        function showSettings() { loadLocations(); loadSpots(); loadCategories(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
         async function loadUsers() { 
             const list = document.getElementById("users-list"); 
             list.innerHTML = "<p>Загрузка...</p>"; 
@@ -698,7 +746,7 @@ T2,,,"></textarea>
             } catch (e) { console.log(e); } 
         }
         
-        async function doReturnFromMain(code) { try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); } catch (e) { notify(e.message); } }
+        async function doReturnFromMain(code) { try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); loadStats(); } catch (e) { notify(e.message); } }
         
         function filterItems() { 
             const query = document.getElementById("search-input").value.toLowerCase(); 
@@ -724,6 +772,7 @@ T2,,,"></textarea>
                 let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
                 let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
+                let catBadge = i.category ? `<span class="badge cat">${i.category}</span>` : ""; 
                 
                 return `
                 <div class="card item-card" onclick="openItem('${i.code}')">
@@ -733,33 +782,77 @@ T2,,,"></textarea>
                     ${placesHtml}
                     <div style="margin-top:auto; padding-top:8px;">
                         <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'Оборуд.' : 'Расходник'}</span>
-                        ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}
+                        ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}
                     </div>
                 </div>
                 `; 
             }).join(""); 
         }
 
-        async function showRooms() { showScreen("screen-rooms"); updateNavActive("nav-rooms"); const list = document.getElementById("rooms-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rooms = await api("/api/locations_view"); list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div style="font-size: 20px; color: #ccc;">›</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function showRooms() { showScreen("screen-rooms"); updateNavActive("nav-rooms"); const list = document.getElementById("rooms-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rooms = await api("/api/locations_view"); list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name.replace(/'/g, "\\'")}')"><div><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div style="font-size: 20px; color: #ccc;">›</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         
-        async function openRoom(id, name) { showScreen("screen-room-view"); currentRoomId = id; document.getElementById("room-title").textContent = name; document.getElementById("batch-actions").classList.add("hidden"); selectedItems = []; const list = document.getElementById("room-items"); list.innerHTML = "<p>Загрузка...</p>"; try { const data = await api(`/api/room_detail/${id}`); let html = ""; const shelfKeys = Object.keys(data.shelves).sort(); if (shelfKeys.length > 0) { shelfKeys.forEach((shelfName, index) => { const shelfId = `shelf-${index}`; html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▼</span></div><div class="shelf-content hidden" id="${shelfId}">`; data.shelves[shelfName].forEach(item => { html += `<div class="card" style="display:flex; align-items:center; padding: 12px;"><input type="checkbox" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); html += `</div>`; }); } if (data.no_shelf.length > 0) { html += `<h2 style="font-size:16px; margin-top: 30px; color: var(--warning);">⚠️ Без полки</h2>`; data.no_shelf.forEach(item => { html += `<div class="card" style="display:flex; align-items:center; padding: 12px;"><input type="checkbox" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); } list.innerHTML = html || "<p>В этой комнате пусто.</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function openRoom(id, name) { showScreen("screen-room-view"); currentRoomId = id; document.getElementById("room-title").textContent = name; selectedItems = []; const list = document.getElementById("room-items"); list.innerHTML = "<p>Загрузка...</p>"; try { const data = await api(`/api/room_detail/${id}`); let html = ""; const shelfKeys = Object.keys(data.shelves).sort(); if (shelfKeys.length > 0) { shelfKeys.forEach((shelfName, index) => { const shelfId = `shelf-${index}`; html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▼</span></div><div class="shelf-content hidden" id="${shelfId}">`; data.shelves[shelfName].forEach(item => { html += `<div class="card" style="display:flex; align-items:center; padding: 12px;"><input type="checkbox" data-code="${item.code}" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); html += `</div>`; }); } if (data.no_shelf.length > 0) { html += `<h2 style="font-size:16px; margin-top: 30px; color: var(--warning);">⚠️ Без полки</h2>`; data.no_shelf.forEach(item => { html += `<div class="card" style="display:flex; align-items:center; padding: 12px;"><input type="checkbox" data-code="${item.code}" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); } list.innerHTML = html || "<p>В этой комнате пусто.</p>"; setTimeout(updateBatchUI, 0); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         
-        function toggleSelectItem(code, checkbox) { if (checkbox.checked) { selectedItems.push(code); } else { selectedItems = selectedItems.filter(c => c !== code); } document.getElementById("selected-count").textContent = selectedItems.length; document.getElementById("batch-actions").classList.toggle("hidden", selectedItems.length === 0); }
+        function toggleSelectItem(code, checkbox) {
+            if (checkbox.checked) { if (!selectedItems.includes(code)) selectedItems.push(code); }
+            else { selectedItems = selectedItems.filter(c => c !== code); }
+            updateBatchUI();
+        }
+
+        function updateBatchUI() {
+            const total = document.querySelectorAll('#room-items input[type="checkbox"]').length;
+            document.getElementById("selected-count").textContent = selectedItems.length;
+            const selectAllBtn = document.getElementById("select-all-btn");
+            const deselectAllBtn = document.getElementById("deselect-all-btn");
+            const moveBtn = document.getElementById("batch-move-btn");
+            if (total === 0) {
+                selectAllBtn.style.display = "none";
+                deselectAllBtn.style.display = "none";
+                moveBtn.style.display = "none";
+                return;
+            }
+            if (selectedItems.length === 0) {
+                selectAllBtn.style.display = "block";
+                deselectAllBtn.style.display = "none";
+                moveBtn.style.display = "none";
+            } else {
+                selectAllBtn.style.display = "none";
+                deselectAllBtn.style.display = "block";
+                moveBtn.style.display = "block";
+            }
+        }
+
+        function selectAllInRoom() {
+            selectedItems = [];
+            document.querySelectorAll('#room-items input[type="checkbox"]').forEach(cb => {
+                cb.checked = true;
+                const code = cb.getAttribute("data-code");
+                if (code) selectedItems.push(code);
+            });
+            updateBatchUI();
+        }
+
+        function deselectAllInRoom() {
+            selectedItems = [];
+            document.querySelectorAll('#room-items input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+            updateBatchUI();
+        }
+
         function toggleShelf(shelfId) { const content = document.getElementById(shelfId); const header = document.getElementById(`header-${shelfId}`); if (content.classList.contains("hidden")) { content.classList.remove("hidden"); header.classList.add("open"); } else { content.classList.add("hidden"); header.classList.remove("open"); } }
         function showBatchMoveForm() { document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); showScreen("screen-batch-move"); }
-        async function executeBatchMove() { const toLocation = parseInt(document.getElementById("batch-to-location").value); const toSpot = document.getElementById("batch-to-spot").value; if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; } try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) }); notify("Перемещено!"); showRooms(); } catch (e) { notify(e.message); } }
+        async function executeBatchMove() { const toLocation = parseInt(document.getElementById("batch-to-location").value); const toSpot = document.getElementById("batch-to-spot").value; if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; } try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) }); notify("Перемещено!"); await loadStats(); showRooms(); } catch (e) { notify(e.message); } }
         
         async function showOnHand() { showScreen("screen-on-hand"); const list = document.getElementById("on-hand-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rows = await api("/api/on_hand"); if (!rows || !rows.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Все вещи на месте!</p>"; return; } list.innerHTML = rows.map(r => `<div class="card" onclick="openItem('${r.item_code}')"><div class="name">${r.name}</div><div class="meta">${r.item_code}</div><div class="meta" style="color:var(--warning); font-weight:600;">У ${r.full_name || 'Неизвестно'} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div><div class="meta" style="font-size:12px;">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`; } }
         
         function scanQr() { if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; } tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } }); }
         
-        async function openItem(code) { try { currentItem = await api(`/api/items/${encodeURIComponent(code)}`); document.getElementById("item-title").textContent = currentItem.name; const repairBtn = document.getElementById("repair-btn"); if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } const editBtn = document.getElementById("edit-btn"); if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:12px; margin-bottom:16px; background:#fff;">` : ""; let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { document.getElementById("kit-box").classList.remove("hidden"); document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; } else { document.getElementById("kit-box").classList.add("hidden"); } let statusHtml = ""; if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } else { repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } else { let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; } } document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; const bookingSection = document.getElementById("booking-section"); if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } renderActions(); loadComments(currentItem.code); showScreen("screen-item"); } catch (e) { notify(e.message); } }
+        async function openItem(code) { try { currentItem = await api(`/api/items/${encodeURIComponent(code)}`); document.getElementById("item-title").textContent = currentItem.name; const repairBtn = document.getElementById("repair-btn"); if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } const editBtn = document.getElementById("edit-btn"); if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:12px; margin-bottom:16px; background:#fff;">` : ""; let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; let catText = currentItem.category ? `<div class="meta" style="color:#4527a0; font-weight:bold;">📂 ${currentItem.category}</div>` : ""; let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { document.getElementById("kit-box").classList.remove("hidden"); document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; } else { document.getElementById("kit-box").classList.add("hidden"); } let statusHtml = ""; if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } else { repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } else { let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; } } document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; const bookingSection = document.getElementById("booking-section"); if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } renderActions(); loadComments(currentItem.code); showScreen("screen-item"); } catch (e) { notify(e.message); } }
         
-        function showEditForm() { document.getElementById("edit-name").value = currentItem.name; document.getElementById("edit-kind").value = currentItem.kind; document.getElementById("edit-price").value = currentItem.price || 0; document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; document.getElementById("edit-kit-lens").value = currentItem.kit_lens || ""; document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; document.getElementById("edit-min-stock").value = currentItem.min_stock || 0; if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } showScreen("screen-edit-item"); }
+        function showEditForm() { document.getElementById("edit-name").value = currentItem.name; document.getElementById("edit-kind").value = currentItem.kind; document.getElementById("edit-category").value = currentItem.category || ""; document.getElementById("edit-price").value = currentItem.price || 0; document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; document.getElementById("edit-kit-lens").value = currentItem.kit_lens || ""; document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; document.getElementById("edit-min-stock").value = currentItem.min_stock || 0; if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } showScreen("screen-edit-item"); }
         function toggleEditFields() { if (document.getElementById("edit-kind").value === "consumable") { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } }
         
-        async function saveEditItem() { const name = document.getElementById("edit-name").value.trim(); const kind = document.getElementById("edit-kind").value; const price = parseFloat(document.getElementById("edit-price").value) || 0; const budget_tag = document.getElementById("edit-budget-tag").value; const serial_number = document.getElementById("edit-serial-number").value.trim(); const buyout_status = document.getElementById("edit-buyout-status").value.trim(); const kit_body = document.getElementById("edit-kit-body").value.trim(); const kit_lens = document.getElementById("edit-kit-lens").value.trim(); const kit_flash = document.getElementById("edit-kit-flash").value.trim(); const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; try { await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) }); notify("Сохранено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function deleteItemFromEdit() { if (!confirm(`Удалить "${currentItem.name}"?`)) return; try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); notify("Удалено"); backToMain(); } catch (e) { notify(e.message); } }
+        async function saveEditItem() { const name = document.getElementById("edit-name").value.trim(); const kind = document.getElementById("edit-kind").value; const category = document.getElementById("edit-category").value; const price = parseFloat(document.getElementById("edit-price").value) || 0; const budget_tag = document.getElementById("edit-budget-tag").value; const serial_number = document.getElementById("edit-serial-number").value.trim(); const buyout_status = document.getElementById("edit-buyout-status").value.trim(); const kit_body = document.getElementById("edit-kit-body").value.trim(); const kit_lens = document.getElementById("edit-kit-lens").value.trim(); const kit_flash = document.getElementById("edit-kit-flash").value.trim(); const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; try { await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category }) }); notify("Сохранено"); await loadStats(); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function deleteItemFromEdit() { if (!confirm(`Удалить "${currentItem.name}"?`)) return; try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); notify("Удалено"); await loadStats(); backToMain(); } catch (e) { notify(e.message); } }
         
         async function showItemHistory() { showScreen("screen-item-history"); const list = document.getElementById("item-history-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api(`/api/history`); const filtered = logs.filter(l => l.item_code === currentItem.code); if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } list.innerHTML = filtered.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type === 'checkout' ? 'Взял' : l.type === 'return' ? 'Вернул' : l.type === 'move' ? 'Переместил' : 'Списал'} — ${l.user_name} (${l.quantity} шт)</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
 
@@ -767,11 +860,11 @@ T2,,,"></textarea>
         
         async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); notify(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); notify(res.message); } catch (e) { notify(e.message); } }
-        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); notify("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doMove() { const from = parseInt(document.getElementById("mv-from").value); const to = parseInt(document.getElementById("mv-to").value); const qty = parseInt(document.getElementById("mv-qty").value) || 0; const spot = document.getElementById("mv-spot").value; if (from === to) { notify("Локации не должны совпадать"); return; } try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }) }); notify("Перемещено!"); openItem(currentItem.code); } catch (e) { notify("Ошибка: " + e.message); } }
-        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); notify("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); notify("Выдано"); await loadStats(); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); notify("Выдано"); await loadStats(); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); notify("Возвращено"); await loadStats(); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doMove() { const from = parseInt(document.getElementById("mv-from").value); const to = parseInt(document.getElementById("mv-to").value); const qty = parseInt(document.getElementById("mv-qty").value) || 0; const spot = document.getElementById("mv-spot").value; if (from === to) { notify("Локации не должны совпадать"); return; } try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }) }); notify("Перемещено!"); await loadStats(); openItem(currentItem.code); } catch (e) { notify("Ошибка: " + e.message); } }
+        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); notify("Списано"); await loadStats(); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         function scanSpotQr() { if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; } tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => { if (text) { document.getElementById("mv-spot").value = text.trim(); return true; } }); }
         function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
         async function loadBookings(code) { const list = document.getElementById("bookings-list"); try { const rows = await api(`/api/bookings/${code}`); list.innerHTML = rows.length ? rows.map(r => `<div class="booking-item"><b>${r.full_name}</b>: ${r.date_from} — ${r.date_to}</div>`).join("") : ""; } catch (e) { list.innerHTML = ""; } }
@@ -780,11 +873,11 @@ T2,,,"></textarea>
         async function doComment() { const text = document.getElementById("comment-text").value.trim(); if (!text) return; try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } }
         async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
-        async function saveItem() { const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } const formData = new FormData(); formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile); try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); } }
+        async function saveItem() { const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } const formData = new FormData(); formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("category", document.getElementById("add-category").value); formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile); try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); await loadStats(); backToMain(); } catch (e) { notify(e.message); } }
         function showImportForm() { showScreen("screen-import"); }
-        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено: ${res.added}, обновлено: ${res.updated}`); backToMain(); } catch (e) { notify(e.message); } }
+        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено: ${res.added}, обновлено: ${res.updated}`); await loadStats(); backToMain(); } catch (e) { notify(e.message); } }
         function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
-        async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
+        async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; await loadSpots(); } catch (e) { notify(e.message); } }
         async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         function downloadHistory() { window.open("/api/export_history", "_blank"); }
         
@@ -800,7 +893,7 @@ T2,,,"></textarea>
             window.scrollTo(0, 0);
         }
         
-        function backToMain() { showScreen("screen-main"); loadItems(); }
+        function backToMain() { showScreen("screen-main"); loadItems(); loadStats(); }
 
         (async () => { await init(); })();
     </script>
