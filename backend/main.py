@@ -5,10 +5,9 @@ import hmac
 import time
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import qrcode
@@ -20,24 +19,25 @@ import base64
 from datetime import datetime, timedelta
 import os
 
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-
 app = FastAPI()
 
-# Глобальный перехватчик ошибок
+# Защита от спама
+request_history = {}
+def check_rate_limit(user_id: int):
+    now = time.time()
+    if user_id in request_history:
+        if now - request_history[user_id] < 0.5: 
+            raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите.")
+    request_history[user_id] = now
+
+# Перехватчик ошибок
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера. Попробуйте позже."})
+    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера."})
 
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["*"], 
-    allow_credentials=True, 
-    allow_methods=["*"], 
-    allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 DB_PATH = "/data/warehouse.db"
 
@@ -47,7 +47,7 @@ def get_conn():
         except: pass
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;") # Надежность SQLite
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
 def init_db():
@@ -58,22 +58,12 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     
     c.execute("""CREATE TABLE IF NOT EXISTS items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        code TEXT UNIQUE NOT NULL, 
-        name TEXT NOT NULL, 
-        kind TEXT NOT NULL DEFAULT 'equipment', 
-        min_stock INTEGER DEFAULT 0, 
-        photo TEXT DEFAULT '', 
-        needs_repair INTEGER DEFAULT 0,
-        price REAL DEFAULT 0,
-        kit_body TEXT DEFAULT '',
-        kit_lens TEXT DEFAULT '',
-        kit_flash TEXT DEFAULT '',
-        budget_tag TEXT DEFAULT '',
-        serial_number TEXT DEFAULT ''
+        id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', 
+        min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0,
+        kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT ''
     )""")
     
-    # Безопасные миграции
+    # Миграции
     migrations = [
         "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
@@ -87,8 +77,8 @@ def init_db():
         "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
         "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
     ]
-    for query in migrations:
-        try: c.execute(query)
+    for q in migrations:
+        try: c.execute(q)
         except sqlite3.OperationalError: pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
@@ -109,32 +99,23 @@ def init_db():
 
 init_db()
 
-# --- БЕЗОПАСНАЯ ПРОВЕРКА ДАННЫХ TELEGRAM ---
 def verify_init_data(init_data: str) -> dict:
-    try:
-        pairs = dict(parse_qsl(init_data, keep_blank_values=True))
-    except Exception:
-        raise HTTPException(status_code=401, detail="Некорректный initData")
-    
+    try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+    except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
     received_hash = pairs.pop("hash", None)
-    if not received_hash:
-        raise HTTPException(status_code=401, detail="Нет подписи")
-    
+    if not received_hash: raise HTTPException(status_code=401, detail="Нет подписи")
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    
-    if calculated != received_hash:
-        raise HTTPException(status_code=401, detail="Неверная подпись")
-        
+    if calculated != received_hash: raise HTTPException(status_code=401, detail="Неверная подпись")
     user_json = pairs.get("user")
-    if not user_json:
-        raise HTTPException(status_code=401, detail="Нет пользователя")
+    if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
     return json.loads(user_json)
 
 def get_user(x_init_data: Optional[str]):
     if not x_init_data: raise HTTPException(status_code=401, detail="Нет авторизации")
     user = verify_init_data(x_init_data)
+    check_rate_limit(user["id"])
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     if not row:
@@ -150,14 +131,16 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
-# --- МОДЕЛИ ДАННЫХ ---
+# --- МОДЕЛИ ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
-    spot: str = ""; min_stock: int = 0; price: float = 0
-    kit_body: str = ""; kit_lens: str = ""; kit_flash: str = ""
-    budget_tag: str = ""; serial_number: str = ""
+    spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
+    kit_flash: str = ""; budget_tag: str = ""; serial_number: str = ""
 
 class MoveRequest(BaseModel):
+    code: str; from_location: int; to_location: int; quantity: int; to_spot: str = ""
+
+class BatchMoveRequest(BaseModel):
     codes: List[str]; from_location: int; to_location: int; to_spot: str = ""
 
 class WriteoffRequest(BaseModel):
@@ -191,42 +174,30 @@ class SpotUpdate(BaseModel):
     old_name: str; new_name: str
 
 # --- ЭНДПОИНТЫ ---
-
 @app.get("/api/me")
-def get_me(x_init_data: Optional[str] = Header(None)):
-    return get_user(x_init_data)
+def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
     rows = conn.execute("SELECT b.*, i.name FROM bookings b JOIN items i ON i.code = b.item_code WHERE b.user_id = ? AND b.date_to >= date('now') ORDER BY b.date_from", (user["tg_id"],)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    conn.close(); return [dict(r) for r in rows]
 
 @app.get("/api/daily_report")
 def get_daily_report(x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
-    conn = get_conn()
-    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_conn(); today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute("SELECT report_text FROM daily_reports WHERE date = ?", (today,)).fetchone()
-    
     if not row:
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         stats = conn.execute("SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at) = ?) as taken, (SELECT COUNT(*) FROM checkouts WHERE date(returned_at) = ?) as returned, (SELECT COUNT(*) FROM writeoffs WHERE date(created_at) = ?) as written_off", (yesterday, yesterday, yesterday)).fetchone()
-        
         low_stock = conn.execute("SELECT name FROM items WHERE kind='consumable' AND min_stock > 0 AND (SELECT SUM(quantity) FROM stock WHERE item_code = items.code) <= min_stock").fetchall()
         low_list = ", ".join([i["name"] for i in low_stock]) if low_stock else "Нет"
-        
-        report = f"📊 <b>Сводка за {yesterday}:</b>\n\n"
-        report += f"📤 Выдано: {stats['taken']} шт.\n📥 Возвращено: {stats['returned']} шт.\n📉 Списано: {stats['written_off']} шт.\n\n⚠️ Заканчивается: {low_list}"
-        
-        conn.execute("INSERT INTO daily_reports (date, report_text) VALUES (?, ?)", (today, report))
-        conn.commit()
-    else:
-        report = row["report_text"]
-    conn.close()
-    return {"report": report}
+        report = f"📊 Сводка за {yesterday}:\n\n📤 Выдано: {stats['taken']} шт.\n📥 Возвращено: {stats['returned']} шт.\n📉 Списано: {stats['written_off']} шт.\n\n⚠️ Заканчивается: {low_list}"
+        conn.execute("INSERT INTO daily_reports (date, report_text) VALUES (?, ?)", (today, report)); conn.commit()
+    else: report = row["report_text"]
+    conn.close(); return {"report": report}
 
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
@@ -243,8 +214,7 @@ def list_users(x_init_data: Optional[str] = Header(None)):
 @app.post("/api/users/{tg_id}/role")
 def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    conn = get_conn()
-    current = conn.execute("SELECT role FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
+    conn = get_conn(); current = conn.execute("SELECT role FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
     new_role = "employee" if current["role"] == "admin" else "admin"
     conn.execute("UPDATE users SET role = ? WHERE tg_id = ?", (new_role, tg_id)); conn.commit(); conn.close()
     return {"status": "ok"}
@@ -253,6 +223,28 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
 def list_locations():
     conn = get_conn(); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close()
     return [dict(r) for r in rows]
+
+@app.get("/api/locations_view")
+def locations_view():
+    conn = get_conn(); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
+    for loc in locations:
+        spots = conn.execute("SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''", (loc["id"],)).fetchall()
+        result.append({"id": loc["id"], "name": loc["name"], "spots": [s["spot"] for s in spots]})
+    conn.close(); return result
+
+@app.get("/api/room_detail/{location_id}")
+def room_detail(location_id: int):
+    conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
+    items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
+    item_names = {i["code"]: i["name"] for i in conn.execute("SELECT code, name FROM items").fetchall()}
+    conn.close(); shelves = {}; no_shelf = []
+    for item in items:
+        data = {"code": item["item_code"], "name": item_names.get(item["item_code"], "—"), "quantity": item["quantity"]}
+        spot = item["spot"].strip() if item["spot"] else ""
+        if spot: shelves.setdefault(spot, []).append(data)
+        else: no_shelf.append(data)
+    return {"location_name": location["name"], "shelves": shelves, "no_shelf": no_shelf}
 
 @app.post("/api/locations")
 def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(None)):
@@ -287,9 +279,7 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
 def update_spot(req: SpotUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     conn = get_conn()
-    try:
-        conn.execute("UPDATE spots SET name = ? WHERE name = ?", (req.new_name.strip(), req.old_name))
-        conn.execute("UPDATE stock SET spot = ? WHERE spot = ?", (req.new_name.strip(), req.old_name)); conn.commit()
+    try: conn.execute("UPDATE spots SET name = ? WHERE name = ?", (req.new_name.strip(), req.old_name)); conn.execute("UPDATE stock SET spot = ? WHERE spot = ?", (req.new_name.strip(), req.old_name)); conn.commit()
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
 
@@ -365,8 +355,7 @@ async def create_item(
     conn = get_conn()
     photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
-    try:
-        conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number))
+    try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number))
     except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
     if spot:
         try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (spot,))
@@ -395,13 +384,28 @@ def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     conn = get_conn(); co = conn.execute("SELECT id, location_id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if not co: conn.close(); raise HTTPException(400, "Не выдано")
     conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["tg_id"], co["id"]))
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone():
-        conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, co["location_id"]))
+    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, co["location_id"]))
     else: conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
 
+@app.post("/api/move")
+def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
+    conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
+    if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
+    conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
+    conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
+    if req.to_spot:
+        try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
+        except: pass
+    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, req.to_spot, req.code, req.to_location))
+    else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (req.code, req.to_location, req.quantity, req.to_spot))
+    conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
+    conn.commit(); conn.close(); return {"status": "ok"}
+
 @app.post("/api/move_batch")
-def move_batch(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
+def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
     conn = get_conn()
@@ -413,10 +417,8 @@ def move_batch(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
             if req.to_spot:
                 try: conn.execute("INSERT OR IGNORE INTO spots (name) VALUES (?)", (req.to_spot,))
                 except: pass
-            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone():
-                conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.to_spot, code, req.to_location))
-            else:
-                conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, req.to_spot))
+            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.to_spot, code, req.to_location))
+            else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, req.to_spot))
             conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,1,?,?,?,?)", (code, req.from_location, req.to_location, req.to_spot, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
 
@@ -436,8 +438,7 @@ def generate_qr(code: str):
     qr.add_data(code); qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     width, height = qr_img.size
-    result_img = Image.new("RGB", (width, height + 60), "white")
-    result_img.paste(qr_img, (0, 0))
+    result_img = Image.new("RGB", (width, height + 60), "white"); result_img.paste(qr_img, (0, 0))
     draw = ImageDraw.Draw(result_img)
     try: font = ImageFont.truetype("DejaVuSans.ttf", 36)
     except IOError: font = ImageFont.load_default()
