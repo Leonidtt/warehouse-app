@@ -97,7 +97,6 @@
         <h1 id="item-title">Товар</h1>
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         
-        <!-- Блок статуса и действий -->
         <div id="item-status-box"></div>
         <div id="actions"></div>
         
@@ -236,7 +235,7 @@
             `).join("");
         }
 
-        async function showRooms() { /* ... как было ... */ 
+        async function showRooms() { 
             showScreen("screen-rooms");
             const list = document.getElementById("rooms-list");
             list.innerHTML = "<p>Загрузка...</p>";
@@ -312,7 +311,6 @@
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 
-                // Табличка статуса (где он есть)
                 let statusHtml = "";
                 if (currentItem.holders.length > 0) {
                     statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
@@ -321,7 +319,6 @@
                     statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"}</div>`;
                 }
 
-                // Убрали лишние таблички, оставили статус
                 document.getElementById("item-status-box").innerHTML = `
                     ${photoHtml}
                     <div class="meta">Код: ${currentItem.code}</div>
@@ -383,10 +380,7 @@
 
         async function doCheckout() {
             try {
-                await api(`/api/checkout`, {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, taken_for: "" })
-                });
+                await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) });
                 notify("Выдано"); openItem(currentItem.code);
             } catch (e) { notify(e.message); }
         }
@@ -395,10 +389,7 @@
             const person = prompt("Для кого берем? (Введите фамилию или имя)");
             if (person === null) return;
             try {
-                await api(`/api/checkout`, {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() })
-                });
+                await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) });
                 notify("Выдано для " + person); openItem(currentItem.code);
             } catch (e) { notify(e.message); }
         }
