@@ -741,4 +741,23 @@
                 if (tg.openLink) {
                     tg.openLink(window.location.origin + url);
                 } else {
-                    window.open(window.location
+                    window.open(window.location.origin + url, '_blank');
+                }
+            } catch (e) { notify("Ошибка при скачивании"); }
+        }
+
+        function showScreen(id) {
+            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view"].forEach(s => {
+                document.getElementById(s).classList.toggle("hidden", s !== id);
+            });
+        }
+        function backToMain() { showScreen("screen-main"); loadItems(); }
+
+        (async () => { 
+            await loadLocations(); 
+            await loadSpots();
+            await loadItems(); 
+        })();
+    </script>
+</body>
+</html>
