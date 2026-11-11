@@ -284,8 +284,18 @@
     <div id="screen-import" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Импорт данных</h1>
-        <div class="card" style="display:block;"><p>Скопируйте текст:</p><code>code;name;kind;location;quantity;spot;min_stock</code></div>
-        <textarea id="csv-text" rows="10" placeholder="BAT-01;Батарейки;consumable;Склад11;50;Ящик 1;10"></textarea>
+        <div class="card" style="display:block;">
+            <p>Вставьте таблицу из Excel (разделитель — запятая).</p>
+            <p style="font-size:12px; color:#666;">Формат:<br>Комплект,Название,Цена,Выкуп<br>Камера,Canon r6,60000,<br>Объектив,24-70,30000,</p>
+        </div>
+        <textarea id="csv-text" rows="10" placeholder="T1,,,
+Камера,Canon r6,60000,
+Объектив,Canon rf 24-70 f4,60000,
+Вспышка,TT685iic,8000,133000
+Допы,,5000,
+T2,,,
+Камера,Canon 6d Mark2,40000,
+..."></textarea>
         <button onclick="submitText()">Загрузить</button>
     </div>
 
@@ -354,424 +364,59 @@
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
         }
 
-        async function doRegister() {
-            const name = document.getElementById("reg-name").value.trim();
-            if (name.length < 3) { notify("Введите Фамилию и Имя"); return; }
-            try { await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) }); init(); } catch (e) { notify(e.message); }
-        }
-
-        async function loadDailyReport() {
-            try {
-                const res = await api("/api/daily_report");
-                if (res.report) {
-                    document.getElementById("daily-report-box").classList.remove("hidden");
-                    document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>');
-                }
-            } catch (e) { console.log(e); }
-        }
-
-        async function loadMyBookings() {
-            try {
-                const rows = await api("/api/my_bookings");
-                if (!rows || !rows.length) return;
-                document.getElementById("my-bookings-section").classList.remove("hidden");
-                document.getElementById("my-bookings-list").innerHTML = rows.map(r => `<div class="card" style="display:block;"><b>${r.name}</b><div class="meta">${r.date_from} — ${r.date_to}</div></div>`).join("");
-            } catch (e) { console.log(e); }
-        }
-
-        async function loadLocations() {
-            locations = await api("/api/locations");
-            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
-            const list = document.getElementById("locations-list");
-            if (list) {
-                list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">Переименовать</button></div>`).join("");
-            }
-        }
-
-        async function createLocation() {
-            const name = document.getElementById("new-location-name").value.trim();
-            if (!name) return;
-            try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); notify("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); }
-        }
-
-        async function renameLocation(id, oldName) {
-            const newName = prompt("Новое название комнаты:", oldName);
-            if (!newName || newName === oldName) return;
-            try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); loadLocations(); } catch (e) { notify(e.message); }
-        }
-
-        async function loadSpots() {
-            spots = await api("/api/spots");
-            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-            const list = document.getElementById("settings-spots-list");
-            if (list) {
-                list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">Переименовать</button></div>`).join("");
-            }
-        }
-
-        async function renameSpot(oldName) {
-            const newName = prompt("Новое название полки:", oldName);
-            if (!newName || newName === oldName) return;
-            try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); notify("Обновлено"); loadSpots(); } catch (e) { notify(e.message); }
-        }
-
+        async function doRegister() { const name = document.getElementById("reg-name").value.trim(); if (name.length < 3) { notify("Введите Фамилию и Имя"); return; } try { await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) }); init(); } catch (e) { notify(e.message); } }
+        async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
+        async function loadMyBookings() { try { const rows = await api("/api/my_bookings"); if (!rows.length) return; document.getElementById("my-bookings-section").classList.remove("hidden"); document.getElementById("my-bookings-list").innerHTML = rows.map(r => `<div class="card" style="display:block;"><b>${r.name}</b><div class="meta">${r.date_from} — ${r.date_to}</div></div>`).join(""); } catch (e) { console.log(e); } }
+        async function loadLocations() { locations = await api("/api/locations"); document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); const list = document.getElementById("locations-list"); if (list) { list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">Переименовать</button></div>`).join(""); } }
+        async function createLocation() { const name = document.getElementById("new-location-name").value.trim(); if (!name) return; try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); notify("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); } }
+        async function renameLocation(id, oldName) { const newName = prompt("Новое название комнаты:", oldName); if (!newName || newName === oldName) return; try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); loadLocations(); } catch (e) { notify(e.message); } }
+        async function loadSpots() { spots = await api("/api/spots"); document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); const list = document.getElementById("settings-spots-list"); if (list) { list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">Переименовать</button></div>`).join(""); } }
+        async function renameSpot(oldName) { const newName = prompt("Новое название полки:", oldName); if (!newName || newName === oldName) return; try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); notify("Обновлено"); loadSpots(); } catch (e) { notify(e.message); } }
         function showSettings() { loadLocations(); loadSpots(); showScreen("screen-settings"); }
-
-        async function loadUsers() {
-            const list = document.getElementById("users-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const users = await api("/api/users");
-                list.innerHTML = users.map(u => `<div class="card" style="justify-content:space-between; align-items:center;"><div><b>${u.full_name}</b><div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div></div><button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button></div>`).join("");
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
-        }
-
-        async function toggleRole(id) {
-            try { await api(`/api/users/${id}/role`, { method: "POST" }); loadUsers(); } catch (e) { notify(e.message); }
-        }
-
+        async function loadUsers() { const list = document.getElementById("users-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const users = await api("/api/users"); list.innerHTML = users.map(u => `<div class="card" style="justify-content:space-between; align-items:center;"><div><b>${u.full_name}</b><div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div></div><button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function toggleRole(id) { try { await api(`/api/users/${id}/role`, { method: "POST" }); loadUsers(); } catch (e) { notify(e.message); } }
         function showUsers() { loadUsers(); showScreen("screen-users"); }
-
-        async function loadItems() {
-            const list = document.getElementById("items-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                allItems = await api("/api/items");
-                filterItems(); loadMyItems();
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
-        }
-
-        async function loadMyItems() {
-            try {
-                const myItems = await api("/api/my_items");
-                const section = document.getElementById("my-items-section");
-                const list = document.getElementById("my-items-list");
-                if (!myItems || !myItems.length) { section.classList.add("hidden"); return; }
-                section.classList.remove("hidden");
-                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div><div class="name" style="font-weight:bold;">${i.name}</div><div class="meta" style="font-size:12px;">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div></div><button class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</button></div>`).join("");
-            } catch (e) { console.log(e); }
-        }
-
-        async function doReturnFromMain(code) {
-            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); } catch (e) { notify(e.message); }
-        }
-
-        function filterItems() {
-            const query = document.getElementById("search-input").value.toLowerCase();
-            const list = document.getElementById("items-list");
-            const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query)));
-            if (!filtered || !filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
-            
-            list.innerHTML = filtered.map(i => {
-                let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join("");
-                let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
-                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
-                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
-                let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 На выкупе: ${i.buyout_status}</span>` : "";
-
-                return `
-                <div class="card ${i.buyout_status ? 'buyout' : ''} ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
-                    ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
-                    <div class="info">
-                        <div class="name">${i.name}
-                            <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
-                            ${priceBadge} ${budgetBadge} ${buyoutBadge}
-                            ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
-                            ${brokenBadge}
-                        </div>
-                        <div class="meta">${i.code} · всего: ${i.total} шт ${i.serial_number ? `· S/N: ${i.serial_number}` : ""}</div>
-                        ${placesHtml}
-                        ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.full_name).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}
-                    </div>
-                </div>
-                `;
-            }).join("");
-        }
-
-        async function showRooms() { 
-            showScreen("screen-rooms");
-            const list = document.getElementById("rooms-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const rooms = await api("/api/locations_view");
-                list.innerHTML = rooms.map(r => `<div class="room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div>`).join("");
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
-        }
-
-        async function openRoom(id, name) {
-            showScreen("screen-room-view");
-            currentRoomId = id;
-            document.getElementById("room-title").textContent = name;
-            document.getElementById("batch-actions").classList.add("hidden");
-            selectedItems = [];
-            const list = document.getElementById("room-items");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const data = await api(`/api/room_detail/${id}`);
-                let html = "";
-                const shelfKeys = Object.keys(data.shelves).sort();
-                if (shelfKeys.length > 0) {
-                    shelfKeys.forEach((shelfName, index) => {
-                        const shelfId = `shelf-${index}`;
-                        html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▶</span></div><div class="shelf-content hidden" id="${shelfId}">`;
-                        data.shelves[shelfName].forEach(item => {
-                            html += `<div class="card" style="align-items:center;">
-                                <input type="checkbox" style="width:20px; height:20px; margin-right:10px;" onchange="toggleSelectItem('${item.code}', this)">
-                                <div class="info" onclick="openItem('${item.code}')"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div>
-                            </div>`;
-                        });
-                        html += `</div>`;
-                    });
-                }
-                if (data.no_shelf.length > 0) {
-                    html += `<h2 style="margin-top: 30px; color: #e67e22;">⚠️ Без полки</h2>`;
-                    data.no_shelf.forEach(item => { 
-                        html += `<div class="card" style="align-items:center;">
-                            <input type="checkbox" style="width:20px; height:20px; margin-right:10px;" onchange="toggleSelectItem('${item.code}', this)">
-                            <div class="info" onclick="openItem('${item.code}')"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div>
-                        </div>`; 
-                    });
-                }
-                list.innerHTML = html || "<p>В этой комнате пусто.</p>";
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
-        }
-
-        function toggleSelectItem(code, checkbox) {
-            if (checkbox.checked) { selectedItems.push(code); } else { selectedItems = selectedItems.filter(c => c !== code); }
-            document.getElementById("selected-count").textContent = selectedItems.length;
-            document.getElementById("batch-actions").classList.toggle("hidden", selectedItems.length === 0);
-        }
-
-        function toggleShelf(shelfId) {
-            const content = document.getElementById(shelfId);
-            const header = document.getElementById(`header-${shelfId}`);
-            if (content.classList.contains("hidden")) { content.classList.remove("hidden"); header.classList.add("open"); }
-            else { content.classList.add("hidden"); header.classList.remove("open"); }
-        }
-
-        function showBatchMoveForm() {
-            document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
-            document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-            showScreen("screen-batch-move");
-        }
-
-        async function executeBatchMove() {
-            const toLocation = parseInt(document.getElementById("batch-to-location").value);
-            const toSpot = document.getElementById("batch-to-spot").value;
-            if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; }
-            try {
-                await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) });
-                notify("Перемещено!"); showRooms();
-            } catch (e) { notify(e.message); }
-        }
-
-        async function showOnHand() {
-            showScreen("screen-on-hand");
-            const list = document.getElementById("on-hand-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const rows = await api("/api/on_hand");
-                if (!rows || !rows.length) { 
-                    list.innerHTML = "<p>Все вещи на месте!</p>"; 
-                    return; 
-                }
-                list.innerHTML = rows.map(r => `
-                    <div class="card" onclick="openItem('${r.item_code}')">
-                        <div class="info">
-                            <div class="name">${r.name} (${r.item_code})</div>
-                            <div class="meta" style="color:#e67e22">У ${r.full_name || 'Неизвестно'} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div>
-                            <div class="meta">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div>
-                        </div>
-                    </div>
-                `).join("");
-            } catch (e) { 
-                list.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`; 
-            }
-        }
-
-        function scanQr() {
-            if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } });
-        }
-
-        async function openItem(code) {
-            try {
-                currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
-                document.getElementById("item-title").textContent = currentItem.name;
-                
-                const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; }
-                const editBtn = document.getElementById("edit-btn");
-                if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; }
-
-                let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
-                let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
-                let priceBadge = currentItem.price ? `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : "";
-                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : "";
-                let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : "";
-                let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:#8e44ad; color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : "";
-
-                if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
-                    document.getElementById("kit-box").classList.remove("hidden");
-                    document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : "";
-                    document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : "";
-                    document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : "";
-                } else { document.getElementById("kit-box").classList.add("hidden"); }
-
-                let statusHtml = "";
-                if (currentItem.needs_repair) {
-                    statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`;
-                    repairBtn.textContent = "✅ Вернуть в строй";
-                } else {
-                    repairBtn.textContent = "🔧 Отметить как «Требует ремонта»";
-                    if (currentItem.holders.length > 0) {
-                        statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
-                    } else {
-                        let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0);
-                        let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
-                        statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`;
-                    }
-                }
-
-                document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`;
-                
-                const bookingSection = document.getElementById("booking-section");
-                if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); }
-
-                renderActions();
-                loadComments(currentItem.code);
-                showScreen("screen-item");
-            } catch (e) { notify(e.message); }
-        }
-
-        function showEditForm() {
-            document.getElementById("edit-name").value = currentItem.name;
-            document.getElementById("edit-kind").value = currentItem.kind;
-            document.getElementById("edit-price").value = currentItem.price || 0;
-            document.getElementById("edit-budget-tag").value = currentItem.budget_tag || "";
-            document.getElementById("edit-serial-number").value = currentItem.serial_number || "";
-            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || "";
-            document.getElementById("edit-kit-body").value = currentItem.kit_body || "";
-            document.getElementById("edit-kit-lens").value = currentItem.kit_lens || "";
-            document.getElementById("edit-kit-flash").value = currentItem.kit_flash || "";
-            document.getElementById("edit-min-stock").value = currentItem.min_stock || 0;
-            if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); }
-            showScreen("screen-edit-item");
-        }
-
-        function toggleEditFields() {
-            if (document.getElementById("edit-kind").value === "consumable") { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); }
-        }
-
-        async function saveEditItem() {
-            const name = document.getElementById("edit-name").value.trim();
-            const kind = document.getElementById("edit-kind").value;
-            const price = parseFloat(document.getElementById("edit-price").value) || 0;
-            const budget_tag = document.getElementById("edit-budget-tag").value;
-            const serial_number = document.getElementById("edit-serial-number").value.trim();
-            const buyout_status = document.getElementById("edit-buyout-status").value.trim();
-            const kit_body = document.getElementById("edit-kit-body").value.trim();
-            const kit_lens = document.getElementById("edit-kit-lens").value.trim();
-            const kit_flash = document.getElementById("edit-kit-flash").value.trim();
-            const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0;
-
-            try {
-                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) });
-                notify("Сохранено"); openItem(currentItem.code);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function deleteItemFromEdit() {
-            if (!confirm(`Удалить "${currentItem.name}"?`)) return;
-            try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); notify("Удалено"); backToMain(); } catch (e) { notify(e.message); }
-        }
-
-        function renderActions() {
-            const box = document.getElementById("actions");
-            const isEq = currentItem.kind === "equipment";
-            const myId = currentUser.tg_id;
-            const myCheckout = currentItem.holders.find(h => h.user_id === myId);
-            const otherCheckout = currentItem.holders.find(h => h.user_id !== myId);
-            let html = "";
-
-            if (currentItem.needs_repair) {
-                html += `<div class="card" style="color:#e74c3c; display:block; text-align:center;">Выдача заблокирована (ремонт).</div>`;
-            } else if (isEq) {
-                if (myCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; }
-                else if (otherCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; }
-                else {
-                    if (currentItem.stocks.some(s => s.quantity > 0)) {
-                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`;
-                    }
-                }
-            } else {
-                html += `<h2>Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`;
-            }
-
-            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
-            if (stockOpts) {
-                html += `<h2>Переместить</h2><select id="mv-from">${stockOpts}</select><select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select><input id="mv-qty" type="number" value="1"><select id="mv-spot"><option value="">Без места</option>${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}</select><button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button><button class="secondary" onclick="doMove()">📦 Переместить</button>`;
-            }
-            box.innerHTML = html;
-        }
-
-        async function markRepair() {
-            try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); notify(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); }
-        }
-
-        async function markLost() {
-            if (!confirm("Сообщить всем, что вещи нет?")) return;
-            try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); notify(res.message); } catch (e) { notify(e.message); }
-        }
-
+        async function loadItems() { const list = document.getElementById("items-list"); list.innerHTML = "<p>Загрузка...</p>"; try { allItems = await api("/api/items"); filterItems(); loadMyItems(); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function loadMyItems() { try { const myItems = await api("/api/my_items"); const section = document.getElementById("my-items-section"); const list = document.getElementById("my-items-list"); if (!myItems.length) { section.classList.add("hidden"); return; } section.classList.remove("hidden"); list.innerHTML = myItems.map(i => `<div class="my-item-card"><div><div class="name" style="font-weight:bold;">${i.name}</div><div class="meta" style="font-size:12px;">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div></div><button class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</button></div>`).join(""); } catch (e) { console.log(e); } }
+        async function doReturnFromMain(code) { try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); } catch (e) { notify(e.message); } }
+        function filterItems() { const query = document.getElementById("search-input").value.toLowerCase(); const list = document.getElementById("items-list"); const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query))); if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; } list.innerHTML = filtered.map(i => { let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join(""); let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : ""; let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 На выкупе: ${i.buyout_status}</span>` : ""; return `<div class="card ${i.buyout_status ? 'buyout' : ''} ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}<div class="info"><div class="name">${i.name} <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span> ${priceBadge} ${budgetBadge} ${buyoutBadge} ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""} ${brokenBadge}</div><div class="meta">${i.code} · всего: ${i.total} шт ${i.serial_number ? `· S/N: ${i.serial_number}` : ""}</div>${placesHtml}${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.full_name).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}</div></div>`; }).join(""); }
+        async function showRooms() { showScreen("screen-rooms"); const list = document.getElementById("rooms-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rooms = await api("/api/locations_view"); list.innerHTML = rooms.map(r => `<div class="room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function openRoom(id, name) { showScreen("screen-room-view"); currentRoomId = id; document.getElementById("room-title").textContent = name; document.getElementById("batch-actions").classList.add("hidden"); selectedItems = []; const list = document.getElementById("room-items"); list.innerHTML = "<p>Загрузка...</p>"; try { const data = await api(`/api/room_detail/${id}`); let html = ""; const shelfKeys = Object.keys(data.shelves).sort(); if (shelfKeys.length > 0) { shelfKeys.forEach((shelfName, index) => { const shelfId = `shelf-${index}`; html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▶</span></div><div class="shelf-content hidden" id="${shelfId}">`; data.shelves[shelfName].forEach(item => { html += `<div class="card" style="align-items:center;"><input type="checkbox" style="width:20px; height:20px; margin-right:10px;" onchange="toggleSelectItem('${item.code}', this)"><div class="info" onclick="openItem('${item.code}')"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); html += `</div>`; }); } if (data.no_shelf.length > 0) { html += `<h2 style="margin-top: 30px; color: #e67e22;">⚠️ Без полки</h2>`; data.no_shelf.forEach(item => { html += `<div class="card" style="align-items:center;"><input type="checkbox" style="width:20px; height:20px; margin-right:10px;" onchange="toggleSelectItem('${item.code}', this)"><div class="info" onclick="openItem('${item.code}')"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; }); } list.innerHTML = html || "<p>В этой комнате пусто.</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        function toggleSelectItem(code, checkbox) { if (checkbox.checked) { selectedItems.push(code); } else { selectedItems = selectedItems.filter(c => c !== code); } document.getElementById("selected-count").textContent = selectedItems.length; document.getElementById("batch-actions").classList.toggle("hidden", selectedItems.length === 0); }
+        function toggleShelf(shelfId) { const content = document.getElementById(shelfId); const header = document.getElementById(`header-${shelfId}`); if (content.classList.contains("hidden")) { content.classList.remove("hidden"); header.classList.add("open"); } else { content.classList.add("hidden"); header.classList.remove("open"); } }
+        function showBatchMoveForm() { document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); showScreen("screen-batch-move"); }
+        async function executeBatchMove() { const toLocation = parseInt(document.getElementById("batch-to-location").value); const toSpot = document.getElementById("batch-to-spot").value; if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; } try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) }); notify("Перемещено!"); showRooms(); } catch (e) { notify(e.message); } }
+        async function showOnHand() { showScreen("screen-on-hand"); const list = document.getElementById("on-hand-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rows = await api("/api/on_hand"); if (!rows || !rows.length) { list.innerHTML = "<p>Все вещи на месте!</p>"; return; } list.innerHTML = rows.map(r => `<div class="card" onclick="openItem('${r.item_code}')"><div class="info"><div class="name">${r.name} (${r.item_code})</div><div class="meta" style="color:#e67e22">У ${r.full_name || 'Неизвестно'} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div><div class="meta">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div></div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`; } }
+        function scanQr() { if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; } tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } }); }
+        async function openItem(code) { try { currentItem = await api(`/api/items/${encodeURIComponent(code)}`); document.getElementById("item-title").textContent = currentItem.name; const repairBtn = document.getElementById("repair-btn"); if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } const editBtn = document.getElementById("edit-btn"); if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : ""; let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; let priceBadge = currentItem.price ? `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:#8e44ad; color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { document.getElementById("kit-box").classList.remove("hidden"); document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; } else { document.getElementById("kit-box").classList.add("hidden"); } let statusHtml = ""; if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } else { repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } else { let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; } } document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; const bookingSection = document.getElementById("booking-section"); if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } renderActions(); loadComments(currentItem.code); showScreen("screen-item"); } catch (e) { notify(e.message); } }
+        function showEditForm() { document.getElementById("edit-name").value = currentItem.name; document.getElementById("edit-kind").value = currentItem.kind; document.getElementById("edit-price").value = currentItem.price || 0; document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; document.getElementById("edit-kit-lens").value = currentItem.kit_lens || ""; document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; document.getElementById("edit-min-stock").value = currentItem.min_stock || 0; if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } showScreen("screen-edit-item"); }
+        function toggleEditFields() { if (document.getElementById("edit-kind").value === "consumable") { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } }
+        async function saveEditItem() { const name = document.getElementById("edit-name").value.trim(); const kind = document.getElementById("edit-kind").value; const price = parseFloat(document.getElementById("edit-price").value) || 0; const budget_tag = document.getElementById("edit-budget-tag").value; const serial_number = document.getElementById("edit-serial-number").value.trim(); const buyout_status = document.getElementById("edit-buyout-status").value.trim(); const kit_body = document.getElementById("edit-kit-body").value.trim(); const kit_lens = document.getElementById("edit-kit-lens").value.trim(); const kit_flash = document.getElementById("edit-kit-flash").value.trim(); const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; try { await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) }); notify("Сохранено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function deleteItemFromEdit() { if (!confirm(`Удалить "${currentItem.name}"?`)) return; try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); notify("Удалено"); backToMain(); } catch (e) { notify(e.message); } }
+        function renderActions() { const box = document.getElementById("actions"); const isEq = currentItem.kind === "equipment"; const myId = currentUser.tg_id; const myCheckout = currentItem.holders.find(h => h.user_id === myId); const otherCheckout = currentItem.holders.find(h => h.user_id !== myId); let html = ""; if (currentItem.needs_repair) { html += `<div class="card" style="color:#e74c3c; display:block; text-align:center;">Выдача заблокирована (ремонт).</div>`; } else if (isEq) { if (myCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; } else if (otherCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; } else { if (currentItem.stocks.some(s => s.quantity > 0)) { html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; } } } else { html += `<h2>Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; } const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join(""); if (stockOpts) { html += `<h2>Переместить</h2><select id="mv-from">${stockOpts}</select><select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select><input id="mv-qty" type="number" value="1"><select id="mv-spot"><option value="">Без места</option>${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}</select><button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button><button class="secondary" onclick="doMove()">📦 Переместить</button>`; } box.innerHTML = html; }
+        async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); notify(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); notify(res.message); } catch (e) { notify(e.message); } }
         async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); notify("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doMove() { const from = parseInt(document.getElementById("mv-from").value); const to = parseInt(document.getElementById("mv-to").value); const qty = parseInt(document.getElementById("mv-qty").value) || 0; const spot = document.getElementById("mv-spot").value; if (from === to) { notify("Локации не должны совпадать"); return; } try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }) }); notify("Перемещено!"); openItem(currentItem.code); } catch (e) { notify("Ошибка: " + e.message); } }
         async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); notify("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        
         function scanSpotQr() { if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; } tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => { if (text) { document.getElementById("mv-spot").value = text.trim(); return true; } }); }
-        
         function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
-        
         async function loadBookings(code) { const list = document.getElementById("bookings-list"); try { const rows = await api(`/api/bookings/${code}`); list.innerHTML = rows.length ? rows.map(r => `<div class="booking-item"><b>${r.full_name}</b>: ${r.date_from} — ${r.date_to}</div>`).join("") : "<p>Нет броней</p>"; } catch (e) { list.innerHTML = ""; } }
         async function doBook() { const from = document.getElementById("book-from").value; const to = document.getElementById("book-to").value; if (!from || !to) return; try { await api("/api/bookings", { method: "POST", body: JSON.stringify({ code: currentItem.code, date_from: from, date_to: to }) }); notify("Забронировано"); loadBookings(currentItem.code); } catch (e) { notify(e.message); } }
         async function loadComments(code) { const list = document.getElementById("comments-list"); try { const rows = await api(`/api/comments/${code}`); list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); } catch (e) { list.innerHTML = ""; } }
         async function doComment() { const text = document.getElementById("comment-text").value.trim(); if (!text) return; try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } }
-        
         async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
-        
-        async function saveItem() {
-            const code = document.getElementById("add-code").value.trim();
-            const name = document.getElementById("add-name").value.trim();
-            const loc = parseInt(document.getElementById("add-location").value);
-            if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
-            const formData = new FormData();
-            formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value);
-            formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value);
-            formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value);
-            formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value);
-            formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value);
-            if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); }
-            const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile);
-            try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); }
-        }
-        
+        async function saveItem() { const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } const formData = new FormData(); formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile); try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); } }
         function showImportForm() { showScreen("screen-import"); }
-        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено: ${res.added}`); backToMain(); } catch (e) { notify(e.message); } }
-        
+        async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено комплектов: ${res.added}`); backToMain(); } catch (e) { notify(e.message); } }
         function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
-        
         async function showHistory() { const list = document.getElementById("history-list"); showScreen("screen-history"); try { const logs = await api("/api/history"); list.innerHTML = logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type}: ${l.name} (${l.quantity} шт) - ${l.user_name}</div></div>`).join(""); } catch (e) { list.innerHTML = ""; } }
         function downloadHistory() { window.open("/api/export_history", "_blank"); }
-
-        function showScreen(id) {
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move"].forEach(s => {
-                const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id);
-            });
-        }
+        function showScreen(id) { ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move"].forEach(s => { const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); }); }
         function backToMain() { showScreen("screen-main"); loadItems(); }
 
         (async () => { await init(); })();
