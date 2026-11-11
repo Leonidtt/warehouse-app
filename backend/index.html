@@ -47,6 +47,26 @@
         
         .header-nav { display: flex; align-items: center; margin-bottom: 15px; }
         .back-btn { background: #fff; color: #333; border: 1px solid #ddd; padding: 8px 12px; border-radius: 8px; width: auto; margin: 0; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+
+        /* Стили для сворачиваемых полок */
+        .shelf-header {
+            background: #2AABEE;
+            color: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .shelf-header:hover { background: #1e8fcf; }
+        .shelf-content { margin-bottom: 15px; }
+        .shelf-arrow { font-size: 12px; transition: transform 0.2s; }
+        .shelf-header.open .shelf-arrow { transform: rotate(90deg); }
     </style>
 </head>
 <body>
@@ -324,7 +344,7 @@
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
-        // --- НОВАЯ ФУНКЦИЯ ПРОСМОТРА КОМНАТЫ ---
+        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ СВОРАЧИВАНИЯ ПОЛОК ---
         async function openRoom(id, name) {
             showScreen("screen-room-view");
             document.getElementById("room-title").textContent = name;
@@ -335,11 +355,19 @@
                 const data = await api(`/api/room_detail/${id}`);
                 let html = "";
 
-                // 1. Выводим полки
                 const shelfKeys = Object.keys(data.shelves).sort();
                 if (shelfKeys.length > 0) {
-                    shelfKeys.forEach(shelfName => {
-                        html += `<h2 style="margin-top: 20px; color: #2AABEE;">📦 Полка: ${shelfName}</h2>`;
+                    shelfKeys.forEach((shelfName, index) => {
+                        const shelfId = `shelf-${index}`;
+                        // Сначала рендерим заголовок полки (свернутый)
+                        html += `
+                            <div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')">
+                                <span>📦 Полка: ${shelfName}</span>
+                                <span class="shelf-arrow">▶</span>
+                            </div>
+                            <div class="shelf-content hidden" id="${shelfId}">
+                        `;
+                        // Затем рендерим товары внутри полки
                         data.shelves[shelfName].forEach(item => {
                             html += `
                                 <div class="card" onclick="openItem('${item.code}')">
@@ -350,10 +378,10 @@
                                 </div>
                             `;
                         });
+                        html += `</div>`; // Закрываем контейнер полки
                     });
                 }
 
-                // 2. Выводим товары без полок
                 if (data.no_shelf.length > 0) {
                     html += `<h2 style="margin-top: 30px; color: #e67e22;">⚠️ Без полки (лежат в комнате)</h2>`;
                     data.no_shelf.forEach(item => {
@@ -375,6 +403,19 @@
                 }
 
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        // Функция для сворачивания/разворачивания полки
+        function toggleShelf(shelfId) {
+            const content = document.getElementById(shelfId);
+            const header = document.getElementById(`header-${shelfId}`);
+            if (content.classList.contains("hidden")) {
+                content.classList.remove("hidden");
+                header.classList.add("open");
+            } else {
+                content.classList.add("hidden");
+                header.classList.remove("open");
+            }
         }
         // ---------------------------------------------
 
