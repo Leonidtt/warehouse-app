@@ -71,11 +71,11 @@
     </style>
 </head>
 <body>
-    <!-- ЭКРАН РЕГИСТРАЦИИ -->
+    <!-- ЭКРАН РЕГИСТРАЦИИ (показывается, если имя пустое) -->
     <div id="screen-register" class="hidden">
         <h1>Регистрация</h1>
         <div class="card" style="display:block;">
-            <p>Добро пожаловать! Укажите вашу Фамилию и Имя для истории.</p>
+            <p>Добро пожаловать! Укажите вашу Фамилию и Имя.</p>
         </div>
         <div class="input-group">
             <label>Ваша Фамилия и Имя</label>
@@ -334,9 +334,21 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
-                if (!currentUser.full_name) { showScreen("screen-register"); return; }
+                
+                // Если имени нет или оно пустое - просим ввести
+                if (!currentUser.full_name || currentUser.full_name.trim() === "") {
+                    showScreen("screen-register"); 
+                    return; 
+                }
+
                 document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE; font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
-                if (currentUser.role === "admin") { document.getElementById("admin-buttons").classList.remove("hidden"); }
+                
+                if (currentUser.role === "admin") { 
+                    document.getElementById("admin-buttons").classList.remove("hidden"); 
+                } else { 
+                    document.getElementById("admin-buttons").classList.add("hidden"); 
+                }
+
                 await loadLocations(); await loadSpots(); await loadItems(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
@@ -551,9 +563,6 @@
                 notify("Перемещено!"); showRooms();
             } catch (e) { notify(e.message); }
         }
-
-        // ... остальные функции (openItem, showEditForm, saveEditItem, renderActions, doCheckout, doReturn, showQr, showHistory, showImportForm, showAddForm, saveItem, submitText, toggleFields) ...
-        // ОНИ У ВАС УЖЕ ЕСТЬ В ПРЕДЫДУЩЕМ РАБОЧЕМ ФАЙЛЕ, Я ВСТАВИЛ ИХ НИЖЕ ДЛЯ ПОЛНОТЫ
 
         async function showOnHand() {
             showScreen("screen-on-hand");
