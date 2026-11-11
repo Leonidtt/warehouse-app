@@ -443,8 +443,7 @@
             if (!newName || newName === oldName) return;
             try { 
                 await api(`/api/users/update_name`, { method: "POST", body: JSON.stringify({ tg_id, new_name: newName }) }); 
-                notify("Имя обновлено"); 
-                loadUsers(); 
+                notify("Имя обновлено"); loadUsers(); 
             } catch (e) { notify(e.message); }
         }
 
@@ -485,7 +484,6 @@
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
                 
-                // Бюджет виден только админу
                 let budgetBadge = "";
                 if (currentUser.role === 'admin') {
                     budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
