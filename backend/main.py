@@ -18,7 +18,12 @@ import base64
 from datetime import datetime
 import os
 
+# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+
+# ВАШ TELEGRAM ID (узнать можно у бота @userinfobot)
+MY_TELEGRAM_ID = 123456789 
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -91,11 +96,17 @@ def get_user(x_init_data: Optional[str]):
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     
     if not row:
-        # Если пользователя нет, создаем его со статусом pending
-        conn.execute("INSERT INTO users (tg_id, first_name, username, role) VALUES (?, ?, ?, 'admin')", (user["id"], user.get("first_name", ""), user.get("username", "")))
+        conn.execute("INSERT INTO users (tg_id, first_name, username, role) VALUES (?, ?, ?, 'pending')", (user["id"], user.get("first_name", ""), user.get("username", "")))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     
+    # --- ВРЕМЕННАЯ СТРОКА ДЛЯ ВАС ---
+    if user["id"] == MY_TELEGRAM_ID:
+        conn.execute("UPDATE users SET role = 'admin' WHERE tg_id = ?", (user["id"],))
+        conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
+    # --------------------------------
+
     conn.close()
     return dict(row)
 
@@ -162,26 +173,18 @@ class RegisterRequest(BaseModel):
 def get_me(x_init_data: Optional[str] = Header(None)):
     return get_user(x_init_data)
 
-# ОБНОВЛЕННАЯ РЕГИСТРАЦИЯ: первый становится админом
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     conn = get_conn()
-    
-    # Проверяем, есть ли уже админы в базе
     admin_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0]
-    
     if admin_count == 0:
-        # Если админов нет, этот пользователь становится админом
         new_role = "admin"
-        notify_msg = "Вы зарегистрированы как Администратор (первый пользователь)!"
     else:
         new_role = "employee"
-        notify_msg = "Вы успешно зарегистрированы как Сотрудник."
-
     conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name.strip(), new_role, user["tg_id"]))
     conn.commit(); conn.close()
-    return {"status": "ok", "message": notify_msg, "role": new_role}
+    return {"status": "ok", "role": new_role}
 
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
