@@ -524,5 +524,20 @@ def generate_qr(code: str):
     draw.text(((width - draw.textlength(code, font=font))/2, height + 10), code, fill="black", font=font)
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+    @app.post("/api/clear_database")
+def clear_database(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    try:
+        # Удаляем только товары и связанные с ними данные. Комнаты и пользователи остаются.
+        tables = ["items", "stock", "checkouts", "movements", "writeoffs", "bookings", "comments", "lost_items", "daily_reports"]
+        for table in tables:
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(400, str(e))
+    conn.close()
+    return {"status": "ok"}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
