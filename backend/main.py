@@ -18,7 +18,9 @@ import base64
 from datetime import datetime, timedelta
 import os
 
+# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+
 app = FastAPI()
 
 @app.exception_handler(Exception)
@@ -436,26 +438,78 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
     check_admin(x_init_data)
     conn = get_conn()
     added = 0
+    updated = 0
     try:
         lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
-        for line in lines[1:]:
-            parts = line.split(';')
-            if len(parts) < 5: continue
-            code, name, kind, loc_name, qty_str = parts[0].strip(), parts[1].strip(), parts[2].strip(), parts[3].strip(), parts[4].strip()
-            spot = parts[5].strip() if len(parts) > 5 else ""
-            try: qty = int(qty_str)
-            except: qty = 0
-            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (loc_name,)).fetchone()
+        current_kit_code = None
+        current_kit_data = {"name": "", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+
+        # Внутренняя функция для сохранения/обновления
+        def save_kit(kit_code, kit_data):
+            nonlocal added, updated
+            if not kit_code: return
+            
+            # Ищем комнату, если нет — берем первую
+            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (kit_data["loc"],)).fetchone()
             loc_id = loc["id"] if loc else 1
-            try:
-                conn.execute("INSERT INTO items (code, name, kind) VALUES (?,?,?)", (code, name, kind))
-                conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (code, loc_id, qty, spot))
-                added += 1
-            except sqlite3.IntegrityError: pass
+            
+            # Проверяем, есть ли уже такой код в базе
+            existing = conn.execute("SELECT code FROM items WHERE code = ?", (kit_code,)).fetchone()
+            
+            if existing:
+                # Если есть — ОБНОВЛЯЕМ
+                conn.execute("""UPDATE items SET name=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, buyout_status=? WHERE code=?""",
+                             (kit_data["name"], kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"], kit_code))
+                # Обновляем или создаем остаток
+                stock_exists = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (kit_code,)).fetchone()
+                if stock_exists:
+                    conn.execute("UPDATE stock SET location_id = ?, spot = ? WHERE item_code = ?", (loc_id, kit_code, kit_code))
+                else:
+                    conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
+                updated += 1
+            else:
+                # Если нет — СОЗДАЕМ
+                try:
+                    conn.execute("""INSERT INTO items (code, name, kind, price, kit_body, kit_lens, kit_flash, buyout_status) VALUES (?,?,?,?,?,?,?,?)""",
+                                 (kit_code, kit_data["name"], "equipment", kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"]))
+                    conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
+                    added += 1
+                except sqlite3.IntegrityError:
+                    pass
+
+        for line in lines:
+            parts = [p.strip() for p in line.split(',')] if ',' in line else [p.strip() for p in line.split(';')]
+            if len(parts) < 2: continue
+            
+            # Определяем новый ли это комплект
+            if parts[0] and not parts[1] and not parts[2]:
+                if current_kit_code:
+                    save_kit(current_kit_code, current_kit_data)
+                
+                current_kit_code = parts[0].replace(" ", "")
+                current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+                continue
+
+            if not current_kit_code: continue
+
+            if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
+            elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
+            elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
+            
+            if len(parts) > 3 and parts[3]:
+                try: current_kit_data["price"] = float(parts[3])
+                except: pass
+            if len(parts) > 4 and parts[4]:
+                current_kit_data["buyer"] = parts[4]
+
+        if current_kit_code:
+            save_kit(current_kit_code, current_kit_data)
+
         conn.commit()
     except Exception as e:
         conn.close(); raise HTTPException(status_code=400, detail=str(e))
-    conn.close(); return {"status": "ok", "added": added}
+    conn.close(); 
+    return {"status": "ok", "added": added, "updated": updated}
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
