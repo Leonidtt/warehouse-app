@@ -18,9 +18,7 @@ import base64
 from datetime import datetime, timedelta
 import os
 
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-
 app = FastAPI()
 
 @app.exception_handler(Exception)
@@ -165,6 +163,10 @@ class SpotUpdate(BaseModel):
 class ImportTextRequest(BaseModel):
     text: str
 
+class UserUpdate(BaseModel):
+    full_name: str
+    role: str
+
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -218,6 +220,22 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
     conn = get_conn(); current = conn.execute("SELECT role FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
     new_role = "employee" if current["role"] == "admin" else "admin"
     conn.execute("UPDATE users SET role = ? WHERE tg_id = ?", (new_role, tg_id)); conn.commit(); conn.close()
+    return {"status": "ok"}
+
+@app.post("/api/users/{tg_id}/update")
+def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name, req.role, tg_id))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
+@app.delete("/api/users/{tg_id}")
+def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    conn.execute("DELETE FROM users WHERE tg_id = ?", (tg_id,))
+    conn.commit(); conn.close()
     return {"status": "ok"}
 
 @app.get("/api/locations")
@@ -472,7 +490,7 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
             if parts[0] and not parts[1] and not parts[2]:
                 if current_kit_code: save_kit(current_kit_code, current_kit_data)
                 current_kit_code = parts[0].replace(" ", "")
-                current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+                current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
                 continue
             if not current_kit_code: continue
             if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
