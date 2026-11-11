@@ -77,17 +77,29 @@
         </div>
 
         <button onclick="scanQr()">📷 Сканировать QR</button>
-        <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+        
+        <!-- АДМИНСКИЕ КНОПКИ -->
+        <div id="admin-buttons" class="hidden">
+            <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+            <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
+            <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
+            <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
+        </div>
+
         <button class="secondary" onclick="showOnHand()">👀 Все кто взял</button>
         <button class="secondary" onclick="showRooms()">🚪 Что в комнатах?</button>
-        <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
-        <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
 
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         
         <div id="items-list"></div>
+    </div>
+
+    <div id="screen-users" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1>Пользователи</h1>
+        <div id="users-list"></div>
     </div>
 
     <div id="screen-rooms" class="hidden">
@@ -215,8 +227,24 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
-                document.getElementById("user-info").innerHTML = `${currentUser.full_name}`;
                 
+                if (!currentUser.full_name) {
+                    // Если имя пустое, просим ввести
+                    const name = prompt("Пожалуйста, введите вашу Фамилию и Имя:");
+                    if (name) {
+                        await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
+                        currentUser.full_name = name;
+                    }
+                }
+
+                document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE; font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                
+                if (currentUser.role === "admin") {
+                    document.getElementById("admin-buttons").classList.remove("hidden");
+                } else {
+                    document.getElementById("admin-buttons").classList.add("hidden");
+                }
+
                 await loadLocations();
                 await loadSpots();
                 await loadItems();
@@ -225,6 +253,32 @@
                 notify("Ошибка инициализации: " + e.message);
             }
         }
+
+        async function loadUsers() {
+            const list = document.getElementById("users-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const users = await api("/api/users");
+                list.innerHTML = users.map(u => `
+                    <div class="card" style="justify-content:space-between; align-items:center;">
+                        <div>
+                            <b>${u.full_name}</b>
+                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
+                        </div>
+                        <button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>
+                    </div>
+                `).join("");
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function toggleRole(id) {
+            try {
+                await api(`/api/users/${id}/role`, { method: "POST" });
+                loadUsers();
+            } catch (e) { notify(e.message); }
+        }
+
+        function showUsers() { loadUsers(); showScreen("screen-users"); }
 
         async function loadLocations() {
             locations = await api("/api/locations");
@@ -390,9 +444,17 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
+                // Скрываем кнопки для расходников и не-админов
                 const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; }
-                else { repairBtn.style.display = 'block'; }
+                if (currentItem.kind === 'consumable') {
+                    repairBtn.style.display = 'none';
+                } else {
+                    repairBtn.style.display = 'block';
+                }
+
+                const delBtn = document.getElementById("delete-btn");
+                if (currentUser.role === 'admin') { delBtn.style.display = 'block'; }
+                else { delBtn.style.display = 'none'; }
 
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
