@@ -50,7 +50,6 @@
     </style>
 </head>
 <body>
-    <!-- Главный экран -->
     <div id="screen-main">
         <h1>Учёт</h1>
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
@@ -65,7 +64,6 @@
         <div id="items-list"></div>
     </div>
 
-    <!-- Экран комнат -->
     <div id="screen-rooms" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -74,7 +72,6 @@
         <div id="rooms-list"></div>
     </div>
 
-    <!-- Экран содержимого комнаты (с полками) -->
     <div id="screen-room-view" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="showRooms()">← Назад</button>
@@ -83,7 +80,6 @@
         <div id="room-items"></div>
     </div>
 
-    <!-- Экран на руках -->
     <div id="screen-on-hand" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -92,7 +88,6 @@
         <div id="on-hand-list"></div>
     </div>
 
-    <!-- Карточка товара -->
     <div id="screen-item" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -103,7 +98,6 @@
         <div class="card" id="item-card" style="display:block;"></div>
         <div id="actions"></div>
         
-        <!-- Блок бронирования (скрывается для расходников) -->
         <div id="booking-section">
             <h2>Бронирование</h2>
             <div id="bookings-list"></div>
@@ -125,11 +119,9 @@
         </div>
         <button class="secondary" onclick="doComment()">Отправить</button>
 
-        <!-- Кнопка удаления в самом низу -->
         <button class="danger" onclick="deleteItem()" style="margin-top:40px;">🗑 Удалить товар</button>
     </div>
 
-    <!-- Экран добавления товара -->
     <div id="screen-add" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -186,7 +178,6 @@
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
-    <!-- Экран импорта -->
     <div id="screen-import" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -200,7 +191,6 @@
         <button onclick="submitText()">Загрузить</button>
     </div>
 
-    <!-- Экран полок -->
     <div id="screen-spot-qr" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -221,7 +211,6 @@
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
     </div>
 
-    <!-- Экран истории -->
     <div id="screen-history" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -335,7 +324,7 @@
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
-        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ПРОСМОТРА КОМНАТЫ ---
+        // --- НОВАЯ ФУНКЦИЯ ПРОСМОТРА КОМНАТЫ ---
         async function openRoom(id, name) {
             showScreen("screen-room-view");
             document.getElementById("room-title").textContent = name;
