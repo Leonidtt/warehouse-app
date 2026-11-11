@@ -184,6 +184,9 @@ class UserUpdate(BaseModel):
     full_name: str
     role: str
 
+class TerminalRequest(BaseModel):
+    sql: str
+
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -355,7 +358,6 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
 
-# ---------- Категории ----------
 @app.get("/api/categories")
 def list_categories():
     conn = get_conn(); rows = conn.execute("SELECT id, name FROM categories ORDER BY id").fetchall(); conn.close()
@@ -736,6 +738,35 @@ def clear_database(x_init_data: Optional[str] = Header(None)):
         raise HTTPException(400, str(e))
     conn.close()
     return {"status": "ok"}
+
+class TerminalRequest(BaseModel):
+    sql: str
+
+@app.post("/api/execute_sql")
+def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    sql = req.sql.strip()
+    if not sql: raise HTTPException(400, "Пустой запрос")
+    sql_upper = sql.upper()
+    if "DROP TABLE" in sql_upper or "DROP DATABASE" in sql_upper:
+        raise HTTPException(400, "Нельзя удалять таблицы")
+    conn = get_conn()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        if sql_upper.startswith("SELECT"):
+            rows = cursor.fetchall()
+            result = [dict(r) for r in rows]
+            conn.close()
+            return {"status": "ok", "type": "select", "data": result}
+        else:
+            conn.commit()
+            count = cursor.rowcount
+            conn.close()
+            return {"status": "ok", "type": "update", "message": f"Выполнено успешно. Затронуто строк: {count}"}
+    except Exception as e:
+        conn.close()
+        raise HTTPException(400, detail=str(e))
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
