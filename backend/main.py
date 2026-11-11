@@ -18,7 +18,9 @@ import base64
 from datetime import datetime, timedelta
 import os
 
+# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+
 app = FastAPI()
 
 @app.exception_handler(Exception)
@@ -460,7 +462,7 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
     try:
         lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
         current_kit_code = None
-        current_kit_data = {"name": "", "loc": "Мастерская", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+        current_kit_data = {"name": "", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
 
         def save_kit(kit_code, kit_data):
             nonlocal added, updated
@@ -485,23 +487,53 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
                 except sqlite3.IntegrityError: pass
 
         for line in lines:
-            parts = [p.strip() for p in line.split(',')] if ',' in line else [p.strip() for p in line.split(';')]
-            if len(parts) < 2: continue
-            if parts[0] and not parts[1] and not parts[2]:
-                if current_kit_code: save_kit(current_kit_code, current_kit_data)
+            # Разделяем по запятой и убираем пустые элементы
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 1: continue
+            
+            # ИГНОРИРУЕМ строки "Допы"
+            if parts[0].lower() == "допы": 
+                # Если у допов есть цена, прибавляем её к текущему комплекту
+                if len(parts) > 2 and parts[2]:
+                    try: current_kit_data["price"] += float(parts[2])
+                    except: pass
+                continue
+
+            # Проверяем, является ли первая ячейка названием комплекта (T1, T2, Ст и т.д.)
+            is_kit_header = False
+            if parts[0]:
+                # Если в строке только одно слово (или оно похоже на код) и нет других данных
+                if len(parts) == 1 or (len(parts) > 1 and not parts[1]):
+                    is_kit_header = True
+                # Дополнительная проверка: если первая ячейка не "Камера", "Объектив", "Вспышка"
+                if parts[0].lower() not in ["камера", "объектив", "вспышка"]:
+                    is_kit_header = True
+
+            if is_kit_header:
+                if current_kit_code:
+                    save_kit(current_kit_code, current_kit_data)
                 current_kit_code = parts[0].replace(" ", "")
                 current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
                 continue
+
             if not current_kit_code: continue
+
+            # Заполняем данные текущего комплекта
             if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
-            if len(parts) > 3 and parts[3]:
-                try: current_kit_data["price"] = float(parts[3])
+            
+            # Если в строке есть цена (в 3-й ячейке), обновляем общую цену комплекта
+            if len(parts) > 2 and parts[2]:
+                try: current_kit_data["price"] = float(parts[2])
                 except: pass
-            if len(parts) > 4 and parts[4]: current_kit_data["buyer"] = parts[4]
+                
+            if len(parts) > 3 and parts[3]:
+                current_kit_data["buyer"] = parts[3]
 
-        if current_kit_code: save_kit(current_kit_code, current_kit_data)
+        if current_kit_code:
+            save_kit(current_kit_code, current_kit_data)
+
         conn.commit()
     except Exception as e:
         conn.close(); raise HTTPException(status_code=400, detail=str(e))
