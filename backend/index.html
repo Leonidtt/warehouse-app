@@ -48,25 +48,15 @@
         .header-nav { display: flex; align-items: center; margin-bottom: 15px; }
         .back-btn { background: #fff; color: #333; border: 1px solid #ddd; padding: 8px 12px; border-radius: 8px; width: auto; margin: 0; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
 
-        /* Стили для сворачиваемых полок */
-        .shelf-header {
-            background: #2AABEE;
-            color: white;
-            padding: 12px 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-            margin-bottom: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            user-select: none;
-        }
+        .shelf-header { background: #2AABEE; color: white; padding: 12px 15px; border-radius: 8px; margin-top: 15px; margin-bottom: 5px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
         .shelf-header:hover { background: #1e8fcf; }
         .shelf-content { margin-bottom: 15px; }
         .shelf-arrow { font-size: 12px; transition: transform 0.2s; }
         .shelf-header.open .shelf-arrow { transform: rotate(90deg); }
+
+        .status-badge { display: inline-block; padding: 8px 12px; border-radius: 8px; font-size: 15px; font-weight: bold; margin-bottom: 15px; width: 100%; box-sizing: border-box; text-align: center; }
+        .status-free { background: #e8f5e9; color: #2e7d32; }
+        .status-taken { background: #fff3e0; color: #e65100; }
     </style>
 </head>
 <body>
@@ -85,79 +75,53 @@
     </div>
 
     <div id="screen-rooms" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Комнаты</h1>
         <div id="rooms-list"></div>
     </div>
 
     <div id="screen-room-view" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="showRooms()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1 id="room-title">Комната</h1>
         <div id="room-items"></div>
     </div>
 
     <div id="screen-on-hand" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>На руках</h1>
         <div id="on-hand-list"></div>
     </div>
 
     <div id="screen-item" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 id="item-title">Товар</h1>
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         
-        <div class="card" id="item-card" style="display:block;"></div>
+        <!-- Блок статуса и действий -->
+        <div id="item-status-box"></div>
         <div id="actions"></div>
         
         <div id="booking-section">
             <h2>Бронирование</h2>
             <div id="bookings-list"></div>
-            <div class="input-group">
-                <label>Забронировать с</label>
-                <input type="date" id="book-from">
-            </div>
-            <div class="input-group">
-                <label>По</label>
-                <input type="date" id="book-to">
-            </div>
+            <div class="input-group"><label>Забронировать с</label><input type="date" id="book-from"></div>
+            <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
             <button class="secondary" onclick="doBook()">Забронировать</button>
         </div>
 
         <h2>Комментарии</h2>
         <div id="comments-list"></div>
-        <div class="input-group">
-            <input id="comment-text" placeholder="Написать комментарий...">
-        </div>
+        <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
         <button class="secondary" onclick="doComment()">Отправить</button>
 
         <button class="danger" onclick="deleteItem()" style="margin-top:40px;">🗑 Удалить товар</button>
     </div>
 
     <div id="screen-add" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Новый товар</h1>
-        
-        <div class="input-group">
-            <label>Код товара</label>
-            <input id="add-code" placeholder="Например, ITEM-1">
-        </div>
-        
-        <div class="input-group">
-            <label>Название</label>
-            <input id="add-name" placeholder="Например, Фотоаппарат Sony">
-        </div>
-
+        <div class="input-group"><label>Код товара</label><input id="add-code" placeholder="Например, ITEM-1"></div>
+        <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
         <div class="input-group">
             <label>Тип</label>
             <select id="add-kind" onchange="toggleFields()">
@@ -165,43 +129,18 @@
                 <option value="consumable">Расходник (списывается)</option>
             </select>
         </div>
-
-        <div class="input-group">
-            <label>Локация</label>
-            <select id="add-location"></select>
-        </div>
-
-        <div class="input-group">
-            <label>Место / Полка / Ячейка</label>
-            <select id="add-spot">
-                <option value="">Без места</option>
-            </select>
-        </div>
-
+        <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
+        <div class="input-group"><label>Место / Полка / Ячейка</label><select id="add-spot"><option value="">Без места</option></select></div>
         <div id="consumable-fields" class="hidden">
-            <div class="input-group">
-                <label>Количество при добавлении</label>
-                <input id="add-qty" type="number" placeholder="0" value="0">
-            </div>
-
-            <div class="input-group">
-                <label>Минимальное значение (для оповещения)</label>
-                <input id="add-min-stock" type="number" placeholder="Например, 5" value="0">
-            </div>
+            <div class="input-group"><label>Количество при добавлении</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
+            <div class="input-group"><label>Минимальное значение (для оповещения)</label><input id="add-min-stock" type="number" placeholder="Например, 5" value="0"></div>
         </div>
-
-        <div class="input-group">
-            <label>Фотография (необязательно)</label>
-            <input type="file" id="add-photo" accept="image/*">
-        </div>
-
+        <div class="input-group"><label>Фотография (необязательно)</label><input type="file" id="add-photo" accept="image/*"></div>
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
     <div id="screen-import" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Импорт данных</h1>
         <div class="card" style="display:block;">
             <p>Скопируйте текст и вставьте в поле.</p>
@@ -212,29 +151,18 @@
     </div>
 
     <div id="screen-spot-qr" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Создать полку</h1>
-        <div class="card" style="display:block;">
-            <p>Введите название полки. После создания приложение сгенерирует для неё QR-код.</p>
-        </div>
-        <div class="input-group">
-            <label>Название полки</label>
-            <input id="spot-name" placeholder="Например, Т1">
-        </div>
+        <div class="card" style="display:block;"><p>Введите название полки. После создания приложение сгенерирует для неё QR-код.</p></div>
+        <div class="input-group"><label>Название полки</label><input id="spot-name" placeholder="Например, Т1"></div>
         <button onclick="createSpot()">Создать</button>
-        
         <h2>Существующие полки</h2>
         <div id="spots-list"></div>
-        
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
     </div>
 
     <div id="screen-history" class="hidden">
-        <div class="header-nav">
-            <button class="back-btn" onclick="backToMain()">← Назад</button>
-        </div>
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>История</h1>
         <button class="ok" onclick="downloadHistory()">📥 Скачать в Excel</button>
         <div id="history-list"></div>
@@ -257,10 +185,7 @@
 
         async function api(path, options = {}) {
             const res = await fetch(path, {
-                headers: {
-                    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-                    "X-Init-Data": tg.initData || "",
-                },
+                headers: { ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }), "X-Init-Data": tg.initData || "" },
                 ...options,
             });
             const data = await res.json().catch(() => ({}));
@@ -270,23 +195,15 @@
 
         async function loadLocations() {
             locations = await api("/api/locations");
-            const opts = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
-            document.getElementById("add-location").innerHTML = opts;
+            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
         }
 
         async function loadSpots() {
             spots = await api("/api/spots");
-            const opts = spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + opts;
-            
+            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
             const list = document.getElementById("spots-list");
             if (list) {
-                list.innerHTML = spots.map(s => `
-                    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
-                        <div><b>${s.name}</b></div>
-                        <button class="danger" style="width:auto; padding:5px 10px; margin:0;" onclick="deleteSpot('${s.name}')">Удалить</button>
-                    </div>
-                `).join("");
+                list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="danger" style="width:auto; padding:5px 10px; margin:0;" onclick="deleteSpot('${s.name}')">Удалить</button></div>`).join("");
             }
         }
 
@@ -296,128 +213,72 @@
             try {
                 allItems = await api("/api/items");
                 filterItems();
-            } catch (e) {
-                list.innerHTML = `<p style="color:red">${e.message}</p>`;
-            }
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         function filterItems() {
             const query = document.getElementById("search-input").value.toLowerCase();
             const list = document.getElementById("items-list");
-            
-            const filtered = allItems.filter(i => 
-                i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query)
-            );
-
+            const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
             if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
-            
             list.innerHTML = filtered.map(i => `
                 <div class="card ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
                     ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
                     <div class="info">
                         <div class="name">${i.name}
-                            <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">
-                                ${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}
-                            </span>
+                            <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                         </div>
                         <div class="meta">${i.code} · всего: ${i.total} шт</div>
-                        ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username || h.user_id).join(", ")}</div>` : ""}
+                        ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}
                     </div>
                 </div>
             `).join("");
         }
 
-        async function showRooms() {
+        async function showRooms() { /* ... как было ... */ 
             showScreen("screen-rooms");
             const list = document.getElementById("rooms-list");
             list.innerHTML = "<p>Загрузка...</p>";
             try {
                 const rooms = await api("/api/locations_view");
-                if (!rooms.length) { list.innerHTML = "<p>Нет комнат</p>"; return; }
-                list.innerHTML = rooms.map(r => `
-                    <div class="room-card" onclick="openRoom(${r.id}, '${r.name}')">
-                        <div class="room-title">${r.name}</div>
-                        <div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div>
-                    </div>
-                `).join("");
+                list.innerHTML = rooms.map(r => `<div class="room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
-        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ СВОРАЧИВАНИЯ ПОЛОК ---
         async function openRoom(id, name) {
             showScreen("screen-room-view");
             document.getElementById("room-title").textContent = name;
             const list = document.getElementById("room-items");
             list.innerHTML = "<p>Загрузка...</p>";
-            
             try {
                 const data = await api(`/api/room_detail/${id}`);
                 let html = "";
-
                 const shelfKeys = Object.keys(data.shelves).sort();
                 if (shelfKeys.length > 0) {
                     shelfKeys.forEach((shelfName, index) => {
                         const shelfId = `shelf-${index}`;
-                        // Сначала рендерим заголовок полки (свернутый)
-                        html += `
-                            <div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')">
-                                <span>📦 Полка: ${shelfName}</span>
-                                <span class="shelf-arrow">▶</span>
-                            </div>
-                            <div class="shelf-content hidden" id="${shelfId}">
-                        `;
-                        // Затем рендерим товары внутри полки
+                        html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▶</span></div><div class="shelf-content hidden" id="${shelfId}">`;
                         data.shelves[shelfName].forEach(item => {
-                            html += `
-                                <div class="card" onclick="openItem('${item.code}')">
-                                    <div class="info">
-                                        <div class="name">${item.name}</div>
-                                        <div class="meta">${item.code} · ${item.quantity} шт</div>
-                                    </div>
-                                </div>
-                            `;
+                            html += `<div class="card" onclick="openItem('${item.code}')"><div class="info"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`;
                         });
-                        html += `</div>`; // Закрываем контейнер полки
+                        html += `</div>`;
                     });
                 }
-
                 if (data.no_shelf.length > 0) {
                     html += `<h2 style="margin-top: 30px; color: #e67e22;">⚠️ Без полки (лежат в комнате)</h2>`;
-                    data.no_shelf.forEach(item => {
-                        html += `
-                            <div class="card" onclick="openItem('${item.code}')">
-                                <div class="info">
-                                    <div class="name">${item.name}</div>
-                                    <div class="meta">${item.code} · ${item.quantity} шт</div>
-                                </div>
-                            </div>
-                        `;
-                    });
+                    data.no_shelf.forEach(item => { html += `<div class="card" onclick="openItem('${item.code}')"><div class="info"><div class="name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; });
                 }
-
-                if (!html) {
-                    list.innerHTML = "<p>В этой комнате пусто.</p>";
-                } else {
-                    list.innerHTML = html;
-                }
-
+                list.innerHTML = html || "<p>В этой комнате пусто.</p>";
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
-        // Функция для сворачивания/разворачивания полки
         function toggleShelf(shelfId) {
             const content = document.getElementById(shelfId);
             const header = document.getElementById(`header-${shelfId}`);
-            if (content.classList.contains("hidden")) {
-                content.classList.remove("hidden");
-                header.classList.add("open");
-            } else {
-                content.classList.add("hidden");
-                header.classList.remove("open");
-            }
+            if (content.classList.contains("hidden")) { content.classList.remove("hidden"); header.classList.add("open"); }
+            else { content.classList.add("hidden"); header.classList.remove("open"); }
         }
-        // ---------------------------------------------
 
         async function showOnHand() {
             showScreen("screen-on-hand");
@@ -430,7 +291,7 @@
                     <div class="card" onclick="openItem('${r.item_code}')">
                         <div class="info">
                             <div class="name">${r.name} (${r.item_code})</div>
-                            <div class="meta" style="color:#e67e22">У ${r.first_name || r.username || r.user_id}</div>
+                            <div class="meta" style="color:#e67e22">У ${r.first_name || r.username} ${r.taken_for ? `(для ${r.taken_for})` : ""}</div>
                             <div class="meta">Взято: ${new Date(r.taken_at + 'Z').toLocaleString('ru-RU')}</div>
                         </div>
                     </div>
@@ -440,9 +301,7 @@
 
         function scanQr() {
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
-                if (text) { openItem(text.trim()); return true; }
-            });
+            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } });
         }
 
         async function openItem(code) {
@@ -450,36 +309,30 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
-                let photoHtml = currentItem.photo ? 
-                    `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
-
+                let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
+                
+                // Табличка статуса (где он есть)
+                let statusHtml = "";
+                if (currentItem.holders.length > 0) {
+                    statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
+                } else {
+                    let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
+                    statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"}</div>`;
+                }
 
-                document.getElementById("item-card").innerHTML = `
+                // Убрали лишние таблички, оставили статус
+                document.getElementById("item-status-box").innerHTML = `
                     ${photoHtml}
                     <div class="meta">Код: ${currentItem.code}</div>
                     <div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>
                     ${minStockText}
-                    ${currentItem.stocks.map(s => `
-                        <div class="stock-line">
-                            <span>${s.location_name}${s.spot ? " · " + s.spot : ""}</span>
-                            <strong>${s.quantity} шт</strong>
-                        </div>
-                    `).join("")}
-                    ${currentItem.holders.map(h => `
-                        <div class="holder-line">
-                            <span style="color:#e67e22">На руках у ${h.first_name || h.username || h.user_id}</span>
-                        </div>
-                    `).join("")}
+                    ${statusHtml}
                 `;
                 
                 const bookingSection = document.getElementById("booking-section");
-                if (currentItem.kind === "consumable") {
-                    bookingSection.classList.add("hidden");
-                } else {
-                    bookingSection.classList.remove("hidden");
-                    loadBookings(currentItem.code);
-                }
+                if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); }
+                else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); }
 
                 renderActions();
                 loadComments(currentItem.code);
@@ -503,40 +356,65 @@
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`;
                 } else {
                     const hasStock = currentItem.stocks.some(s => s.quantity > 0);
-                    if (hasStock) html += `<button onclick="doCheckout()">📤 Взять</button>`;
+                    if (hasStock) {
+                        html += `<button onclick="doCheckout()">📤 Взять себе</button>`;
+                        html += `<button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`;
+                    }
                 }
             } else {
                 html += `<h2>Списать</h2>
-                    <select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s =>
-                        `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}
-                    </select>
+                    <select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select>
                     <input id="wo-qty" type="number" value="1" placeholder="Количество">
                     <button class="danger" onclick="doWriteoff()">📉 Списать</button>`;
             }
 
-            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0)
-                .map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
+            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
             if (stockOpts) {
                 html += `<h2>Переместить</h2>
                     <select id="mv-from">${stockOpts}</select>
                     <select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select>
                     <input id="mv-qty" type="number" value="1" placeholder="Количество">
-                    <select id="mv-spot">
-                        <option value="">Без места</option>
-                        ${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}
-                    </select>
+                    <select id="mv-spot"><option value="">Без места</option>${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}</select>
                     <button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button>
                     <button class="secondary" onclick="doMove()">📦 Переместить</button>`;
             }
             box.innerHTML = html;
         }
 
+        async function doCheckout() {
+            try {
+                await api(`/api/checkout`, {
+                    method: "POST",
+                    body: JSON.stringify({ code: currentItem.code, taken_for: "" })
+                });
+                notify("Выдано"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
+        async function doCheckoutFor() {
+            const person = prompt("Для кого берем? (Введите фамилию или имя)");
+            if (person === null) return;
+            try {
+                await api(`/api/checkout`, {
+                    method: "POST",
+                    body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() })
+                });
+                notify("Выдано для " + person); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
+        async function doReturn() {
+            try {
+                await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" });
+                notify("Возвращено"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
         async function deleteItem() {
-            if (!confirm(`Вы уверены, что хотите удалить "${currentItem.name}"? Это действие необратимо.`)) return;
+            if (!confirm(`Вы уверены, что хотите удалить "${currentItem.name}"?`)) return;
             try {
                 await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" });
-                notify("Товар удален");
-                backToMain();
+                notify("Товар удален"); backToMain();
             } catch (e) { notify(e.message); }
         }
 
@@ -546,14 +424,7 @@
             try {
                 const rows = await api(`/api/bookings/${code}`);
                 if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Нет активных броней</p>"; return; }
-                list.innerHTML = rows.map(r => `
-                    <div class="booking-item">
-                        <div>
-                            <b>${r.first_name || r.username || r.user_id}</b><br>
-                            <span style="font-size:13px;">${r.date_from} — ${r.date_to}</span>
-                        </div>
-                    </div>
-                `).join("");
+                list.innerHTML = rows.map(r => `<div class="booking-item"><div><b>${r.first_name || r.username}</b><br><span style="font-size:13px;">${r.date_from} — ${r.date_to}</span></div></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
@@ -562,12 +433,8 @@
             const to = document.getElementById("book-to").value;
             if (!from || !to) { notify("Выберите даты"); return; }
             try {
-                await api("/api/bookings", {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, date_from: from, date_to: to })
-                });
-                notify("Забронировано");
-                loadBookings(currentItem.code);
+                await api("/api/bookings", { method: "POST", body: JSON.stringify({ code: currentItem.code, date_from: from, date_to: to }) });
+                notify("Забронировано"); loadBookings(currentItem.code);
             } catch (e) { notify(e.message); }
         }
 
@@ -577,15 +444,7 @@
             try {
                 const rows = await api(`/api/comments/${code}`);
                 if (!rows.length) { list.innerHTML = "<p style='font-size:14px; color:#888;'>Пока нет комментариев</p>"; return; }
-                list.innerHTML = rows.map(r => `
-                    <div class="comment-box">
-                        <div>
-                            <span class="comment-author">${r.first_name || r.username || 'Сотрудник'}</span>
-                            <span class="comment-date">${new Date(r.created_at + 'Z').toLocaleString('ru-RU')}</span>
-                        </div>
-                        <div class="comment-text">${r.text}</div>
-                    </div>
-                `).join("");
+                list.innerHTML = rows.map(r => `<div class="comment-box"><div><span class="comment-author">${r.first_name || r.username}</span><span class="comment-date">${new Date(r.created_at + 'Z').toLocaleString('ru-RU')}</span></div><div class="comment-text">${r.text}</div></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
@@ -593,10 +452,7 @@
             const text = document.getElementById("comment-text").value.trim();
             if (!text) return;
             try {
-                await api("/api/comments", {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, text: text })
-                });
+                await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text: text }) });
                 document.getElementById("comment-text").value = "";
                 loadComments(currentItem.code);
             } catch (e) { notify(e.message); }
@@ -604,15 +460,10 @@
 
         function showQr() {
             const url = `/api/qr/${currentItem.code}`;
-            document.getElementById("item-card").innerHTML = `
+            document.getElementById("item-status-box").innerHTML = `
                 <div class="meta">Код товара: ${currentItem.code}</div>
-                <div style="text-align:center; margin-top:10px;">
-                    <img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" />
-                </div>
-                <div class="qr-text-box">
-                    <div class="label">Текст для создания QR в другом приложении:</div>
-                    <div class="value">${currentItem.code}</div>
-                </div>
+                <div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" /></div>
+                <div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>
             `;
             document.getElementById("actions").innerHTML = "";
             document.getElementById("booking-section").classList.add("hidden");
@@ -623,12 +474,7 @@
 
         function scanSpotQr() {
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => {
-                if (text) { 
-                    document.getElementById("mv-spot").value = text.trim(); 
-                    return true; 
-                }
-            });
+            tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => { if (text) { document.getElementById("mv-spot").value = text.trim(); return true; } });
         }
 
         function showSpotQrForm() {
@@ -641,81 +487,28 @@
         async function createSpot() {
             const spot = document.getElementById("spot-name").value.trim();
             if (!spot) { notify("Введите название полки"); return; }
-            
-            try {
-                await api("/api/spots", {
-                    method: "POST",
-                    body: JSON.stringify({ name: spot })
-                });
-                await loadSpots();
-            } catch (e) {
-                if (!e.message.includes("уже есть")) {
-                    notify("Ошибка: " + e.message);
-                    return;
-                }
-            }
-
+            try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name: spot }) }); await loadSpots(); } catch (e) { if (!e.message.includes("уже есть")) { notify("Ошибка: " + e.message); return; } }
             const url = `/api/qr/${encodeURIComponent(spot)}`;
-            document.getElementById("spot-qr-result").innerHTML = `
-                <div style="text-align:center; margin-top:10px;">
-                    <img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" />
-                </div>
-                <div class="qr-text-box">
-                    <div class="label">Текст для создания QR в другом приложении:</div>
-                    <div class="value">${spot}</div>
-                </div>
-                <p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка успешно создана!</p>
-            `;
+            document.getElementById("spot-qr-result").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; cursor:pointer;" onclick="openQrLink('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${spot}</div></div><p style="font-size:12px; color:#28a745; text-align:center; margin-top:10px;">Полка успешно создана!</p>`;
             document.getElementById("spot-name").value = "";
         }
 
         async function deleteSpot(name) {
             if (!confirm(`Удалить полку "${name}"?`)) return;
-            try {
-                await api(`/api/spots/${encodeURIComponent(name)}`, { method: "DELETE" });
-                notify("Полка удалена");
-                loadSpots();
-            } catch (e) { notify(e.message); }
-        }
-
-        async function doCheckout() {
-            try {
-                await api(`/api/checkout?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" });
-                notify("Выдано"); openItem(currentItem.code);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function doReturn() {
-            try {
-                await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" });
-                notify("Возвращено"); openItem(currentItem.code);
-            } catch (e) { notify(e.message); }
+            try { await api(`/api/spots/${encodeURIComponent(name)}`, { method: "DELETE" }); notify("Полка удалена"); loadSpots(); } catch (e) { notify(e.message); }
         }
 
         async function doMove() {
-            const fromSel = document.getElementById("mv-from");
-            const toSel = document.getElementById("mv-to");
-            const qtyInput = document.getElementById("mv-qty");
-            const spotSel = document.getElementById("mv-spot");
-
-            if (!fromSel || !toSel || !qtyInput) { notify("Ошибка интерфейса"); return; }
-
-            const from = parseInt(fromSel.value);
-            const to = parseInt(toSel.value);
-            const qty = parseInt(qtyInput.value) || 0;
-            const spot = spotSel ? spotSel.value : "";
-
+            const from = parseInt(document.getElementById("mv-from").value);
+            const to = parseInt(document.getElementById("mv-to").value);
+            const qty = parseInt(document.getElementById("mv-qty").value) || 0;
+            const spot = document.getElementById("mv-spot").value;
             if (isNaN(from) || isNaN(to)) { notify("Выберите локации"); return; }
             if (from === to) { notify("Локации не должны совпадать"); return; }
             if (qty <= 0) { notify("Количество должно быть > 0"); return; }
-
             try {
-                await api("/api/move", {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }),
-                });
-                notify("Перемещено!");
-                openItem(currentItem.code);
+                await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }) });
+                notify("Перемещено!"); openItem(currentItem.code);
             } catch (e) { notify("Ошибка: " + e.message); }
         }
 
@@ -723,10 +516,7 @@
             const loc = parseInt(document.getElementById("wo-loc").value);
             const qty = parseInt(document.getElementById("wo-qty").value) || 0;
             try {
-                await api("/api/writeoff", {
-                    method: "POST",
-                    body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }),
-                });
+                await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) });
                 notify("Списано"); openItem(currentItem.code);
             } catch (e) { notify(e.message); }
         }
@@ -734,22 +524,12 @@
         function toggleFields() {
             const kind = document.getElementById("add-kind").value;
             const consumableFields = document.getElementById("consumable-fields");
-            if (kind === "consumable") {
-                consumableFields.classList.remove("hidden");
-            } else {
-                consumableFields.classList.add("hidden");
-                document.getElementById("add-qty").value = "1";
-                document.getElementById("add-min-stock").value = "0";
-            }
+            if (kind === "consumable") consumableFields.classList.remove("hidden");
+            else { consumableFields.classList.add("hidden"); document.getElementById("add-qty").value = "1"; document.getElementById("add-min-stock").value = "0"; }
         }
 
         async function showAddForm() {
-            try {
-                const res = await api("/api/next_code");
-                document.getElementById("add-code").value = res.code;
-            } catch (e) {
-                document.getElementById("add-code").value = "ITEM-1";
-            }
+            try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) { document.getElementById("add-code").value = "ITEM-1"; }
             document.getElementById("add-kind").value = "equipment";
             toggleFields();
             showScreen("screen-add");
@@ -761,29 +541,16 @@
             const name = document.getElementById("add-name").value.trim();
             const kind = document.getElementById("add-kind").value;
             const loc = parseInt(document.getElementById("add-location").value);
-            
-            let qty = 1;
-            let minStock = 0;
-            if (kind === "consumable") {
-                qty = parseInt(document.getElementById("add-qty").value) || 0;
-                minStock = parseInt(document.getElementById("add-min-stock").value) || 0;
-            }
-
+            let qty = 1; let minStock = 0;
+            if (kind === "consumable") { qty = parseInt(document.getElementById("add-qty").value) || 0; minStock = parseInt(document.getElementById("add-min-stock").value) || 0; }
             const spot = document.getElementById("add-spot").value;
             const photoFile = document.getElementById("add-photo").files[0];
-
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
-
             const formData = new FormData();
-            formData.append("code", code);
-            formData.append("name", name);
-            formData.append("kind", kind);
-            formData.append("location_id", loc);
-            formData.append("quantity", qty);
-            formData.append("spot", spot);
+            formData.append("code", code); formData.append("name", name); formData.append("kind", kind);
+            formData.append("location_id", loc); formData.append("quantity", qty); formData.append("spot", spot);
             formData.append("min_stock", minStock);
             if (photoFile) formData.append("photo", photoFile);
-
             try {
                 await api("/api/items", { method: "POST", body: formData });
                 notify("Добавлено");
@@ -796,10 +563,7 @@
             const text = document.getElementById("csv-text").value;
             if (!text.trim()) { notify("Вставьте текст"); return; }
             try {
-                const res = await api("/api/import_text", {
-                    method: "POST",
-                    body: JSON.stringify({ text: text })
-                });
+                const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text: text }) });
                 notify(`Загружено товаров: ${res.added}`);
                 document.getElementById("csv-text").value = "";
                 backToMain();
@@ -815,9 +579,9 @@
                 if (!logs.length) { list.innerHTML = "<p>Пока нет событий</p>"; return; }
                 list.innerHTML = logs.map(l => {
                     let text = "";
-                    if (l.type === 'checkout') text = `📤 ${l.user_name} взял ${l.name} (${l.quantity} шт)`;
-                    if (l.type === 'return') text = `📥 ${l.user_name} вернул ${l.name} (${l.quantity} шт)`;
-                    if (l.type === 'move') text = `📦 ${l.user_name} переместил ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'} в ${l.to_loc || '—'}`;
+                    if (l.type === 'checkout') text = `📤 ${l.user_name} взял ${l.name} ${l.taken_for ? `(для ${l.taken_for})` : ""}`;
+                    if (l.type === 'return') text = `📥 ${l.user_name} вернул ${l.name}`;
+                    if (l.type === 'move') text = `📦 ${l.user_name} переместил ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
                     if (l.type === 'writeoff') text = `📉 ${l.user_name} списал ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
                     const dateStr = new Date(l.date + 'Z').toLocaleString('ru-RU');
                     return `<div class="card" style="display:block;"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
@@ -828,11 +592,7 @@
         async function downloadHistory() {
             try {
                 const url = `/api/export_history`;
-                if (tg.openLink) {
-                    tg.openLink(window.location.origin + url);
-                } else {
-                    window.open(window.location.origin + url, '_blank');
-                }
+                if (tg.openLink) tg.openLink(window.location.origin + url); else window.open(window.location.origin + url, '_blank');
             } catch (e) { notify("Ошибка при скачивании"); }
         }
 
@@ -843,11 +603,7 @@
         }
         function backToMain() { showScreen("screen-main"); loadItems(); }
 
-        (async () => { 
-            await loadLocations(); 
-            await loadSpots();
-            await loadItems(); 
-        })();
+        (async () => { await loadLocations(); await loadSpots(); await loadItems(); })();
     </script>
 </body>
 </html>
