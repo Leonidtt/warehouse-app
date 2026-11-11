@@ -487,27 +487,16 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
                 except sqlite3.IntegrityError: pass
 
         for line in lines:
-            # Разделяем по запятой и убираем пустые элементы
             parts = [p.strip() for p in line.split(',')]
             if len(parts) < 1: continue
             
-            # ИГНОРИРУЕМ строки "Допы"
-            if parts[0].lower() == "допы": 
-                # Если у допов есть цена, прибавляем её к текущему комплекту
-                if len(parts) > 2 and parts[2]:
-                    try: current_kit_data["price"] += float(parts[2])
-                    except: pass
-                continue
+            if parts[0].lower() == "допы": continue
 
-            # Проверяем, является ли первая ячейка названием комплекта (T1, T2, Ст и т.д.)
             is_kit_header = False
-            if parts[0]:
-                # Если в строке только одно слово (или оно похоже на код) и нет других данных
-                if len(parts) == 1 or (len(parts) > 1 and not parts[1]):
-                    is_kit_header = True
-                # Дополнительная проверка: если первая ячейка не "Камера", "Объектив", "Вспышка"
-                if parts[0].lower() not in ["камера", "объектив", "вспышка"]:
-                    is_kit_header = True
+            if parts[0] and not parts[1] and not parts[2]:
+                is_kit_header = True
+            if parts[0].lower() not in ["камера", "объектив", "вспышка"] and parts[0]:
+                is_kit_header = True
 
             if is_kit_header:
                 if current_kit_code:
@@ -518,18 +507,17 @@ def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None
 
             if not current_kit_code: continue
 
-            # Заполняем данные текущего комплекта
             if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
             elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
             
-            # Если в строке есть цена (в 3-й ячейке), обновляем общую цену комплекта
-            if len(parts) > 2 and parts[2]:
-                try: current_kit_data["price"] = float(parts[2])
-                except: pass
-                
             if len(parts) > 3 and parts[3]:
-                current_kit_data["buyer"] = parts[3]
+                val = parts[3]
+                try:
+                    price_val = float(val)
+                    current_kit_data["price"] = price_val
+                except ValueError:
+                    current_kit_data["buyer"] = val
 
         if current_kit_code:
             save_kit(current_kit_code, current_kit_data)
