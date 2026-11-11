@@ -50,6 +50,7 @@
     </style>
 </head>
 <body>
+    <!-- Главный экран -->
     <div id="screen-main">
         <h1>Учёт</h1>
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
@@ -64,6 +65,7 @@
         <div id="items-list"></div>
     </div>
 
+    <!-- Экран комнат -->
     <div id="screen-rooms" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -72,6 +74,7 @@
         <div id="rooms-list"></div>
     </div>
 
+    <!-- Экран содержимого комнаты (с полками) -->
     <div id="screen-room-view" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="showRooms()">← Назад</button>
@@ -80,6 +83,7 @@
         <div id="room-items"></div>
     </div>
 
+    <!-- Экран на руках -->
     <div id="screen-on-hand" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -88,6 +92,7 @@
         <div id="on-hand-list"></div>
     </div>
 
+    <!-- Карточка товара -->
     <div id="screen-item" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -98,6 +103,7 @@
         <div class="card" id="item-card" style="display:block;"></div>
         <div id="actions"></div>
         
+        <!-- Блок бронирования (скрывается для расходников) -->
         <div id="booking-section">
             <h2>Бронирование</h2>
             <div id="bookings-list"></div>
@@ -119,9 +125,11 @@
         </div>
         <button class="secondary" onclick="doComment()">Отправить</button>
 
-        <button class="danger" onclick="deleteItem()" style="margin-top:30px;">🗑 Удалить товар</button>
+        <!-- Кнопка удаления в самом низу -->
+        <button class="danger" onclick="deleteItem()" style="margin-top:40px;">🗑 Удалить товар</button>
     </div>
 
+    <!-- Экран добавления товара -->
     <div id="screen-add" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -178,6 +186,7 @@
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
+    <!-- Экран импорта -->
     <div id="screen-import" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -191,6 +200,7 @@
         <button onclick="submitText()">Загрузить</button>
     </div>
 
+    <!-- Экран полок -->
     <div id="screen-spot-qr" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -211,6 +221,7 @@
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
     </div>
 
+    <!-- Экран истории -->
     <div id="screen-history" class="hidden">
         <div class="header-nav">
             <button class="back-btn" onclick="backToMain()">← Назад</button>
@@ -324,25 +335,59 @@
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
+        // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ПРОСМОТРА КОМНАТЫ ---
         async function openRoom(id, name) {
             showScreen("screen-room-view");
             document.getElementById("room-title").textContent = name;
             const list = document.getElementById("room-items");
             list.innerHTML = "<p>Загрузка...</p>";
+            
             try {
-                const items = await api(`/api/stock_view?location_id=${id}`);
-                if (!items.length) { list.innerHTML = "<p>Пусто</p>"; return; }
-                list.innerHTML = items.map(i => `
-                    <div class="card" onclick="openItem('${i.item_code}')">
-                        <div class="info">
-                            <div class="name">${i.name}</div>
-                            <div class="meta">${i.item_code} · ${i.quantity} шт</div>
-                            <div class="meta" style="color:#1565c0;">Полка: ${i.spot || "—"}</div>
-                        </div>
-                    </div>
-                `).join("");
+                const data = await api(`/api/room_detail/${id}`);
+                let html = "";
+
+                // 1. Выводим полки
+                const shelfKeys = Object.keys(data.shelves).sort();
+                if (shelfKeys.length > 0) {
+                    shelfKeys.forEach(shelfName => {
+                        html += `<h2 style="margin-top: 20px; color: #2AABEE;">📦 Полка: ${shelfName}</h2>`;
+                        data.shelves[shelfName].forEach(item => {
+                            html += `
+                                <div class="card" onclick="openItem('${item.code}')">
+                                    <div class="info">
+                                        <div class="name">${item.name}</div>
+                                        <div class="meta">${item.code} · ${item.quantity} шт</div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    });
+                }
+
+                // 2. Выводим товары без полок
+                if (data.no_shelf.length > 0) {
+                    html += `<h2 style="margin-top: 30px; color: #e67e22;">⚠️ Без полки (лежат в комнате)</h2>`;
+                    data.no_shelf.forEach(item => {
+                        html += `
+                            <div class="card" onclick="openItem('${item.code}')">
+                                <div class="info">
+                                    <div class="name">${item.name}</div>
+                                    <div class="meta">${item.code} · ${item.quantity} шт</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                if (!html) {
+                    list.innerHTML = "<p>В этой комнате пусто.</p>";
+                } else {
+                    list.innerHTML = html;
+                }
+
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
+        // ---------------------------------------------
 
         async function showOnHand() {
             showScreen("screen-on-hand");
