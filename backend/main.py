@@ -100,7 +100,6 @@ def init_db():
         returned_at TIMESTAMP,
         returned_by INTEGER
     )""")
-    # Миграция для возврата другим человеком
     try:
         c.execute("ALTER TABLE checkouts ADD COLUMN returned_by INTEGER")
     except sqlite3.OperationalError:
@@ -231,14 +230,12 @@ def list_locations():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- ПРОСМОТР ПО КОМНАТАМ ---
 @app.get("/api/locations_view")
 def locations_view():
     conn = get_conn()
     locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall()
     result = []
     for loc in locations:
-        # Получаем все полки в этой локации (где есть остатки)
         spots = conn.execute(
             "SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''",
             (loc["id"],)
@@ -250,6 +247,51 @@ def locations_view():
         })
     conn.close()
     return result
+
+# ФУНКЦИЯ ПРОСМОТРА КОМНАТЫ С ГРУППИРОВКОЙ
+@app.get("/api/room_detail/{location_id}")
+def room_detail(location_id: int):
+    conn = get_conn()
+    location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not location:
+        conn.close()
+        raise HTTPException(404, "Комната не найдена")
+    
+    items = conn.execute("""
+        SELECT item_code, quantity, spot 
+        FROM stock 
+        WHERE location_id = ? AND quantity > 0
+    """, (location_id,)).fetchall()
+    
+    item_names = {}
+    for i in conn.execute("SELECT code, name FROM items").fetchall():
+        item_names[i["code"]] = i["name"]
+        
+    conn.close()
+    
+    shelves = {}
+    no_shelf = []
+    
+    for item in items:
+        item_data = {
+            "code": item["item_code"],
+            "name": item_names.get(item["item_code"], "Неизвестно"),
+            "quantity": item["quantity"]
+        }
+        spot = item["spot"].strip() if item["spot"] else ""
+        if spot:
+            if spot not in shelves:
+                shelves[spot] = []
+            shelves[spot].append(item_data)
+        else:
+            no_shelf.append(item_data)
+            
+    return {
+        "location_name": location["name"],
+        "shelves": shelves,
+        "no_shelf": no_shelf
+    }
+# ---------------------------------------
 
 @app.get("/api/stock_view")
 def stock_view(location_id: int, spot: Optional[str] = None):
@@ -270,7 +312,6 @@ def stock_view(location_id: int, spot: Optional[str] = None):
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
-# ---------------------------
 
 @app.get("/api/spots")
 def list_spots():
@@ -296,7 +337,6 @@ def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
 def delete_spot(spot_name: str, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     conn = get_conn()
-    # Проверяем, есть ли товары на этой полке
     check = conn.execute("SELECT COUNT(*) FROM stock WHERE spot = ? AND quantity > 0", (spot_name,)).fetchone()[0]
     if check > 0:
         conn.close()
@@ -380,7 +420,6 @@ def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     conn = get_conn()
     
-    # Проверяем, не на руках ли вещь
     holder = conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if holder:
         conn.close()
@@ -546,7 +585,6 @@ def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     if not co:
         conn.close(); raise HTTPException(400, "Не выдано")
     
-    # Разрешаем возвращать любому
     conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["id"], co["id"]))
     
     existing = conn.execute(
