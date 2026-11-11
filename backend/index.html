@@ -220,7 +220,16 @@
             const list = document.getElementById("items-list");
             const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
             if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
-            list.innerHTML = filtered.map(i => `
+                        list.innerHTML = filtered.map(i => {
+                // Собираем места хранения в красивую строку
+                let placesHtml = "";
+                if (i.stocks && i.stocks.length > 0) {
+                    placesHtml = i.stocks.map(s => 
+                        `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`
+                    ).join("");
+                }
+
+                return `
                 <div class="card ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
                     ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
                     <div class="info">
@@ -229,10 +238,12 @@
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                         </div>
                         <div class="meta">${i.code} · всего: ${i.total} шт</div>
+                        ${placesHtml}
                         ${i.holders.length ? `<div class="meta" style="color:#e67e22">На руках: ${i.holders.map(h => h.first_name || h.username).join(", ")} ${i.holders.some(h=>h.taken_for) ? `(для ${i.holders.filter(h=>h.taken_for).map(h=>h.taken_for).join(", ")})` : ""}</div>` : ""}
                     </div>
                 </div>
-            `).join("");
+                `;
+            }).join("");
         }
 
         async function showRooms() { 
