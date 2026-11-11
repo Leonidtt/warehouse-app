@@ -22,6 +22,7 @@
         .card .meta { color: #666; font-size: 14px; margin-top: 4px; }
         .card.low-stock { border: 2px solid #e74c3c; background: #fdf2f2; }
         .card.broken { border: 2px solid #e74c3c; opacity: 0.7; }
+        .card.buyout { border: 2px solid #8e44ad; background: #f4ecf7; }
         .card img.thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; background: #eee; }
         
         .input-group { margin-bottom: 12px; }
@@ -37,6 +38,8 @@
         .badge.price { background: #e8f5e9; color: #2e7d32; font-weight: bold; }
         .badge.budget-kc { background: #ffebee; color: #c62828; font-weight: bold; border: 1px solid #ffcdd2; }
         .badge.budget-tx { background: #e8f5e9; color: #2e7d32; font-weight: bold; border: 1px solid #c8e6c9; }
+        .badge.buyout { background: #8e44ad; color: white; font-weight: bold; }
+        
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
@@ -223,6 +226,10 @@
                 <option value="ТХ">ТХ (Зеленый)</option>
             </select>
         </div>
+        <div class="input-group">
+            <label>На выкупе</label>
+            <input id="edit-buyout-status" placeholder="Например: Мартемьянов">
+        </div>
         <div class="input-group"><label>Серийный номер (S/N)</label><input id="edit-serial-number"></div>
 
         <h2>Комплектация</h2>
@@ -254,6 +261,10 @@
                 <option value="КЦ">КЦ</option>
                 <option value="ТХ">ТХ</option>
             </select>
+        </div>
+        <div class="input-group">
+            <label>На выкупе</label>
+            <input id="add-buyout-status" placeholder="Например: Мартемьянов">
         </div>
         <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
 
@@ -456,14 +467,15 @@
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
                 let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
+                let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 На выкупе: ${i.buyout_status}</span>` : "";
 
                 return `
-                <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
+                <div class="card ${i.buyout_status ? 'buyout' : ''} ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
                     ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
                     <div class="info">
                         <div class="name">${i.name}
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
-                            ${priceBadge} ${budgetBadge}
+                            ${priceBadge} ${budgetBadge} ${buyoutBadge}
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
                             ${brokenBadge}
                         </div>
@@ -597,6 +609,7 @@
                 let priceBadge = currentItem.price ? `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : "";
                 let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : "";
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : "";
+                let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:#8e44ad; color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : "";
 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
                     document.getElementById("kit-box").classList.remove("hidden");
@@ -620,7 +633,7 @@
                     }
                 }
 
-                document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${statusHtml}`;
+                document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`;
                 
                 const bookingSection = document.getElementById("booking-section");
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); }
@@ -637,6 +650,7 @@
             document.getElementById("edit-price").value = currentItem.price || 0;
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || "";
             document.getElementById("edit-serial-number").value = currentItem.serial_number || "";
+            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || "";
             document.getElementById("edit-kit-body").value = currentItem.kit_body || "";
             document.getElementById("edit-kit-lens").value = currentItem.kit_lens || "";
             document.getElementById("edit-kit-flash").value = currentItem.kit_flash || "";
@@ -655,13 +669,14 @@
             const price = parseFloat(document.getElementById("edit-price").value) || 0;
             const budget_tag = document.getElementById("edit-budget-tag").value;
             const serial_number = document.getElementById("edit-serial-number").value.trim();
+            const buyout_status = document.getElementById("edit-buyout-status").value.trim();
             const kit_body = document.getElementById("edit-kit-body").value.trim();
             const kit_lens = document.getElementById("edit-kit-lens").value.trim();
             const kit_flash = document.getElementById("edit-kit-flash").value.trim();
             const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0;
 
             try {
-                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number }) });
+                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) });
                 notify("Сохранено"); openItem(currentItem.code);
             } catch (e) { notify(e.message); }
         }
@@ -736,8 +751,8 @@
             formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value);
             formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value);
             formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value);
-            formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("kit_body", document.getElementById("add-kit-body").value);
-            formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value);
+            formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value);
+            formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value);
             if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); }
             const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile);
             try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); }
