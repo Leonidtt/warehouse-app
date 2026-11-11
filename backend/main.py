@@ -21,18 +21,19 @@ import os
 
 # ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ИЗ BOTFATHER
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+
 app = FastAPI()
 
-# Защита от частых запросов
+# Защита от частых запросов (Rate Limiting)
 request_history = {}
 def check_rate_limit(user_id: int):
     now = time.time()
     if user_id in request_history:
-        if now - request_history[user_id] < 0.5: # Не чаще 1 раза в 0.5 сек
+        if now - request_history[user_id] < 0.5: 
             raise HTTPException(status_code=429, detail="Слишком много запросов. Подождите.")
     request_history[user_id] = now
 
-# Глобальный перехватчик ошибок (чтобы не было белого экрана)
+# Глобальный перехватчик ошибок
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}")
@@ -48,7 +49,7 @@ def get_conn():
         except: pass
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;") # Надежная работа с базой
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
 def init_db():
@@ -64,7 +65,6 @@ def init_db():
         kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT ''
     )""")
     
-    # Безопасные миграции (добавляем колонки, если их нет)
     migrations = [
         "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
@@ -131,7 +131,6 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
-# --- МОДЕЛИ ДАННЫХ ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0
@@ -157,8 +156,6 @@ class ItemUpdate(BaseModel):
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str
 class SpotUpdate(BaseModel): old_name: str; new_name: str
 class UserUpdate(BaseModel): tg_id: int; new_name: str
-
-# --- ЭНДПОИНТЫ ---
 
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
@@ -204,11 +201,9 @@ def set_role(tg_id: int, x_init_data: Optional[str] = Header(None)):
 
 @app.post("/api/users/update_name")
 def update_user_name(req: UserUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    conn = get_conn()
+    check_admin(x_init_data); conn = get_conn()
     conn.execute("UPDATE users SET full_name = ? WHERE tg_id = ?", (req.new_name.strip(), req.tg_id))
-    conn.commit(); conn.close()
-    return {"status": "ok"}
+    conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.get("/api/locations")
 def list_locations():
