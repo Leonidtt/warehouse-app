@@ -31,7 +31,7 @@
         .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; background: #eee; color: #555; }
         .badge.eq { background: #e3f2fd; color: #1565c0; }
         .badge.cons { background: #fff3e0; color: #e65100; }
-        .badge.price { background: #e8f5e9; color: #2e7d32; }
+        .badge.price { background: #e8f5e9; color: #2e7d32; font-weight: bold; }
         .qr-text-box { background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; margin-top: 15px; text-align: center; }
         .qr-text-box .label { font-size: 13px; color: #888; margin-bottom: 5px; }
         .qr-text-box .value { font-size: 24px; font-weight: bold; font-family: monospace; color: #000; user-select: all; }
@@ -64,11 +64,25 @@
         .my-item-card { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #90caf9; }
         .my-item-btn { width: auto; padding: 6px 12px; margin: 0; font-size: 13px; background: #1565c0; }
         
-        .kit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .kit-box { background: #f0f4c3; padding: 10px; border-radius: 8px; font-size: 14px; }
+        .kit-box { background: #f0f4c3; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border-left: 4px solid #cddc39; }
+        .kit-row { margin-top: 5px; }
     </style>
 </head>
 <body>
+    <!-- ЭКРАН РЕГИСТРАЦИИ (Скрыт по умолчанию) -->
+    <div id="screen-register" class="hidden">
+        <h1>Регистрация</h1>
+        <div class="card" style="display:block;">
+            <p>Добро пожаловать! Пожалуйста, укажите вашу Фамилию и Имя. Это нужно для того, чтобы в истории было видно, кто взял вещь.</p>
+        </div>
+        <div class="input-group">
+            <label>Ваша Фамилия и Имя</label>
+            <input id="reg-name" placeholder="Например, Петров Иван">
+        </div>
+        <button onclick="doRegister()">Зарегистрироваться</button>
+    </div>
+
+    <!-- ГЛАВНЫЙ ЭКРАН -->
     <div id="screen-main" class="hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <h1 style="margin:0;">Учёт</h1>
@@ -85,6 +99,7 @@
         <div id="admin-buttons" class="hidden">
             <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
             <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
+            <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
             <button class="secondary" onclick="showSettings()">⚙️ Настройки (Комнаты/Полки)</button>
             <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         </div>
@@ -99,62 +114,91 @@
         <div id="items-list"></div>
     </div>
 
+    <!-- ЭКРАН РЕДАКТИРОВАНИЯ -->
+    <div id="screen-edit-item" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="openItem(currentItem.code)">← Назад</button></div>
+        <h1>Редактирование</h1>
+        
+        <div class="input-group"><label>Название</label><input id="edit-name"></div>
+        <div class="input-group">
+            <label>Тип</label>
+            <select id="edit-kind" onchange="toggleEditFields()">
+                <option value="equipment">Оборудование</option>
+                <option value="consumable">Расходник</option>
+            </select>
+        </div>
+        <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
+        
+        <h2>Комплектация (Оборудование)</h2>
+        <div class="input-group"><label>Тушка / Корпус</label><input id="edit-kit-body" placeholder="Например, Canon R6"></div>
+        <div class="input-group"><label>Объектив</label><input id="edit-kit-lens" placeholder="Например, 24-105 F4"></div>
+        <div class="input-group"><label>Вспышка</label><input id="edit-kit-flash" placeholder="Например, Speedlite 600EX"></div>
+
+        <div id="edit-consumable-fields" class="hidden">
+            <div class="input-group"><label>Мин. остаток (для оповещения)</label><input id="edit-min-stock" type="number" placeholder="0"></div>
+        </div>
+        
+        <button class="ok" onclick="saveEditItem()">Сохранить изменения</button>
+        <button class="danger" onclick="deleteItemFromEdit()" style="margin-top:20px;">🗑 Удалить товар</button>
+    </div>
+
+    <!-- ЭКРАН НАСТРОЕК -->
     <div id="screen-settings" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Настройки</h1>
         
         <h2>Комнаты</h2>
-        <div class="input-group">
-            <input id="new-location-name" placeholder="Название новой комнаты">
-        </div>
+        <div class="input-group"><input id="new-location-name" placeholder="Название новой комнаты"></div>
         <button onclick="createLocation()">Добавить комнату</button>
-        <div id="locations-list" style="margin-bottom:20px;"></div>
+        <div id="locations-list"></div>
 
-        <h2>Полки</h2>
-        <div class="input-group">
-            <input id="new-spot-name" placeholder="Название новой полки">
-        </div>
-        <button onclick="createSpotFromSettings()">Добавить полку</button>
-        <div id="spots-settings-list"></div>
+        <h2 style="margin-top:30px;">Полки</h2>
+        <div id="settings-spots-list"></div>
     </div>
 
+    <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
     <div id="screen-users" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Пользователи</h1>
         <div id="users-list"></div>
     </div>
 
+    <!-- ЭКРАН КОМНАТ -->
     <div id="screen-rooms" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Комнаты</h1>
         <div id="rooms-list"></div>
     </div>
 
+    <!-- ЭКРАН ПРОСМОТРА КОМНАТЫ -->
     <div id="screen-room-view" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1 id="room-title">Комната</h1>
         <div id="room-items"></div>
     </div>
 
+    <!-- ЭКРАН НА РУКАХ -->
     <div id="screen-on-hand" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Все на руках</h1>
         <div id="on-hand-list"></div>
     </div>
 
+    <!-- КАРТОЧКА ТОВАРА -->
     <div id="screen-item" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 id="item-title">Товар</h1>
+        
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
-        <button class="ok" onclick="showEditForm()" id="edit-btn" style="display:none; margin-bottom:15px;">✏️ Редактировать</button>
+        <button class="ok" onclick="showEditForm()" id="edit-btn">✏️ Редактировать</button>
         
         <div id="item-status-box"></div>
         
-        <div class="kit-grid" id="kit-grid">
-            <div class="kit-box" id="kit-body-box" style="display:none;"><b>Тушка:</b> <span id="kit-body"></span></div>
-            <div class="kit-box" id="kit-lens-box" style="display:none;"><b>Объектив:</b> <span id="kit-lens"></span></div>
-            <div class="kit-box" id="kit-flash-box" style="display:none;"><b>Вспышка:</b> <span id="kit-flash"></span></div>
-            <div class="kit-box" id="kit-other-box" style="display:none;"><b>Другое:</b> <span id="kit-other"></span></div>
+        <div id="kit-box" class="kit-box hidden">
+            <b>Комплектация:</b>
+            <div id="kit-body-text" class="kit-row"></div>
+            <div id="kit-lens-text" class="kit-row"></div>
+            <div id="kit-flash-text" class="kit-row"></div>
         </div>
         
         <div id="actions"></div>
@@ -174,30 +218,9 @@
 
         <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
         <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
-
-        <button class="danger" onclick="deleteItem()" id="delete-btn" style="margin-top:10px; display:none;">🗑 Удалить товар</button>
     </div>
 
-    <div id="screen-edit" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="openItem(currentItem.code)">← Назад</button></div>
-        <h1>Редактирование</h1>
-        
-        <div class="input-group"><label>Название</label><input id="edit-name"></div>
-        <div class="input-group"><label>Стоимость (₽)</label><input id="edit-price" type="number"></div>
-        
-        <div class="input-group"><label>Тушка</label><input id="edit-kit-body" placeholder="Например: Canon 6D Mark II"></div>
-        <div class="input-group"><label>Объектив</label><input id="edit-kit-lens" placeholder="Например: 24-105 f/4"></div>
-        <div class="input-group"><label>Вспышка</label><input id="edit-kit-flash" placeholder="Например: Canon Speedlite"></div>
-        <div class="input-group"><label>Другое (аксессуары)</label><input id="edit-kit-other" placeholder="Например: Сумка, батареи"></div>
-        
-        <div class="input-group">
-            <label>Полка</label>
-            <select id="edit-spot"></select>
-        </div>
-        
-        <button onclick="saveEdit()">Сохранить</button>
-    </div>
-
+    <!-- ЭКРАН ДОБАВЛЕНИЯ -->
     <div id="screen-add" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Новый товар</h1>
@@ -211,15 +234,14 @@
             </select>
         </div>
         <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
-        <div class="input-group"><label>Место / Полка</label><select id="add-spot"><option value="">Без места</option></select></div>
+        <div class="input-group"><label>Место / Полка / Ячейка</label><select id="add-spot"><option value="">Без места</option></select></div>
         
         <div class="input-group"><label>Стоимость (для админа)</label><input id="add-price" type="number" placeholder="0" value="0"></div>
         
-        <h3 style="margin-top:10px;">Комплектация</h3>
-        <div class="input-group"><label>Тушка</label><input id="add-kit-body" placeholder="Например: Canon 6D Mark II"></div>
-        <div class="input-group"><label>Объектив</label><input id="add-kit-lens" placeholder="Например: 24-105 f/4"></div>
-        <div class="input-group"><label>Вспышка</label><input id="add-kit-flash" placeholder="Например: Canon Speedlite"></div>
-        <div class="input-group"><label>Другое (аксессуары)</label><input id="add-kit-other" placeholder="Например: Сумка, батареи"></div>
+        <h2>Комплектация</h2>
+        <div class="input-group"><label>Тушка / Корпус</label><input id="add-kit-body" placeholder="Например, Canon R6"></div>
+        <div class="input-group"><label>Объектив</label><input id="add-kit-lens" placeholder="Например, 24-105 F4"></div>
+        <div class="input-group"><label>Вспышка</label><input id="add-kit-flash" placeholder="Например, Speedlite 600EX"></div>
 
         <div id="consumable-fields" class="hidden">
             <div class="input-group"><label>Количество при добавлении</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
@@ -229,6 +251,7 @@
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
+    <!-- ЭКРАН ИМПОРТА -->
     <div id="screen-import" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>Импорт данных</h1>
@@ -240,6 +263,17 @@
         <button onclick="submitText()">Загрузить</button>
     </div>
 
+    <!-- ЭКРАН СОЗДАНИЯ ПОЛКИ -->
+    <div id="screen-spot-qr" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1>Создать полку</h1>
+        <div class="card" style="display:block;"><p>Введите название полки. После создания приложение сгенерирует для неё QR-код.</p></div>
+        <div class="input-group"><label>Название полки</label><input id="spot-name" placeholder="Например, Т1"></div>
+        <button onclick="createSpot()">Создать</button>
+        <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
+    </div>
+
+    <!-- ЭКРАН ИСТОРИИ -->
     <div id="screen-history" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1>История</h1>
@@ -278,11 +312,8 @@
                 currentUser = await api("/api/me");
                 
                 if (!currentUser.full_name) {
-                    const name = prompt("Пожалуйста, введите вашу Фамилию и Имя:");
-                    if (name) {
-                        await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
-                        currentUser.full_name = name;
-                    }
+                    showScreen("screen-register");
+                    return;
                 }
 
                 document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE; font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
@@ -302,9 +333,19 @@
             }
         }
 
+        async function doRegister() {
+            const name = document.getElementById("reg-name").value.trim();
+            if (name.length < 3) { notify("Введите Фамилию и Имя"); return; }
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
+                init();
+            } catch (e) { notify(e.message); }
+        }
+
         async function loadLocations() {
             locations = await api("/api/locations");
             document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+            
             const list = document.getElementById("locations-list");
             if (list) {
                 list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div></div>`).join("");
@@ -322,51 +363,32 @@
             } catch (e) { notify(e.message); }
         }
 
-        function showSettings() { 
-            loadLocations(); 
-            loadSpotsSettings();
-            showScreen("screen-settings"); 
-        }
-
-        async function loadSpotsSettings() {
-            const list = document.getElementById("spots-settings-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const spots = await api("/api/spots");
+        async function loadSpots() {
+            spots = await api("/api/spots");
+            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
+            
+            const list = document.getElementById("settings-spots-list");
+            if (list) {
                 list.innerHTML = spots.map(s => `
                     <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
-                        <input type="text" value="${s.name}" id="spot-edit-${s.id}" style="width:60%; padding:5px; margin:0;">
-                        <div style="display:flex; gap:5px;">
-                            <button class="ok" style="width:auto; padding:5px 10px; margin:0;" onclick="renameSpot('${s.name}', 'spot-edit-${s.id}')">💾</button>
-                            <button class="danger" style="width:auto; padding:5px 10px; margin:0;" onclick="deleteSpot('${s.name}')">🗑</button>
-                        </div>
+                        <div><b>${s.name}</b></div>
+                        <button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">Переименовать</button>
                     </div>
                 `).join("");
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+            }
         }
 
-        async function createSpotFromSettings() {
-            const name = document.getElementById("new-spot-name").value.trim();
-            if (!name) { notify("Введите название"); return; }
-            try {
-                await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) });
-                notify("Полка добавлена");
-                document.getElementById("new-spot-name").value = "";
-                loadSpotsSettings();
-                loadSpots();
-            } catch (e) { notify(e.message); }
-        }
-
-        async function renameSpot(oldName, inputId) {
-            const newName = document.getElementById(inputId).value.trim();
+        async function renameSpot(oldName) {
+            const newName = prompt("Новое название для полки:", oldName);
             if (!newName || newName === oldName) return;
             try {
-                await api("/api/spots", { method: "PUT", body: JSON.stringify({ old_name: oldName, new_name: newName }) });
+                await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) });
                 notify("Полка переименована");
-                loadSpotsSettings();
                 loadSpots();
             } catch (e) { notify(e.message); }
         }
+
+        function showSettings() { loadLocations(); loadSpots(); showScreen("screen-settings"); }
 
         async function loadUsers() {
             const list = document.getElementById("users-list");
@@ -393,11 +415,6 @@
         }
 
         function showUsers() { loadUsers(); showScreen("screen-users"); }
-
-        async function loadSpots() {
-            spots = await api("/api/spots");
-            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-        }
 
         async function loadItems() {
             const list = document.getElementById("items-list");
@@ -551,17 +568,13 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
-                const editBtn = document.getElementById("edit-btn");
-                if (currentUser.role === 'admin') { editBtn.style.display = 'block'; }
-                else { editBtn.style.display = 'none'; }
-
                 const repairBtn = document.getElementById("repair-btn");
                 if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; }
                 else { repairBtn.style.display = 'block'; }
 
-                const delBtn = document.getElementById("delete-btn");
-                if (currentUser.role === 'admin') { delBtn.style.display = 'block'; }
-                else { delBtn.style.display = 'none'; }
+                const editBtn = document.getElementById("edit-btn");
+                if (currentUser.role === 'admin') { editBtn.style.display = 'block'; }
+                else { editBtn.style.display = 'none'; }
 
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
@@ -569,6 +582,15 @@
                 let priceBadge = "";
                 if (currentItem.price && currentItem.price > 0) {
                     priceBadge = `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>`;
+                }
+
+                if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
+                    document.getElementById("kit-box").classList.remove("hidden");
+                    document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : "";
+                    document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : "";
+                    document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : "";
+                } else {
+                    document.getElementById("kit-box").classList.add("hidden");
                 }
 
                 let statusHtml = "";
@@ -597,21 +619,6 @@
                     ${minStockText}
                     ${statusHtml}
                 `;
-
-                // Комплектация
-                document.getElementById("kit-grid").classList.add("hidden");
-                document.getElementById("kit-body-box").style.display = "none";
-                document.getElementById("kit-lens-box").style.display = "none";
-                document.getElementById("kit-flash-box").style.display = "none";
-                document.getElementById("kit-other-box").style.display = "none";
-
-                let hasKit = false;
-                if (currentItem.kit_body) { document.getElementById("kit-body").textContent = currentItem.kit_body; document.getElementById("kit-body-box").style.display = "block"; hasKit = true; }
-                if (currentItem.kit_lens) { document.getElementById("kit-lens").textContent = currentItem.kit_lens; document.getElementById("kit-lens-box").style.display = "block"; hasKit = true; }
-                if (currentItem.kit_flash) { document.getElementById("kit-flash").textContent = currentItem.kit_flash; document.getElementById("kit-flash-box").style.display = "block"; hasKit = true; }
-                if (currentItem.kit_other) { document.getElementById("kit-other").textContent = currentItem.kit_other; document.getElementById("kit-other-box").style.display = "block"; hasKit = true; }
-                
-                if (hasKit) document.getElementById("kit-grid").classList.remove("hidden");
                 
                 const bookingSection = document.getElementById("booking-section");
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); }
@@ -625,35 +632,55 @@
 
         function showEditForm() {
             document.getElementById("edit-name").value = currentItem.name;
+            document.getElementById("edit-kind").value = currentItem.kind;
             document.getElementById("edit-price").value = currentItem.price || 0;
             document.getElementById("edit-kit-body").value = currentItem.kit_body || "";
             document.getElementById("edit-kit-lens").value = currentItem.kit_lens || "";
             document.getElementById("edit-kit-flash").value = currentItem.kit_flash || "";
-            document.getElementById("edit-kit-other").value = currentItem.kit_other || "";
+            document.getElementById("edit-min-stock").value = currentItem.min_stock || 0;
             
-            let currentSpot = "";
-            if (currentItem.stocks.length > 0) currentSpot = currentItem.stocks[0].spot;
+            if (currentItem.kind === 'consumable') {
+                document.getElementById("edit-consumable-fields").classList.remove("hidden");
+            } else {
+                document.getElementById("edit-consumable-fields").classList.add("hidden");
+            }
             
-            document.getElementById("edit-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}" ${s.name === currentSpot ? 'selected' : ''}>${s.name}</option>`).join("");
-            showScreen("screen-edit");
+            showScreen("screen-edit-item");
         }
 
-        async function saveEdit() {
-            const data = {
-                name: document.getElementById("edit-name").value.trim(),
-                kind: currentItem.kind,
-                location_id: currentItem.stocks.length > 0 ? currentItem.stocks[0].location_id : 1,
-                spot: document.getElementById("edit-spot").value,
-                price: parseFloat(document.getElementById("edit-price").value) || 0,
-                kit_body: document.getElementById("edit-kit-body").value.trim(),
-                kit_lens: document.getElementById("edit-kit-lens").value.trim(),
-                kit_flash: document.getElementById("edit-kit-flash").value.trim(),
-                kit_other: document.getElementById("edit-kit-other").value.trim()
-            };
+        function toggleEditFields() {
+            const kind = document.getElementById("edit-kind").value;
+            if (kind === "consumable") {
+                document.getElementById("edit-consumable-fields").classList.remove("hidden");
+            } else {
+                document.getElementById("edit-consumable-fields").classList.add("hidden");
+            }
+        }
+
+        async function saveEditItem() {
+            const name = document.getElementById("edit-name").value.trim();
+            const kind = document.getElementById("edit-kind").value;
+            const price = parseFloat(document.getElementById("edit-price").value) || 0;
+            const kit_body = document.getElementById("edit-kit-body").value.trim();
+            const kit_lens = document.getElementById("edit-kit-lens").value.trim();
+            const kit_flash = document.getElementById("edit-kit-flash").value.trim();
+            const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0;
+
             try {
-                await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "PUT", body: JSON.stringify(data) });
+                await api(`/api/items/${currentItem.code}/update`, {
+                    method: "POST",
+                    body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash })
+                });
                 notify("Сохранено");
                 openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
+        async function deleteItemFromEdit() {
+            if (!confirm(`Вы уверены, что хотите удалить "${currentItem.name}"?`)) return;
+            try {
+                await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" });
+                notify("Товар удален"); backToMain();
             } catch (e) { notify(e.message); }
         }
 
@@ -824,7 +851,7 @@
 
         async function deleteSpot(name) {
             if (!confirm(`Удалить полку "${name}"?`)) return;
-            try { await api(`/api/spots/${encodeURIComponent(name)}`, { method: "DELETE" }); notify("Полка удалена"); loadSpotsSettings(); loadSpots(); } catch (e) { notify(e.message); }
+            try { await api(`/api/spots/${encodeURIComponent(name)}`, { method: "DELETE" }); notify("Полка удалена"); loadSpots(); } catch (e) { notify(e.message); }
         }
 
         async function doMove() {
@@ -864,7 +891,6 @@
             document.getElementById("add-kit-body").value = "";
             document.getElementById("add-kit-lens").value = "";
             document.getElementById("add-kit-flash").value = "";
-            document.getElementById("add-kit-other").value = "";
             toggleFields();
             showScreen("screen-add");
         }
@@ -879,14 +905,11 @@
             const kit_body = document.getElementById("add-kit-body").value.trim();
             const kit_lens = document.getElementById("add-kit-lens").value.trim();
             const kit_flash = document.getElementById("add-kit-flash").value.trim();
-            const kit_other = document.getElementById("add-kit-other").value.trim();
-            
             let qty = 1; let minStock = 0;
             if (kind === "consumable") { qty = parseInt(document.getElementById("add-qty").value) || 0; minStock = parseInt(document.getElementById("add-min-stock").value) || 0; }
             const spot = document.getElementById("add-spot").value;
             const photoFile = document.getElementById("add-photo").files[0];
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
-            
             const formData = new FormData();
             formData.append("code", code); formData.append("name", name); formData.append("kind", kind);
             formData.append("location_id", loc); formData.append("quantity", qty); formData.append("spot", spot);
@@ -895,12 +918,11 @@
             formData.append("kit_body", kit_body);
             formData.append("kit_lens", kit_lens);
             formData.append("kit_flash", kit_flash);
-            formData.append("kit_other", kit_other);
-            
             if (photoFile) formData.append("photo", photoFile);
             try {
                 await api("/api/items", { method: "POST", body: formData });
                 notify("Добавлено");
+                ["add-code", "add-name", "add-photo"].forEach(id => document.getElementById(id).value = "");
                 backToMain();
             } catch (e) { notify(e.message); }
         }
@@ -944,8 +966,9 @@
         }
 
         function showScreen(id) {
-            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit"].forEach(s => {
-                document.getElementById(s).classList.toggle("hidden", s !== id);
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item"].forEach(s => {
+                const el = document.getElementById(s);
+                if (el) el.classList.toggle("hidden", s !== id);
             });
         }
         function backToMain() { showScreen("screen-main"); loadItems(); }
