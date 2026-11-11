@@ -44,6 +44,9 @@
         .room-card { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 10px; cursor: pointer; border-left: 4px solid #2AABEE; }
         .room-title { font-weight: bold; font-size: 16px; }
         .room-spots { font-size: 13px; color: #666; margin-top: 5px; }
+        
+        .header-nav { display: flex; align-items: center; margin-bottom: 15px; }
+        .back-btn { background: #fff; color: #333; border: 1px solid #ddd; padding: 8px 12px; border-radius: 8px; width: auto; margin: 0; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
     </style>
 </head>
 <body>
@@ -62,27 +65,35 @@
     </div>
 
     <div id="screen-rooms" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>Комнаты</h1>
         <div id="rooms-list"></div>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-room-view" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="showRooms()">← Назад</button>
+        </div>
         <h1 id="room-title">Комната</h1>
         <div id="room-items"></div>
-        <button class="secondary" onclick="showRooms()">← Назад к комнатам</button>
     </div>
 
     <div id="screen-on-hand" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>На руках</h1>
         <div id="on-hand-list"></div>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-item" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1 id="item-title">Товар</h1>
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
-        <button class="danger" onclick="deleteItem()">🗑 Удалить товар</button>
         
         <div class="card" id="item-card" style="display:block;"></div>
         <div id="actions"></div>
@@ -108,10 +119,13 @@
         </div>
         <button class="secondary" onclick="doComment()">Отправить</button>
 
-        <button class="secondary" onclick="backToMain()" style="margin-top:20px;">← Назад</button>
+        <button class="danger" onclick="deleteItem()" style="margin-top:30px;">🗑 Удалить товар</button>
     </div>
 
     <div id="screen-add" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>Новый товар</h1>
         
         <div class="input-group">
@@ -162,10 +176,12 @@
         </div>
 
         <button onclick="saveItem()">Сохранить</button>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-import" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>Импорт данных</h1>
         <div class="card" style="display:block;">
             <p>Скопируйте текст и вставьте в поле.</p>
@@ -173,10 +189,12 @@
         </div>
         <textarea id="csv-text" rows="10" placeholder="BAT-01;Батарейки;consumable;Склад11;50;Ящик 1;10"></textarea>
         <button onclick="submitText()">Загрузить</button>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-spot-qr" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>Создать полку</h1>
         <div class="card" style="display:block;">
             <p>Введите название полки. После создания приложение сгенерирует для неё QR-код.</p>
@@ -191,14 +209,15 @@
         <div id="spots-list"></div>
         
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <div id="screen-history" class="hidden">
+        <div class="header-nav">
+            <button class="back-btn" onclick="backToMain()">← Назад</button>
+        </div>
         <h1>История</h1>
         <button class="ok" onclick="downloadHistory()">📥 Скачать в Excel</button>
         <div id="history-list"></div>
-        <button class="secondary" onclick="backToMain()">← Назад</button>
     </div>
 
     <script>
@@ -289,7 +308,6 @@
             `).join("");
         }
 
-        // --- ПРОСМОТР ПО КОМНАТАМ ---
         async function showRooms() {
             showScreen("screen-rooms");
             const list = document.getElementById("rooms-list");
@@ -325,7 +343,6 @@
                 `).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
-        // ---------------------------
 
         async function showOnHand() {
             showScreen("screen-on-hand");
@@ -381,7 +398,6 @@
                     `).join("")}
                 `;
                 
-                // Скрываем бронирование для расходников
                 const bookingSection = document.getElementById("booking-section");
                 if (currentItem.kind === "consumable") {
                     bookingSection.classList.add("hidden");
@@ -408,7 +424,6 @@
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`;
                 } else if (otherCheckout) {
-                    // Разрешаем вернуть за другого
                     html += `<div class="card" style="color:#e67e22; display:block;">Вещь у другого сотрудника. Вы можете её вернуть.</div>`;
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`;
                 } else {
@@ -544,7 +559,7 @@
         function showSpotQrForm() {
             document.getElementById("spot-name").value = "";
             document.getElementById("spot-qr-result").innerHTML = "";
-            loadSpots(); // Обновляем список
+            loadSpots();
             showScreen("screen-spot-qr");
         }
 
