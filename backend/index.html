@@ -18,6 +18,7 @@
         .card .name { font-weight: 600; }
         .card .meta { color: #666; font-size: 14px; margin-top: 4px; }
         .card.low-stock { border: 2px solid #e74c3c; background: #fdf2f2; }
+        .card.broken { border: 2px solid #e74c3c; opacity: 0.7; }
         .card img.thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; background: #eee; }
         
         .input-group { margin-bottom: 12px; }
@@ -57,15 +58,26 @@
         .status-badge { display: inline-block; padding: 8px 12px; border-radius: 8px; font-size: 15px; font-weight: bold; margin-bottom: 15px; width: 100%; box-sizing: border-box; text-align: center; }
         .status-free { background: #e8f5e9; color: #2e7d32; }
         .status-taken { background: #fff3e0; color: #e65100; }
+        .status-broken { background: #ffebee; color: #c62828; }
+        
+        .my-item-card { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #90caf9; }
+        .my-item-btn { width: auto; padding: 6px 12px; margin: 0; font-size: 13px; background: #1565c0; }
     </style>
 </head>
 <body>
     <div id="screen-main">
         <h1>Учёт</h1>
+        
+        <!-- Блок "Мои вещи на руках" -->
+        <div id="my-items-section" class="hidden" style="margin-bottom: 20px;">
+            <h2 style="color: #1565c0;">🖐 Мои вещи на руках</h2>
+            <div id="my-items-list"></div>
+        </div>
+
         <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         <button onclick="scanQr()">📷 Сканировать QR</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-        <button class="secondary" onclick="showOnHand()">🖐 Что на руках?</button>
+        <button class="secondary" onclick="showOnHand()">👀 Все кто взял</button>
         <button class="secondary" onclick="showRooms()">🚪 Что в комнатах?</button>
         <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
         <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
@@ -88,7 +100,7 @@
 
     <div id="screen-on-hand" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
-        <h1>На руках</h1>
+        <h1>Все на руках</h1>
         <div id="on-hand-list"></div>
     </div>
 
@@ -98,6 +110,10 @@
         <button class="secondary" onclick="showQr()">🔲 Показать QR-код</button>
         
         <div id="item-status-box"></div>
+        
+        <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:15px;">🔧 Отметить как «Требует ремонта»</button>
+        <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:15px;">🚨 Не нашел на месте</button>
+
         <div id="actions"></div>
         
         <div id="booking-section">
@@ -212,7 +228,37 @@
             try {
                 allItems = await api("/api/items");
                 filterItems();
+                loadMyItems();
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
+        }
+
+        async function loadMyItems() {
+            try {
+                const myItems = await api("/api/my_items");
+                const section = document.getElementById("my-items-section");
+                const list = document.getElementById("my-items-list");
+                
+                if (!myItems.length) { section.classList.add("hidden"); return; }
+                
+                section.classList.remove("hidden");
+                list.innerHTML = myItems.map(i => `
+                    <div class="my-item-card">
+                        <div>
+                            <div class="name" style="font-weight:bold;">${i.name}</div>
+                            <div class="meta" style="font-size:12px;">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div>
+                        </div>
+                        <button class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</button>
+                    </div>
+                `).join("");
+            } catch (e) { console.log(e); }
+        }
+
+        async function doReturnFromMain(code) {
+            try {
+                await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" });
+                notify("Возвращено");
+                loadItems();
+            } catch (e) { notify(e.message); }
         }
 
         function filterItems() {
@@ -222,21 +268,21 @@
             if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
             
             list.innerHTML = filtered.map(i => {
-                // Вывод мест прямо в список
                 let placesHtml = "";
                 if (i.stocks && i.stocks.length > 0) {
-                    placesHtml = i.stocks.map(s => 
-                        `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`
-                    ).join("");
+                    placesHtml = i.stocks.map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join("");
                 }
 
+                let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
+
                 return `
-                <div class="card ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
+                <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
                     ${i.photo ? `<img class="thumb" src="data:image/jpeg;base64,${i.photo}">` : `<div class="thumb"></div>`}
                     <div class="info">
                         <div class="name">${i.name}
                             <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'оборуд.' : 'расходник'}</span>
                             ${i.is_low ? '<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">⚠️ Мало!</span>' : ""}
+                            ${brokenBadge}
                         </div>
                         <div class="meta">${i.code} · всего: ${i.total} шт</div>
                         ${placesHtml}
@@ -312,7 +358,14 @@
 
         function scanQr() {
             if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } });
+            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { 
+                if (text) { 
+                    // Звуковой/вибрационный отклик при успешном сканировании
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    openItem(text.trim()); 
+                    return true; 
+                } 
+            });
         }
 
         async function openItem(code) {
@@ -324,14 +377,20 @@
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 
                 let statusHtml = "";
-                if (currentItem.holders.length > 0) {
-                    statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
+                if (currentItem.needs_repair) {
+                    statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`;
+                    document.getElementById("repair-btn").textContent = "✅ Вернуть в строй";
                 } else {
-                    let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
-                    if (currentItem.kind === 'equipment') {
-                        statusHtml = `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>`;
+                    document.getElementById("repair-btn").textContent = "🔧 Отметить как «Требует ремонта»";
+                    if (currentItem.holders.length > 0) {
+                        statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
                     } else {
-                        statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${currentItem.total} шт)</div>`;
+                        let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
+                        if (currentItem.kind === 'equipment') {
+                            statusHtml = `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>`;
+                        } else {
+                            statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${currentItem.total} шт)</div>`;
+                        }
                     }
                 }
 
@@ -361,7 +420,9 @@
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId);
             let html = "";
 
-            if (isEq) {
+            if (currentItem.needs_repair) {
+                html += `<div class="card" style="color:#e74c3c; display:block; text-align:center;">Выдача заблокирована, пока товар в ремонте.</div>`;
+            } else if (isEq) {
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`;
                 } else if (otherCheckout) {
@@ -392,6 +453,22 @@
                     <button class="secondary" onclick="doMove()">📦 Переместить</button>`;
             }
             box.innerHTML = html;
+        }
+
+        async function markRepair() {
+            try {
+                const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" });
+                notify(res.message);
+                openItem(currentItem.code);
+            } catch (e) { notify(e.message); }
+        }
+
+        async function markLost() {
+            if (!confirm("Сообщить всем, что вещи нет на месте?")) return;
+            try {
+                const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" });
+                notify(res.message);
+            } catch (e) { notify(e.message); }
         }
 
         async function doCheckout() {
@@ -590,6 +667,7 @@
                     if (l.type === 'return') text = `📥 ${l.user_name} вернул ${l.name}`;
                     if (l.type === 'move') text = `📦 ${l.user_name} переместил ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
                     if (l.type === 'writeoff') text = `📉 ${l.user_name} списал ${l.name} (${l.quantity} шт) из ${l.from_loc || '—'}`;
+                    if (l.type === 'lost') text = `🚨 ${l.user_name} не нашел ${l.name}`;
                     const dateStr = new Date(l.date + 'Z').toLocaleString('ru-RU');
                     return `<div class="card" style="display:block;"><div class="meta">${dateStr}</div><div>${text}</div></div>`;
                 }).join("");
