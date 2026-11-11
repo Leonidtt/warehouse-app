@@ -311,12 +311,11 @@
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 
-                                let statusHtml = "";
+                // --- ИЗМЕНЕННЫЙ БЛОК СТАТУСА ---
+                let statusHtml = "";
                 if (currentItem.holders.length > 0) {
-                    // Если вещь на руках
                     statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
                 } else {
-                    // Если вещь на месте
                     let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
                     
                     if (currentItem.kind === 'equipment') {
@@ -325,12 +324,7 @@
                         statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${currentItem.total} шт)</div>`;
                     }
                 }
-                if (currentItem.holders.length > 0) {
-                    statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].first_name || currentItem.holders[0].username} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`;
-                } else {
-                    let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
-                    statusHtml = `<div class="status-badge status-free">В наличии: ${places || "Нет"}</div>`;
-                }
+                // --------------------------------
 
                 document.getElementById("item-status-box").innerHTML = `
                     ${photoHtml}
