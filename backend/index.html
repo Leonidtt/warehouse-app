@@ -29,11 +29,10 @@
             padding: 0; 
             background: var(--bg); 
             color: var(--text); 
-            padding-bottom: 80px; /* Место для нижней панели */
+            padding-bottom: 80px;
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Сетка для карточек товаров */
         .grid-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -63,7 +62,6 @@
         
         .thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; background: #eee; margin-bottom: 10px; }
 
-        /* Цветные бейджи */
         .badge { 
             display: inline-flex; 
             align-items: center; 
@@ -83,7 +81,6 @@
         .badge.repair { background: var(--danger); color: white; }
         .badge.low { background: var(--warning); color: white; }
 
-        /* Нижняя панель */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -114,7 +111,6 @@
         .nav-item.active { color: var(--primary); }
         .nav-item .icon { font-size: 22px; margin-bottom: 2px; }
 
-        /* Шапка */
         .app-header {
             padding: 16px 16px 8px;
             display: flex;
@@ -128,7 +124,6 @@
         .app-header h1 { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: -0.5px; }
         .user-info { font-size: 12px; color: var(--text-muted); text-align: right; }
 
-        /* Поля ввода */
         .input-group { margin-bottom: 14px; }
         .input-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; margin-left: 4px; }
         input, select, textarea { 
@@ -144,7 +139,6 @@
         input:focus, select:focus, textarea:focus { border-color: var(--primary); }
         textarea { resize: vertical; min-height: 80px; }
 
-        /* Кнопки */
         button { 
             width: 100%; 
             padding: 16px; 
@@ -164,12 +158,10 @@
         button.ok { background: var(--success); }
         button.ghost { background: transparent; color: var(--primary); }
 
-        /* Модальные окна / Экраны */
         .screen { padding: 0 16px 20px; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .hidden { display: none !important; }
 
-        /* Разное */
         .header-nav { display: flex; align-items: center; margin-bottom: 20px; padding-top: 16px; }
         .back-btn { 
             background: #fff; color: var(--text); border: 1px solid var(--border); 
@@ -209,7 +201,6 @@
 </head>
 <body>
 
-    <!-- ЭКРАН РЕГИСТРАЦИИ -->
     <div id="screen-register" class="screen hidden" style="padding-top: 40px;">
         <h1 style="text-align: center; margin-bottom: 10px;">Регистрация</h1>
         <p style="text-align: center; color: var(--text-muted); margin-bottom: 30px;">Укажите вашу Фамилию и Имя для истории</p>
@@ -220,7 +211,6 @@
         <button onclick="doRegister()">Зарегистрироваться</button>
     </div>
 
-    <!-- ГЛАВНЫЙ ЭКРАН -->
     <div id="screen-main" class="screen hidden">
         <div class="app-header">
             <h1>Учёт</h1>
@@ -249,7 +239,6 @@
         <div id="items-list" class="grid-container"></div>
     </div>
 
-    <!-- ЭКРАН НАСТРОЕК (Админ) -->
     <div id="screen-settings" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Настройки</h1>
@@ -271,14 +260,18 @@
         <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
     </div>
 
-    <!-- ЭКРАН КОМНАТ -->
+    <div id="screen-users" class="screen hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1 style="font-size: 22px; margin-bottom: 20px;">Пользователи</h1>
+        <div id="users-list"></div>
+    </div>
+
     <div id="screen-rooms" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Комнаты</h1>
         <div id="rooms-list"></div>
     </div>
 
-    <!-- ЭКРАН ПРОСМОТРА КОМНАТЫ -->
     <div id="screen-room-view" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1 id="room-title" style="font-size: 22px; margin-bottom: 20px;">Комната</h1>
@@ -291,14 +284,12 @@
         <div id="room-items"></div>
     </div>
 
-    <!-- ЭКРАН НА РУКАХ -->
     <div id="screen-on-hand" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Все на руках</h1>
         <div id="on-hand-list"></div>
     </div>
 
-    <!-- КАРТОЧКА ТОВАРА -->
     <div id="screen-item" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 id="item-title" style="font-size: 22px; margin-bottom: 20px;">Товар</h1>
@@ -336,7 +327,6 @@
         <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
     </div>
 
-    <!-- ЭКРАН РЕДАКТИРОВАНИЯ -->
     <div id="screen-edit-item" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="openItem(currentItem.code)">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Редактирование</h1>
@@ -368,7 +358,6 @@
         <button class="danger" onclick="deleteItemFromEdit()" style="margin-top:20px;">🗑 Удалить товар</button>
     </div>
 
-    <!-- ЭКРАН ДОБАВЛЕНИЯ -->
     <div id="screen-add" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Новый товар</h1>
@@ -402,7 +391,6 @@
         <button onclick="saveItem()">Сохранить</button>
     </div>
 
-    <!-- ЭКРАН ИМПОРТА -->
     <div id="screen-import" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Импорт данных</h1>
@@ -418,7 +406,6 @@ T2,,,"></textarea>
         <button onclick="submitText()">Загрузить</button>
     </div>
 
-    <!-- ЭКРАН СОЗДАНИЯ ПОЛКИ -->
     <div id="screen-spot-qr" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Создать полку</h1>
@@ -427,7 +414,6 @@ T2,,,"></textarea>
         <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
     </div>
 
-    <!-- ЭКРАН ИСТОРИИ -->
     <div id="screen-history" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">История</h1>
@@ -435,7 +421,6 @@ T2,,,"></textarea>
         <div id="history-list"></div>
     </div>
 
-    <!-- ЭКРАН МАССОВОГО ПЕРЕМЕЩЕНИЯ -->
     <div id="screen-batch-move" class="screen hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1 style="font-size: 22px; margin-bottom: 20px;">Перемещение</h1>
@@ -444,7 +429,6 @@ T2,,,"></textarea>
         <button onclick="executeBatchMove()">Переместить выбранные</button>
     </div>
 
-    <!-- НИЖНЯЯ ПАНЕЛЬ -->
     <div class="bottom-nav">
         <div class="nav-item active" id="nav-main" onclick="backToMain()">
             <span class="icon">📦</span>
