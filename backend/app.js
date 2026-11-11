@@ -341,5 +341,44 @@ function showScreen(id) {
 }
 
 function backToMain() { showScreen("screen-main"); loadItems(); }
+        function showTerminal() {
+            document.getElementById("terminal-sql").value = "";
+            document.getElementById("terminal-result").innerHTML = "";
+            showScreen("screen-terminal");
+        }
+
+        async function executeTerminal() {
+            const sql = document.getElementById("terminal-sql").value.trim();
+            if (!sql) return;
+            
+            const resBox = document.getElementById("terminal-result");
+            resBox.innerHTML = "<p>Выполняется...</p>";
+            
+            try {
+                const res = await api("/api/execute_sql", { 
+                    method: "POST", 
+                    body: JSON.stringify({ sql: sql }) 
+                });
+                
+                if (res.type === "select") {
+                    if (!res.data.length) {
+                        resBox.innerHTML = "<p>Запрос выполнен. Данных нет.</p>";
+                    } else {
+                        let html = `<div style="overflow-x: auto; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 10px;"><table style="width: 100%; border-collapse: collapse;">`;
+                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th style="text-align: left; border-bottom: 1px solid var(--border); padding: 4px;">${k}</th>`).join("") + `</tr>`;
+                        res.data.forEach(row => {
+                            html += `<tr>` + Object.values(row).map(v => `<td style="border-bottom: 1px solid var(--border); padding: 4px;">${v}</td>`).join("") + `</tr>`;
+                        });
+                        html += `</table></div>`;
+                        resBox.innerHTML = html;
+                    }
+                } else {
+                    resBox.innerHTML = `<div class="status-badge status-free">${res.message}</div>`;
+                    loadStats();
+                }
+            } catch (e) {
+                resBox.innerHTML = `<div class="status-badge status-broken">Ошибка: ${e.message}</div>`;
+            }
+        }
 
 (async () => { await init(); })();
