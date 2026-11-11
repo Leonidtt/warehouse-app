@@ -9,7 +9,9 @@
         body { font-family: -apple-system, sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
         h1 { font-size: 20px; margin: 0 0 16px; }
         h2 { font-size: 15px; margin: 16px 0 8px; color: #555; }
-        button { width: 100%; padding: 14px; margin-bottom: 10px; border: none; border-radius: 10px; font-size: 16px; background: #2AABEE; color: white; cursor: pointer; }
+        button { width: 100%; padding: 14px; margin-bottom: 10px; border: none; border-radius: 10px; font-size: 16px; background: #2AABEE; color: white; cursor: pointer; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+        button:disabled { background: #ccc; color: #888; cursor: not-allowed; }
         button.secondary { background: #fff; color: #333; border: 1px solid #ddd; }
         button.danger { background: #e74c3c; }
         button.ok { background: #27ae60; }
@@ -68,8 +70,6 @@
         
         .kit-box { background: #f0f4c3; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border-left: 4px solid #cddc39; }
         .report-box { background: #fff; padding: 15px; border-radius: 10px; border-left: 4px solid #ff9800; margin-bottom: 20px; white-space: pre-wrap; font-family: monospace; font-size: 14px;}
-        
-        .delete-btn-small { background: #e74c3c; color: white; border: none; border-radius: 5px; padding: 4px 8px; font-size: 12px; cursor: pointer; margin-left: 10px; }
     </style>
 </head>
 <body>
@@ -77,7 +77,7 @@
     <div id="screen-register" class="hidden">
         <h1>Регистрация</h1>
         <div class="card" style="display:block;">
-            <p>Добро пожаловать! Укажите вашу Фамилию и Имя.</p>
+            <p>Добро пожаловать! Укажите вашу Фамилию и Имя для истории.</p>
         </div>
         <div class="input-group">
             <label>Ваша Фамилия и Имя</label>
@@ -113,7 +113,8 @@
         <div id="admin-buttons" class="hidden">
             <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
             <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
-            <button class="secondary" onclick="showSettings()">⚙️ Настройки (Комнаты/Полки)</button>
+            <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
+            <button class="secondary" onclick="showSettings()">⚙️ Настройки</button>
             <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         </div>
 
@@ -137,8 +138,8 @@
         <button onclick="createLocation()">Добавить комнату</button>
         <div id="locations-list"></div>
 
-        <h2 style="margin-top:30px;">Полки в комнатах</h2>
-        <div id="settings-locations-with-spots"></div>
+        <h2 style="margin-top:30px;">Полки</h2>
+        <div id="settings-spots-list"></div>
     </div>
 
     <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
@@ -249,62 +250,30 @@
         <div class="input-group"><label>Код</label><input id="add-code" placeholder="Например, ITEM-1"></div>
         <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
         <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
-        
-        <!-- Скрытые поля для шагов -->
-        <input type="hidden" id="add-location-id">
-        <input type="hidden" id="add-spot-name">
-        
-        <!-- Блок выбора комнаты и полки -->
-        <div id="add-location-step">
-            <h2>1. Выберите комнату</h2>
-            <div id="add-location-buttons"></div>
-            <button class="secondary" onclick="showAddLocationCreator()">➕ Добавить комнату</button>
+        <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
+        <div class="input-group"><label>Место</label><select id="add-spot"><option value="">Без места</option></select></div>
+        <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
+        <div class="input-group">
+            <label>Бюджет</label>
+            <select id="add-budget-tag">
+                <option value="">Не указан</option>
+                <option value="КЦ">КЦ</option>
+                <option value="ТХ">ТХ</option>
+            </select>
         </div>
-        <div id="add-new-location-step" class="hidden">
-            <h2>Новая комната</h2>
-            <div class="input-group"><label>Название комнаты</label><input id="add-new-location-name" placeholder="Например, Склад 2"></div>
-            <button onclick="confirmAddNewLocation()">Создать и выбрать</button>
-            <button class="secondary" onclick="resetAddLocationStep()">← Назад</button>
-        </div>
+        <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
 
-        <div id="add-spot-step" class="hidden">
-            <h2>2. Выберите полку</h2>
-            <div id="add-spot-buttons"></div>
-            <button class="secondary" onclick="showAddSpotCreator()">➕ Создать новую полку</button>
-            <button class="secondary" onclick="resetAddStep()">← Назад к комнатам</button>
-        </div>
-        <div id="add-new-spot-step" class="hidden">
-            <h2>Новая полка</h2>
-            <div class="input-group"><label>Название полки</label><input id="add-new-spot-name" placeholder="Например, Т1"></div>
-            <button onclick="confirmAddNewSpot()">Создать и выбрать</button>
-            <button class="secondary" onclick="resetAddSpotStep()">← Назад</button>
-        </div>
+        <h2>Комплектация</h2>
+        <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
+        <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
+        <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
 
-        <div id="add-details-step" class="hidden">
-            <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
-            <div class="input-group">
-                <label>Бюджет</label>
-                <select id="add-budget-tag">
-                    <option value="">Не указан</option>
-                    <option value="КЦ">КЦ</option>
-                    <option value="ТХ">ТХ</option>
-                </select>
-            </div>
-            <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
-
-            <h2>Комплектация</h2>
-            <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
-            <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
-            <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
-
-            <div id="consumable-fields" class="hidden">
-                <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
-                <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
-            </div>
-            <div class="input-group"><label>Фото (необязательно)</label><input type="file" id="add-photo" accept="image/*"></div>
-            <button onclick="saveItem()">Сохранить</button>
-            <button class="secondary" onclick="resetAddSpotStep()">← Назад</button>
+        <div id="consumable-fields" class="hidden">
+            <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
+            <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
         </div>
+        <div class="input-group"><label>Фото (необязательно)</label><input type="file" id="add-photo" accept="image/*"></div>
+        <button onclick="saveItem()">Сохранить</button>
     </div>
 
     <!-- ЭКРАН ИМПОРТА -->
@@ -316,6 +285,15 @@
         <button onclick="submitText()">Загрузить</button>
     </div>
 
+    <!-- ЭКРАН СОЗДАНИЯ ПОЛКИ -->
+    <div id="screen-spot-qr" class="hidden">
+        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
+        <h1>Создать полку</h1>
+        <div class="input-group"><label>Название полки</label><input id="spot-name" placeholder="Например, Т1"></div>
+        <button onclick="createSpot()">Создать</button>
+        <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
+    </div>
+
     <!-- ЭКРАН ИСТОРИИ -->
     <div id="screen-history" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
@@ -324,45 +302,12 @@
         <div id="history-list"></div>
     </div>
 
-    <!-- НОВЫЙ ЭКРАН ВЫБОРА КОМНАТЫ ДЛЯ ПЕРЕМЕЩЕНИЯ -->
-    <div id="screen-move-location" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="openItem(currentItem.code)">← Назад</button></div>
-        <h1>Куда переместить?</h1>
-        <p style="color:#666; margin-bottom:15px;">Выберите комнату:</p>
-        <div id="move-locations-list"></div>
-        <button class="secondary" onclick="showMoveLocationCreator()">➕ Добавить новую комнату</button>
-    </div>
-
-    <!-- НОВЫЙ ЭКРАН СОЗДАНИЯ КОМНАТЫ ДЛЯ ПЕРЕМЕЩЕНИЯ -->
-    <div id="screen-move-new-location" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="showMoveLocation()">← Назад</button></div>
-        <h1>Новая комната</h1>
-        <div class="input-group"><label>Название комнаты</label><input id="move-new-location-name" placeholder="Например, Склад 2"></div>
-        <button onclick="confirmMoveNewLocation()">Создать и выбрать</button>
-    </div>
-
-    <!-- НОВЫЙ ЭКРАН ВЫБОРА ПОЛКИ ДЛЯ ПЕРЕМЕЩЕНИЯ -->
-    <div id="screen-move-spot" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="showMoveLocation()">← Назад</button></div>
-        <h1 id="move-room-title">Выберите полку</h1>
-        <div id="move-spots-list"></div>
-        <button class="secondary" onclick="showMoveSpotCreator()">➕ Создать новую полку</button>
-    </div>
-
-    <!-- ЭКРАН СОЗДАНИЯ ПОЛКИ ПРИ ПЕРЕМЕЩЕНИИ -->
-    <div id="screen-move-new-spot" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="showMoveSpot()">← Назад</button></div>
-        <h1>Новая полка</h1>
-        <div class="input-group"><label>Название полки</label><input id="move-new-spot-name" placeholder="Например, Т2"></div>
-        <button onclick="confirmMoveNewSpot()">Создать и переместить</button>
-    </div>
-
     <!-- ЭКРАН МАССОВОГО ПЕРЕМЕЩЕНИЯ -->
     <div id="screen-batch-move" class="hidden">
         <div class="header-nav"><button class="back-btn" onclick="showRooms()">← Назад</button></div>
         <h1>Перемещение</h1>
         <div class="input-group"><label>Куда</label><select id="batch-to-location"></select></div>
-        <div class="input-group"><label>Место</label><select id="batch-to-spot"><option value="">Выберите полку</option></select></div>
+        <div class="input-group"><label>Место</label><select id="batch-to-spot"><option value="">Без места</option></select></div>
         <button onclick="executeBatchMove()">Переместить выбранные</button>
     </div>
 
@@ -374,11 +319,7 @@
         };
         tg.ready(); tg.expand();
 
-        let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
-        let moveTargetLocationId = null;
-        let addSelectedLocationId = null;
-        let addSelectedSpotName = null;
-        let locationsWithSpots = [];
+        let currentItem = null, locations = [], allItems = [], spots = [], currentUser = null, selectedItems = [], currentRoomId = null;
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
@@ -395,10 +336,10 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
-                if (!currentUser.full_name || currentUser.full_name.trim() === "") { showScreen("screen-register"); return; }
+                if (!currentUser.full_name) { showScreen("screen-register"); return; }
                 document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE; font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
-                if (currentUser.role === "admin") { document.getElementById("admin-buttons").classList.remove("hidden"); } else { document.getElementById("admin-buttons").classList.add("hidden"); }
-                await loadLocations(); await loadItems(); await loadDailyReport(); await loadMyBookings();
+                if (currentUser.role === "admin") { document.getElementById("admin-buttons").classList.remove("hidden"); }
+                await loadLocations(); await loadSpots(); await loadItems(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
         }
@@ -430,31 +371,10 @@
 
         async function loadLocations() {
             locations = await api("/api/locations");
-            
-            // Загружаем полки для каждой комнаты
-            locationsWithSpots = [];
-            for (let loc of locations) {
-                let spots = await api(`/api/spots?location_id=${loc.id}`);
-                locationsWithSpots.push({ ...loc, spots: spots });
-            }
-
+            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
             const list = document.getElementById("locations-list");
             if (list) {
-                list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">Переименовать</button><button class="danger" style="width:auto; padding:5px 10px; margin:0 0 0 5px; font-size:12px;" onclick="deleteLocation(${l.id})">Удалить</button></div>`).join("");
-            }
-
-            // Отрисовка полок в настройках
-            const settingsList = document.getElementById("settings-locations-with-spots");
-            if (settingsList) {
-                settingsList.innerHTML = locationsWithSpots.map(loc => `
-                    <div class="card" style="display:block;">
-                        <b>${loc.name}</b>
-                        <div style="margin-top:5px;">
-                            ${loc.spots.map(s => `<span class="badge" style="margin-right:5px; margin-bottom:5px; cursor:pointer;" onclick="renameSpot(${s.id}, '${s.name}')">${s.name} ✏️</span>`).join("")}
-                            <span class="badge" style="background:#e3f2fd; color:#1565c0; cursor:pointer;" onclick="showAddSpotForLocation(${loc.id})">➕ Добавить полку</span>
-                        </div>
-                    </div>
-                `).join("");
+                list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">Переименовать</button></div>`).join("");
             }
         }
 
@@ -470,54 +390,34 @@
             try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); loadLocations(); } catch (e) { notify(e.message); }
         }
 
-        async function deleteLocation(id) {
-            if (!confirm("Удалить комнату? Все её полки тоже удалятся (если они пустые).")) return;
-            try { await api(`/api/locations/${id}`, { method: "DELETE" }); notify("Удалено"); loadLocations(); } catch (e) { notify(e.message); }
+        async function loadSpots() {
+            spots = await api("/api/spots");
+            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
+            const list = document.getElementById("settings-spots-list");
+            if (list) {
+                list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:5px 10px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">Переименовать</button></div>`).join("");
+            }
         }
 
-        async function showAddSpotForLocation(locId) {
-            const name = prompt("Название новой полки:");
-            if (!name) return;
-            try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name, location_id: locId }) }); notify("Полка добавлена"); loadLocations(); } catch (e) { notify(e.message); }
-        }
-
-        async function renameSpot(id, oldName) {
+        async function renameSpot(oldName) {
             const newName = prompt("Новое название полки:", oldName);
             if (!newName || newName === oldName) return;
-            try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ id, new_name: newName }) }); notify("Обновлено"); loadLocations(); } catch (e) { notify(e.message); }
+            try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); notify("Обновлено"); loadSpots(); } catch (e) { notify(e.message); }
         }
 
-        function showSettings() { loadLocations(); showScreen("screen-settings"); }
+        function showSettings() { loadLocations(); loadSpots(); showScreen("screen-settings"); }
 
         async function loadUsers() {
             const list = document.getElementById("users-list");
             list.innerHTML = "<p>Загрузка...</p>";
             try {
                 const users = await api("/api/users");
-                list.innerHTML = users.map(u => `
-                    <div class="card" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <div style="flex:1; min-width:150px;">
-                            <b>${u.full_name}</b>
-                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
-                        </div>
-                        <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>
-                        <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserName(${u.tg_id}, '${u.full_name}')">✏️ Имя</button>
-                    </div>
-                `).join("");
+                list.innerHTML = users.map(u => `<div class="card" style="justify-content:space-between; align-items:center;"><div><b>${u.full_name}</b><div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div></div><button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button></div>`).join("");
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         async function toggleRole(id) {
             try { await api(`/api/users/${id}/role`, { method: "POST" }); loadUsers(); } catch (e) { notify(e.message); }
-        }
-
-        async function editUserName(tg_id, oldName) {
-            const newName = prompt("Новое Фамилия и Имя:", oldName);
-            if (!newName || newName === oldName) return;
-            try { 
-                await api(`/api/users/update_name`, { method: "POST", body: JSON.stringify({ tg_id, new_name: newName }) }); 
-                notify("Имя обновлено"); loadUsers(); 
-            } catch (e) { notify(e.message); }
         }
 
         function showUsers() { loadUsers(); showScreen("screen-users"); }
@@ -553,14 +453,10 @@
             if (!filtered.length) { list.innerHTML = "<p>Ничего не найдено</p>"; return; }
             
             list.innerHTML = filtered.map(i => {
-                let placesHtml = i.stocks.map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join("");
+                let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="color:#1565c0;">📍 ${s.location_name}${s.spot ? ` · Полка: ${s.spot}` : ""}</div>`).join("");
                 let brokenBadge = i.needs_repair ? `<span style="color:#e74c3c; font-weight:bold; margin-left:5px;">🔧 Ремонт</span>` : "";
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : "";
-                
-                let budgetBadge = "";
-                if (currentUser.role === 'admin') {
-                    budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
-                }
+                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : "");
 
                 return `
                 <div class="card ${i.needs_repair ? 'broken' : ''} ${i.is_low ? 'low-stock' : ''}" onclick="openItem('${i.code}')">
@@ -644,20 +540,7 @@
 
         function showBatchMoveForm() {
             document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
-            document.getElementById("batch-to-spot").innerHTML = `<option value="">Сначала выберите комнату</option>`;
-            
-            // Вешаем событие на смену комнаты, чтобы подгрузить полки
-            document.getElementById("batch-to-location").onchange = async (e) => {
-                const locId = parseInt(e.target.value);
-                const loc = locationsWithSpots.find(l => l.id === locId);
-                if (loc) {
-                    document.getElementById("batch-to-spot").innerHTML = loc.spots.length ? loc.spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("") : "<option value=''>Нет полок</option>";
-                }
-            };
-            
-            // Триггерим сразу для первой комнаты
-            document.getElementById("batch-to-location").onchange({ target: { value: document.getElementById("batch-to-location").value } });
-            
+            document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
             showScreen("screen-batch-move");
         }
 
@@ -665,7 +548,6 @@
             const toLocation = parseInt(document.getElementById("batch-to-location").value);
             const toSpot = document.getElementById("batch-to-spot").value;
             if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; }
-            if (!toSpot) { notify("Выберите полку"); return; }
             try {
                 await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) });
                 notify("Перемещено!"); showRooms();
@@ -701,10 +583,7 @@
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
                 let priceBadge = currentItem.price ? `<div class="meta" style="color:#2e7d32; font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : "";
-                let budgetText = "";
-                if (currentUser.role === 'admin' && currentItem.budget_tag) {
-                    budgetText = `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>`;
-                }
+                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? '#c62828' : '#2e7d32'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : "";
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : "";
 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) {
@@ -804,77 +683,10 @@
 
             const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("");
             if (stockOpts) {
-                html += `<h2>Переместить</h2><button class="secondary" onclick="showMoveLocation()">📦 Выбрать комнату</button>`;
+                html += `<h2>Переместить</h2><select id="mv-from">${stockOpts}</select><select id="mv-to">${locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("")}</select><input id="mv-qty" type="number" value="1"><select id="mv-spot"><option value="">Без места</option>${spots.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}</select><button class="secondary" onclick="scanSpotQr()">📷 Сканировать полку</button><button class="secondary" onclick="doMove()">📦 Переместить</button>`;
             }
             box.innerHTML = html;
         }
-
-        // НОВАЯ ЛОГИКА ПЕРЕМЕЩЕНИЯ (Пошагово)
-        async function showMoveLocation() {
-            await loadLocations(); // обновляем данные
-            document.getElementById("move-locations-list").innerHTML = locations.map(l => 
-                `<button class="secondary" onclick="selectMoveLocation(${l.id}, '${l.name}')">${l.name}</button>`
-            ).join("");
-            showScreen("screen-move-location");
-        }
-
-        function showMoveLocationCreator() {
-            document.getElementById("move-locations-list").classList.add("hidden");
-            document.getElementById("move-new-location-name").value = "";
-            // Показываем экран создания комнаты
-            showScreen("screen-move-new-location");
-        }
-
-        async function confirmMoveNewLocation() {
-            const name = document.getElementById("move-new-location-name").value.trim();
-            if (!name) return;
-            try {
-                await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) });
-                await loadLocations();
-                // Находим ID только что созданной комнаты
-                const newLoc = locations.find(l => l.name === name);
-                if (newLoc) selectMoveLocation(newLoc.id, newLoc.name);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function selectMoveLocation(id, name) {
-            moveTargetLocationId = id;
-            document.getElementById("move-room-title").textContent = `Комната: ${name}`;
-            
-            // Загружаем полки для этой комнаты
-            const locSpots = await api(`/api/spots?location_id=${id}`);
-            
-            if (locSpots.length > 0) {
-                document.getElementById("move-spots-list").innerHTML = locSpots.map(s => 
-                    `<button class="secondary" onclick="executeMoveToSpot('${s.name}')">${s.name}</button>`
-                ).join("");
-            } else {
-                document.getElementById("move-spots-list").innerHTML = "<p>В этой комнате пока нет полок.</p>";
-            }
-            showScreen("screen-move-spot");
-        }
-
-        function showMoveSpotCreator() {
-            document.getElementById("move-new-spot-name").value = "";
-            showScreen("screen-move-new-spot");
-        }
-
-        async function confirmMoveNewSpot() {
-            const newName = document.getElementById("move-new-spot-name").value.trim();
-            if (!newName) return;
-            try {
-                await api("/api/spots", { method: "POST", body: JSON.stringify({ name: newName, location_id: moveTargetLocationId }) });
-                await executeMoveToSpot(newName);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function executeMoveToSpot(spotName) {
-            try {
-                await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: currentItem.stocks[0].location_id, to_location: moveTargetLocationId, quantity: 1, to_spot: spotName }) });
-                notify("Перемещено!"); openItem(currentItem.code);
-            } catch (e) { notify("Ошибка: " + e.message); }
-        }
-        // -----------------------------
 
         async function markRepair() {
             try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); notify(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); }
@@ -888,7 +700,10 @@
         async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); notify("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); notify("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doMove() { const from = parseInt(document.getElementById("mv-from").value); const to = parseInt(document.getElementById("mv-to").value); const qty = parseInt(document.getElementById("mv-qty").value) || 0; const spot = document.getElementById("mv-spot").value; if (from === to) { notify("Локации не должны совпадать"); return; } try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: from, to_location: to, quantity: qty, to_spot: spot }) }); notify("Перемещено!"); openItem(currentItem.code); } catch (e) { notify("Ошибка: " + e.message); } }
         async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); notify("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        
+        function scanSpotQr() { if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; } tg.showScanQrPopup({ text: "Наведите на QR полки" }, (text) => { if (text) { document.getElementById("mv-spot").value = text.trim(); return true; } }); }
         
         function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
         
@@ -897,123 +712,36 @@
         async function loadComments(code) { const list = document.getElementById("comments-list"); try { const rows = await api(`/api/comments/${code}`); list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); } catch (e) { list.innerHTML = ""; } }
         async function doComment() { const text = document.getElementById("comment-text").value.trim(); if (!text) return; try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } }
         
-        // ПОШАГОВОЕ ДОБАВЛЕНИЕ
-        async function showAddForm() { 
-            try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {}
-            await loadLocations();
-            addSelectedLocationId = null;
-            addSelectedSpotName = null;
-            document.getElementById("add-location-step").classList.remove("hidden");
-            document.getElementById("add-new-location-step").classList.add("hidden");
-            document.getElementById("add-spot-step").classList.add("hidden");
-            document.getElementById("add-new-spot-step").classList.add("hidden");
-            document.getElementById("add-details-step").classList.add("hidden");
-            
-            document.getElementById("add-location-buttons").innerHTML = locations.map(l => 
-                `<button class="secondary" onclick="selectAddLocation(${l.id})">${l.name}</button>`
-            ).join("");
-            showScreen("screen-add");
-        }
-
-        function showAddLocationCreator() {
-            document.getElementById("add-location-step").classList.add("hidden");
-            document.getElementById("add-new-location-step").classList.remove("hidden");
-            document.getElementById("add-new-location-name").value = "";
-        }
-
-        async function confirmAddNewLocation() {
-            const name = document.getElementById("add-new-location-name").value.trim();
-            if (!name) return;
-            try {
-                await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) });
-                await loadLocations();
-                const newLoc = locations.find(l => l.name === name);
-                if (newLoc) selectAddLocation(newLoc.id);
-            } catch (e) { notify(e.message); }
-        }
-
-        async function selectAddLocation(id) {
-            addSelectedLocationId = id;
-            document.getElementById("add-location-step").classList.add("hidden");
-            document.getElementById("add-new-location-step").classList.add("hidden");
-            document.getElementById("add-spot-step").classList.remove("hidden");
-            
-            // Загружаем полки для этой комнаты
-            const locSpots = await api(`/api/spots?location_id=${id}`);
-            
-            if (locSpots.length > 0) {
-                document.getElementById("add-spot-buttons").innerHTML = locSpots.map(s => 
-                    `<button class="secondary" onclick="selectAddSpot('${s.name}')">${s.name}</button>`
-                ).join("");
-            } else {
-                document.getElementById("add-spot-buttons").innerHTML = "<p>В этой комнате пока нет полок.</p>";
-            }
-        }
-
-        function selectAddSpot(name) {
-            addSelectedSpotName = name;
-            document.getElementById("add-spot-step").classList.add("hidden");
-            document.getElementById("add-details-step").classList.remove("hidden");
-            toggleFields();
-        }
-
-        function showAddSpotCreator() {
-            document.getElementById("add-spot-step").classList.add("hidden");
-            document.getElementById("add-new-spot-step").classList.remove("hidden");
-            document.getElementById("add-new-spot-name").value = "";
-        }
-
-        async function confirmAddNewSpot() {
-            const newName = document.getElementById("add-new-spot-name").value.trim();
-            if (!newName) return;
-            try {
-                await api("/api/spots", { method: "POST", body: JSON.stringify({ name: newName, location_id: addSelectedLocationId }) });
-                selectAddSpot(newName);
-            } catch (e) { notify(e.message); }
-        }
-
-        function resetAddLocationStep() {
-            document.getElementById("add-new-location-step").classList.add("hidden");
-            document.getElementById("add-location-step").classList.remove("hidden");
-        }
-
-        function resetAddStep() {
-            document.getElementById("add-spot-step").classList.add("hidden");
-            document.getElementById("add-location-step").classList.remove("hidden");
-        }
-
-        function resetAddSpotStep() {
-            document.getElementById("add-details-step").classList.add("hidden");
-            document.getElementById("add-spot-step").classList.remove("hidden");
-        }
-
+        async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
         
         async function saveItem() {
             const code = document.getElementById("add-code").value.trim();
             const name = document.getElementById("add-name").value.trim();
-            if (!code || !name || !addSelectedLocationId || !addSelectedSpotName) { notify("Заполните все данные и выберите полку"); return; }
-            
+            const loc = parseInt(document.getElementById("add-location").value);
+            if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; }
             const formData = new FormData();
             formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value);
-            formData.append("location_id", addSelectedLocationId); formData.append("spot", addSelectedSpotName);
+            formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value);
             formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value);
             formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("kit_body", document.getElementById("add-kit-body").value);
             formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value);
             if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); }
             const photoFile = document.getElementById("add-photo").files[0]; if (photoFile) formData.append("photo", photoFile);
-            
             try { await api("/api/items", { method: "POST", body: formData }); notify("Добавлено"); backToMain(); } catch (e) { notify(e.message); }
         }
         
         function showImportForm() { showScreen("screen-import"); }
         async function submitText() { const text = document.getElementById("csv-text").value; if (!text.trim()) return; try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); notify(`Загружено: ${res.added}`); backToMain(); } catch (e) { notify(e.message); } }
         
+        function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
+        async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
+        
         async function showHistory() { const list = document.getElementById("history-list"); showScreen("screen-history"); try { const logs = await api("/api/history"); list.innerHTML = logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type}: ${l.name} (${l.quantity} шт) - ${l.user_name}</div></div>`).join(""); } catch (e) { list.innerHTML = ""; } }
         function downloadHistory() { window.open("/api/export_history", "_blank"); }
 
         function showScreen(id) {
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-move-location", "screen-move-spot", "screen-move-new-spot", "screen-move-new-location"].forEach(s => {
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move"].forEach(s => {
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id);
             });
         }
