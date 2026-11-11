@@ -65,20 +65,6 @@
     </style>
 </head>
 <body>
-    <!-- ЭКРАН РЕГИСТРАЦИИ -->
-    <div id="screen-register" class="hidden">
-        <h1>Регистрация</h1>
-        <div class="card" style="display:block;">
-            <p>Добро пожаловать! Пожалуйста, укажите ваши Имя и Фамилию. Это нужно для того, чтобы в истории было видно, кто взял вещь.</p>
-        </div>
-        <div class="input-group">
-            <label>Ваше Имя и Фамилия</label>
-            <input id="reg-name" placeholder="Например, Иван Петров">
-        </div>
-        <button onclick="doRegister()">Зарегистрироваться</button>
-    </div>
-
-    <!-- ГЛАВНЫЙ ЭКРАН -->
     <div id="screen-main" class="hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <h1 style="margin:0;">Учёт</h1>
@@ -90,29 +76,18 @@
             <div id="my-items-list"></div>
         </div>
 
-        <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
         <button onclick="scanQr()">📷 Сканировать QR</button>
-        
-        <!-- АДМИНСКИЕ КНОПКИ -->
-        <div id="admin-buttons" class="hidden">
-            <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-            <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
-            <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
-            <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
-        </div>
-
+        <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         <button class="secondary" onclick="showOnHand()">👀 Все кто взял</button>
         <button class="secondary" onclick="showRooms()">🚪 Что в комнатах?</button>
+        <button class="secondary" onclick="showImportForm()">📁 Импорт данных (текст)</button>
+        <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         <button class="secondary" onclick="showHistory()">🕒 История действий</button>
         <button class="secondary" onclick="loadItems()">🔄 Обновить</button>
-        <div id="items-list"></div>
-    </div>
 
-    <!-- ЭКРАН ПОЛЬЗОВАТЕЛЕЙ -->
-    <div id="screen-users" class="hidden">
-        <div class="header-nav"><button class="back-btn" onclick="backToMain()">← Назад</button></div>
-        <h1>Пользователи</h1>
-        <div id="users-list"></div>
+        <input class="search-box" type="text" id="search-input" placeholder="🔍 Поиск по названию или коду..." oninput="filterItems()">
+        
+        <div id="items-list"></div>
     </div>
 
     <div id="screen-rooms" class="hidden">
@@ -240,19 +215,8 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
-                if (currentUser.role === "pending") {
-                    showScreen("screen-register");
-                    return;
-                }
+                document.getElementById("user-info").innerHTML = `${currentUser.full_name}`;
                 
-                document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:#2AABEE">${currentUser.role === 'admin' ? 'Администратор' : 'Сотрудник'}</span>`;
-                
-                if (currentUser.role === "admin") {
-                    document.getElementById("admin-buttons").classList.remove("hidden");
-                } else {
-                    document.getElementById("admin-buttons").classList.add("hidden");
-                }
-
                 await loadLocations();
                 await loadSpots();
                 await loadItems();
@@ -261,42 +225,6 @@
                 notify("Ошибка инициализации: " + e.message);
             }
         }
-
-        async function doRegister() {
-            const name = document.getElementById("reg-name").value.trim();
-            if (name.length < 3) { notify("Введите Имя и Фамилию"); return; }
-            try {
-                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
-                notify("Вы успешно зарегистрированы!");
-                init();
-            } catch (e) { notify(e.message); }
-        }
-
-        async function loadUsers() {
-            const list = document.getElementById("users-list");
-            list.innerHTML = "<p>Загрузка...</p>";
-            try {
-                const users = await api("/api/users");
-                list.innerHTML = users.map(u => `
-                    <div class="card" style="justify-content:space-between; align-items:center;">
-                        <div>
-                            <b>${u.full_name}</b>
-                            <div class="meta">${u.role === 'admin' ? 'Администратор' : 'Сотрудник'}</div>
-                        </div>
-                        <button class="secondary" style="width:auto; padding:8px; font-size:12px;" onclick="toggleRole(${u.tg_id})">${u.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>
-                    </div>
-                `).join("");
-            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; }
-        }
-
-        async function toggleRole(id) {
-            try {
-                await api(`/api/users/${id}/role`, { method: "POST" });
-                loadUsers();
-            } catch (e) { notify(e.message); }
-        }
-
-        function showUsers() { loadUsers(); showScreen("screen-users"); }
 
         async function loadLocations() {
             locations = await api("/api/locations");
@@ -462,17 +390,9 @@
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`);
                 document.getElementById("item-title").textContent = currentItem.name;
                 
-                // Скрываем кнопки для расходников и не-админов
                 const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.kind === 'consumable') {
-                    repairBtn.style.display = 'none';
-                } else {
-                    repairBtn.style.display = 'block';
-                }
-
-                const delBtn = document.getElementById("delete-btn");
-                if (currentUser.role === 'admin') { delBtn.style.display = 'block'; }
-                else { delBtn.style.display = 'none'; }
+                if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; }
+                else { repairBtn.style.display = 'block'; }
 
                 let photoHtml = currentItem.photo ? `<img src="data:image/jpeg;base64,${currentItem.photo}" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-bottom:10px;">` : "";
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : "";
@@ -783,7 +703,7 @@
         }
 
         function showScreen(id) {
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users"].forEach(s => {
+            ["screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users"].forEach(s => {
                 document.getElementById(s).classList.toggle("hidden", s !== id);
             });
         }
