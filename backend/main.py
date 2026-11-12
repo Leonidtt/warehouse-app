@@ -55,15 +55,6 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
     c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
     c.execute("""CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
-    
-    # НОВАЯ ТАБЛИЦА ДЛЯ ПЛОЩАДОК
-    c.execute("""CREATE TABLE IF NOT EXISTS venues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        type TEXT NOT NULL, 
-        name TEXT NOT NULL, 
-        status TEXT DEFAULT 'Всё хватает', 
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment',
@@ -213,23 +204,19 @@ def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_da
 def sync_google(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     
-    creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_env:
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
         raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
     
     try:
-        try:
-            decoded_bytes = base64.b64decode(creds_env)
-            creds_json = decoded_bytes.decode('utf-8')
-            creds_dict = json.loads(creds_json)
-        except Exception:
-            creds_dict = json.loads(creds_env)
-            
+        # Подключаемся к Google
+        creds_dict = json.loads(creds_json)
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
         
+        # Читаем все данные, игнорируя пустые заголовки
         all_values = sheet.get_all_values()
         if not all_values:
             return {"status": "ok", "message": "Таблица пуста"}
@@ -245,45 +232,43 @@ def sync_google(x_init_data: Optional[str] = Header(None)):
                     record[header] = row[i]
             if record:
                 records.append(record)
-
+        
+        # === ЛОГИКА ОБНОВЛЕНИЯ БАЗЫ ===
+        # Внимание! Настрой колонки под свою таблицу. 
+        # Сейчас код ищет колонки "Код", "Название", "Категория", "Количество".
         conn = get_conn()
-        added_venues = 0
+        added = 0
+        updated = 0
         
         for r in records:
-            name = r.get("Площадка", "").strip() or r.get("Название", "").strip()
-            date_val = r.get("дата", "").strip() or r.get("Дата", "").strip()
-            
-            if not name: continue
-            
-            status = date_val if date_val else "Всё хватает"
-            
-            existing = conn.execute("SELECT id FROM venues WHERE type = 'concert' AND name = ?", (name,)).fetchone()
+            code = r.get("Код", "").strip()
+            name = r.get("Название", "").strip()
+            if not code or not name:
+                continue # Пропускаем строки без кода или названия
+                
+            category = r.get("Категория", "").strip()
+            try:
+                qty = int(r.get("Количество", 0))
+            except:
+                qty = 0
+
+            existing = conn.execute("SELECT code FROM items WHERE code = ?", (code,)).fetchone()
             if existing:
-                conn.execute("UPDATE venues SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (status, existing["id"]))
+                conn.execute("UPDATE items SET name=?, category=? WHERE code=?", (name, category, code))
+                updated += 1
             else:
-                conn.execute("INSERT INTO venues (type, name, status) VALUES ('concert', ?, ?)", (name, status))
-                added_venues += 1
+                # Если товара нет, создаем его (привязываем к первой локации)
+                conn.execute("INSERT INTO items (code, name, kind, category) VALUES (?, ?, 'equipment', ?)", (code, name, category))
+                conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?, 1, ?)", (code, qty))
+                added += 1
                 
         conn.commit()
         conn.close()
         
-        return {"status": "ok", "message": f"Синхронизировано. Добавлено концертов: {added_venues}"}
+        return {"status": "ok", "message": f"Успешно. Добавлено: {added}, обновлено: {updated}"}
         
     except Exception as e:
-        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
-
-@app.get("/api/venues/{v_type}")
-def get_venues(v_type: str):
-    conn = get_conn()
-    rows = conn.execute("""
-        SELECT * FROM venues 
-        WHERE type = ? 
-        ORDER BY 
-            CASE WHEN status != 'Всё хватает' THEN 0 ELSE 1 END,
-            updated_at DESC
-    """, (v_type,)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+        raise HTTPException(500, f"Ошибка: {str(e)}")
 
 # --------------------------------------------
 
