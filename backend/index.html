@@ -333,8 +333,8 @@
                 <h2 style="font-size: 16px; margin: 24px 0 10px;">Бронирование</h2>
                 <div id="bookings-list"></div>
                 <div class="date-row">
-                    <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
-                    <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+                    <div class="input-group"><label>С</label><input type="text" id="book-from" placeholder="ДД.ММ.ГГГГ" maxlength="10">
+                    <div class="input-group"><label>По</label><input type="text" id="book-to" placeholder="ДД.ММ.ГГГГ" maxlength="10">
                 </div>
                 <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
             </div>
