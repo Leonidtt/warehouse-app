@@ -223,7 +223,7 @@ def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_da
 
 @app.get("/api/sync_google")
 def sync_google(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
+    get_user(x_init_data)
     creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not creds_env: raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
     try:
