@@ -124,9 +124,9 @@
         .status-ok { background: rgba(39, 174, 96, 0.15); color: var(--success); }
         .status-bad { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
 
-        .date-row { display: flex; gap: 10px; }
-        .date-row .input-group { flex: 1; margin-bottom: 0; }
-        .date-row input { width: 100%; }
+        .date-row { display: flex; gap: 10px; width: 100%; }
+        .date-row .input-group { flex: 1; margin-bottom: 0; min-width: 0; max-width: calc(50% - 5px); }
+        .date-row input { width: 100%; padding: 12px 8px; font-size: 14px; box-sizing: border-box; }
     </style>
 </head>
 <body>
