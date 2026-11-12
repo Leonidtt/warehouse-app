@@ -223,12 +223,11 @@
         .filters { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
         .filters select { padding: 10px 12px; font-size: 14px; border-radius: 10px; flex: 1; min-width: 100px; background: var(--card-bg); }
 
-        .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; }
-        .room-info { flex: 1; text-align: left; }
-        .room-title { font-weight: 700; font-size: 16px; word-break: break-word; text-align: left; }
-        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; word-break: break-word; text-align: left; }
+               .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; }
+        .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
+        .room-title { font-weight: 700; font-size: 16px; word-break: break-word; text-align: left; width: 100%; }
+        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; word-break: break-word; text-align: left; width: 100%; }
         .room-arrow { font-size: 20px; color: var(--text-muted); padding-left: 10px; }
-
         .shelf-header { 
             background: var(--primary); color: white; padding: 14px 16px; border-radius: 12px; 
             margin-top: 16px; margin-bottom: 8px; font-weight: 700; cursor: pointer; 
