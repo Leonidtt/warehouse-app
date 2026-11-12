@@ -12,11 +12,12 @@ from typing import Optional, List
 import qrcode
 import io
 import csv
-import httpx
+import os
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime, timedelta
-import os
+import gspread
+from google.oauth2.service_account import Credentials
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 app = FastAPI()
@@ -357,7 +358,6 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
     items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
-    # Берем все нужные поля для карточек
     item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close(); shelves = {}; no_shelf = []
     for item in items:
@@ -815,5 +815,33 @@ def generate_qr(code: str):
     draw.text(((width - text_w) / 2, height + 10), code, fill="black", font=font)
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+# --- НОВЫЙ ЭНДПОИНТ ДЛЯ GOOGLE SHEETS ---
+@app.get("/api/google_sheet_data")
+def get_google_sheet_data(x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
+        raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
+    
+    try:
+        creds_dict = json.loads(creds_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        # Открываем таблицу по ID
+        sheet = client.open_by_key("1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0")
+        # Открываем лист "кц"
+        worksheet = sheet.worksheet("кц")
+        
+        # Получаем все данные (первая строка - заголовки)
+        data = worksheet.get_all_records()
+        
+        return {"status": "ok", "data": data}
+    except Exception as e:
+        print(f"Google Sheets Error: {e}")
+        raise HTTPException(500, detail=f"Ошибка Google Sheets: {str(e)}")
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
