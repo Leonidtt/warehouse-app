@@ -98,6 +98,7 @@ def init_db():
         "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
+        "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
         "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
         "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
     ]
@@ -116,6 +117,9 @@ def init_db():
         for name in ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]:
             try: c.execute("INSERT INTO categories (name) VALUES (?)", (name,))
             except sqlite3.IntegrityError: pass
+
+    # Устанавливаем is_registered = 1 для старых пользователей, чтобы они не видели окно регистрации
+    c.execute("UPDATE users SET is_registered = 1 WHERE full_name != '' AND is_registered = 0")
 
     conn.commit(); conn.close()
 
@@ -149,11 +153,14 @@ def get_user(x_init_data: Optional[str]):
     row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     if not row:
         full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
-        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role) VALUES (?, ?, ?, ?, 'employee')", (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
+        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role, is_registered) VALUES (?, ?, ?, ?, 'employee', 0)", (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
     conn.close()
-    return dict(row)
+    
+    user_dict = dict(row)
+    user_dict["is_registered"] = row["is_registered"] if "is_registered" in row.keys() else 1
+    return user_dict
 
 def check_admin(x_init_data: Optional[str]):
     user = get_user(x_init_data)
@@ -223,7 +230,8 @@ def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_da
 
 @app.get("/api/sync_google")
 def sync_google(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
+    get_user(x_init_data) # Теперь пускает любого авторизованного, а не только админа
+    
     creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not creds_env: raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
     try:
@@ -314,7 +322,7 @@ def export_stock(x_init_data: Optional[str] = Header(None)):
 
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ? WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
+    user = get_user(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
@@ -666,6 +674,9 @@ def clear_database(x_init_data: Optional[str] = Header(None)):
         conn.commit()
     except Exception as e: conn.close(); raise HTTPException(400, str(e))
     conn.close(); return {"status": "ok"}
+
+class TerminalRequest(BaseModel):
+    sql: str
 
 @app.post("/api/execute_sql")
 def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None)):
