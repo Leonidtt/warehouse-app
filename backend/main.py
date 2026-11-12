@@ -24,6 +24,7 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
+# ВПИШИ СЮДА СВОЙ ТОКЕН
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 SHEET_NAME = "кц" 
@@ -204,22 +205,24 @@ def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_da
 def sync_google(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     
-    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_json:
+    creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_env:
         raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
     
     try:
-        # Подключаемся к Google
+        # Декодируем Base64
+        decoded_bytes = base64.b64decode(creds_env)
+        creds_json = decoded_bytes.decode('utf-8')
         creds_dict = json.loads(creds_json)
+            
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
         
-        # Читаем все данные, игнорируя пустые заголовки
         all_values = sheet.get_all_values()
         if not all_values:
-            return {"status": "ok", "message": "Таблица пуста"}
+            return {"status": "ok", "data": []}
             
         headers = all_values[0]
         data_rows = all_values[1:]
@@ -228,47 +231,15 @@ def sync_google(x_init_data: Optional[str] = Header(None)):
         for row in data_rows:
             record = {}
             for i, header in enumerate(headers):
-                if header and i < len(row):
-                    record[header] = row[i]
-            if record:
+                if header.strip() and i < len(row):
+                    record[header.strip()] = row[i].strip()
+            if record.get("Площадка") or record.get("дата"):
                 records.append(record)
-        
-        # === ЛОГИКА ОБНОВЛЕНИЯ БАЗЫ ===
-        # Внимание! Настрой колонки под свою таблицу. 
-        # Сейчас код ищет колонки "Код", "Название", "Категория", "Количество".
-        conn = get_conn()
-        added = 0
-        updated = 0
-        
-        for r in records:
-            code = r.get("Код", "").strip()
-            name = r.get("Название", "").strip()
-            if not code or not name:
-                continue # Пропускаем строки без кода или названия
                 
-            category = r.get("Категория", "").strip()
-            try:
-                qty = int(r.get("Количество", 0))
-            except:
-                qty = 0
-
-            existing = conn.execute("SELECT code FROM items WHERE code = ?", (code,)).fetchone()
-            if existing:
-                conn.execute("UPDATE items SET name=?, category=? WHERE code=?", (name, category, code))
-                updated += 1
-            else:
-                # Если товара нет, создаем его (привязываем к первой локации)
-                conn.execute("INSERT INTO items (code, name, kind, category) VALUES (?, ?, 'equipment', ?)", (code, name, category))
-                conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?, 1, ?)", (code, qty))
-                added += 1
-                
-        conn.commit()
-        conn.close()
-        
-        return {"status": "ok", "message": f"Успешно. Добавлено: {added}, обновлено: {updated}"}
+        return {"status": "ok", "data": records}
         
     except Exception as e:
-        raise HTTPException(500, f"Ошибка: {str(e)}")
+        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
 
 # --------------------------------------------
 
