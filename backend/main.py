@@ -17,10 +17,17 @@ from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime, timedelta
 import os
+
+# Библиотеки для Google
 import gspread
 from google.oauth2.service_account import Credentials
+import urllib3
+urllib3.disable_warnings()
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
+SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" # ID твоей таблицы
+SHEET_NAME = "Склад" # Название вкладки (листа)
+
 app = FastAPI()
 
 @app.exception_handler(Exception)
@@ -131,22 +138,6 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
-# --- Инициализация Google ---
-def get_gspread_client():
-    creds_b64 = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_b64:
-        raise HTTPException(status_code=500, detail="Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
-    try:
-        creds_json = base64.b64decode(creds_b64).decode('utf-8')
-        creds_dict = json.loads(creds_json)
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        return gspread.authorize(creds)
-    except Exception as e:
-        print(f"Ошибка авторизации Google: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка авторизации Google. Проверьте ключ.")
-
-# --- Классы ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
@@ -205,10 +196,74 @@ class UserUpdate(BaseModel):
 class TerminalRequest(BaseModel):
     sql: str
 
-# --- Эндпоинты ---
-
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
+
+# ---------------- GOOGLE SYNC ----------------
+@app.get("/api/sync_google")
+def sync_google(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
+        raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
+    
+    try:
+        # Подключаемся к Google
+        creds_dict = json.loads(creds_json)
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
+        
+        # Читаем все данные
+        all_values = sheet.get_all_values()
+        if not all_values:
+            return {"status": "ok", "message": "Таблица пуста"}
+            
+        # Пропускаем первую строку (заголовки) и берем остальные
+        data_rows = all_values[1:]
+        
+        # === ЛОГИКА ОБНОВЛЕНИЯ БАЗЫ ===
+        conn = get_conn()
+        added = 0
+        updated = 0
+        
+        for row in data_rows:
+            # Ожидаем колонки: 0-Код, 1-Название, 2-Категория, 3-Количество
+            
+            # Если строка пустая или нет кода/названия — пропускаем
+            if len(row) < 2 or not row[0].strip() or not row[1].strip():
+                continue
+                
+            code = row[0].strip()
+            name = row[1].strip()
+            category = row[2].strip() if len(row) > 2 else ""
+            
+            try:
+                qty = int(row[3]) if len(row) > 3 and row[3] else 0
+            except:
+                qty = 0
+
+            existing = conn.execute("SELECT code FROM items WHERE code = ?", (code,)).fetchone()
+            if existing:
+                conn.execute("UPDATE items SET name=?, category=? WHERE code=?", (name, category, code))
+                updated += 1
+            else:
+                # Если товара нет, создаем его (привязываем к локации с ID=1, обычно это Мастерская/Склад)
+                conn.execute("INSERT INTO items (code, name, kind, category) VALUES (?, ?, 'equipment', ?)", (code, name, category))
+                conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?, 1, ?)", (code, qty))
+                added += 1
+                
+        conn.commit()
+        conn.close()
+        
+        return {"status": "ok", "message": f"Успешно. Добавлено: {added}, обновлено: {updated}"}
+        
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка: {str(e)}")
+
+# --------------------------------------------
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
@@ -818,27 +873,6 @@ def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None))
     except Exception as e:
         conn.close()
         raise HTTPException(400, detail=str(e))
-
-@app.get("/api/sync_google")
-def sync_google(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data) # Доступно всем авторизованным
-    
-    try:
-        client = get_gspread_client()
-        # ВНИМАНИЕ: Сюда нужно вставить ID твоей таблицы и название листа
-        SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-        SHEET_NAME = "кц"
-        
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-        records = sheet.get_all_records()
-        
-        # Тут будет логика обновления базы из таблицы.
-        # Пока просто возвращаем количество строк для теста.
-        return {"status": "ok", "message": f"Успешно прочитано {len(records)} строк из Google Таблицы."}
-        
-    except Exception as e:
-        print(f"Ошибка Google: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
