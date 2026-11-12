@@ -1194,8 +1194,43 @@ T2,,,"></textarea>
         function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
-        function downloadHistory() { window.open("/api/export_history", "_blank"); }
-        function exportStock() { window.open("/api/export_stock", "_blank"); }
+                async function downloadHistory() {
+            try {
+                const res = await fetch("/api/export_history", {
+                    headers: { "X-Init-Data": tg.initData || "" }
+                });
+                if (!res.ok) throw new Error("Ошибка сервера");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "history.csv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (e) {
+                notify("Ошибка скачивания: " + e.message);
+            }
+        }
+
+        async function exportStock() {
+            try {
+                const res = await fetch("/api/export_stock", {
+                    headers: { "X-Init-Data": tg.initData || "" }
+                });
+                if (!res.ok) throw new Error("Ошибка сервера");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "warehouse_stock.csv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (e) {
+                notify("Ошибка скачивания: " + e.message);
+            }
+        }
 
         function showTerminal() {
             document.getElementById("terminal-sql").value = "";
