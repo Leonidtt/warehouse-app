@@ -92,7 +92,6 @@
             cursor: pointer;
         }
 
-        /* Строгий список в одну колонку */
         .grid-container { display: flex; flex-direction: column; gap: 12px; padding: 0 16px; }
 
         .card { 
@@ -111,11 +110,7 @@
         .item-card { cursor: pointer; justify-content: space-between; }
         .item-card .name { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; word-break: break-word; }
         .item-card .meta { font-size: 12px; color: var(--text-muted); word-break: break-word; }
-        
-        /* Заменили картинку на иконку-заглушку */
-        .thumb-icon { font-size: 24px; margin-bottom: 8px; }
 
-        /* Стили для комнат */
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 20px 16px; }
         .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
         .room-title { font-weight: 700; font-size: 18px; color: var(--text); margin-bottom: 4px; }
@@ -126,7 +121,6 @@
             box-shadow: 0 2px 6px rgba(42, 171, 238, 0.3);
         }
 
-        /* Стили для карточек внутри комнаты (с чекбоксом) */
         .room-item-card { display: flex; flex-direction: row; padding: 12px; margin-bottom: 8px; position: relative; cursor: pointer; align-items: center; justify-content: space-between; }
         .room-item-checkbox { width: 24px; height: 24px; min-width: 24px; margin: 0 12px 0 0; accent-color: var(--primary); z-index: 10; cursor: pointer; }
         .room-item-content { flex: 1; display: flex; flex-direction: column; }
@@ -268,7 +262,6 @@
         <div id="items-list" class="grid-container"></div>
     </div>
 
-    <!-- НОВАЯ ВКЛАДКА: ПЛОЩАДКИ -->
     <div id="screen-venues" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
@@ -351,7 +344,6 @@
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
         
-        <!-- Кнопка выгрузки в Excel -->
         <button class="ok hidden" id="export-stock-btn" onclick="exportStock()" style="margin-top: 16px;">📥 Выгрузить склад в Excel</button>
         
         <div id="rooms-list" style="margin-top: 16px;"></div>
@@ -660,6 +652,7 @@ T2,,,"></textarea>
 
         let currentItem = null, locations = [], allItems = [], spots = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let currentEqCategory = "";
+        let currentVenueType = "concert";
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
@@ -926,14 +919,11 @@ T2,,,"></textarea>
             renderItemsGrid(filtered, "equipment-items-list");
         }
 
-        // ---------------- ПЛОЩАДКИ ----------------
         async function showVenues() {
             showScreen("screen-venues");
             updateNavActive("nav-venues");
             await loadVenues("concert");
         }
-
-        let currentVenueType = "concert";
 
         async function loadVenues(type) {
             currentVenueType = type;
@@ -975,15 +965,7 @@ T2,,,"></textarea>
                 list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
             }
         }
-        // ------------------------------------------
-            // ... (тут конец твоего кода, который ты прислал) ...
-            } catch (e) {
-                list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
-            }
-        }
-        // ------------------------------------------
-        
-        // ВОТ СЮДА ВСТАВЛЯЕШЬ НОВУЮ ФУНКЦИЮ:
+
         async function syncGoogle() {
             if (!confirm("Запустить синхронизацию с Google Таблицей?")) return;
             const btn = event.target;
@@ -993,7 +975,7 @@ T2,,,"></textarea>
             try {
                 const res = await api("/api/sync_google");
                 notify(res.message || "Успешно синхронизировано");
-                await loadVenues('concert'); 
+                await loadVenues(currentVenueType); 
             } catch (e) {
                 notify("Ошибка: " + e.message);
             } finally {
@@ -1001,9 +983,7 @@ T2,,,"></textarea>
                 btn.disabled = false;
             }
         }
-        // ------------------------------------------
 
-        async function showRooms() {  // (или другая функция, которая идет следом)
         async function showRooms() { 
             showScreen("screen-rooms"); 
             updateNavActive("nav-rooms"); 
@@ -1142,7 +1122,7 @@ T2,,,"></textarea>
         
         function scanQr() { if (!tg.showScanQrPopup) { notify("Сканер QR доступен только с телефона"); return; } tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } }); }
         
-        async function openItem(code) { try { currentItem = await api(`/api/items/${encodeURIComponent(code)}`); document.getElementById("item-title").textContent = currentItem.name; const repairBtn = document.getElementById("repair-btn"); if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } const editBtn = document.getElementById("edit-btn"); if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } let photoHtml = ""; /* Убрали фото */ let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; let snText = currentItem.serial_number && currentItem.kind !== 'consumable' ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; let buyoutText = currentItem.buyout_status && currentItem.kind !== 'consumable' ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : ""; if ((currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) && currentItem.kind !== 'consumable') { document.getElementById("kit-box").classList.remove("hidden"); document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; } else { document.getElementById("kit-box").classList.add("hidden"); } let statusHtml = ""; if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } else { repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } else { let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; } } document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; const bookingSection = document.getElementById("booking-section"); if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } renderActions(); loadComments(currentItem.code); showScreen("screen-item"); } catch (e) { notify(e.message); } }
+        async function openItem(code) { try { currentItem = await api(`/api/items/${encodeURIComponent(code)}`); document.getElementById("item-title").textContent = currentItem.name; const repairBtn = document.getElementById("repair-btn"); if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } const editBtn = document.getElementById("edit-btn"); if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } let photoHtml = ""; let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; let snText = currentItem.serial_number && currentItem.kind !== 'consumable' ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; let buyoutText = currentItem.buyout_status && currentItem.kind !== 'consumable' ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : ""; if ((currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) && currentItem.kind !== 'consumable') { document.getElementById("kit-box").classList.remove("hidden"); document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; } else { document.getElementById("kit-box").classList.add("hidden"); } let statusHtml = ""; if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } else { repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } else { let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; } } document.getElementById("item-status-box").innerHTML = `${photoHtml}<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; const bookingSection = document.getElementById("booking-section"); if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } renderActions(); loadComments(currentItem.code); showScreen("screen-item"); } catch (e) { notify(e.message); } }
         
         function showEditForm() { 
             document.getElementById("edit-name").value = currentItem.name; 
