@@ -130,7 +130,6 @@
         .item-card .meta { font-size: 12px; color: var(--text-muted); word-break: break-word; }
         .thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); margin-bottom: 10px; }
 
-        /* Стили для комнат */
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 20px 16px; }
         .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
         .room-title { font-weight: 700; font-size: 18px; color: var(--text); margin-bottom: 4px; }
@@ -141,7 +140,6 @@
             box-shadow: 0 2px 6px rgba(42, 171, 238, 0.3);
         }
 
-        /* Стили для карточек внутри комнаты */
         .room-item-card { display: flex; flex-direction: column; padding: 12px; margin-bottom: 0; position: relative; cursor: pointer; justify-content: space-between; }
         .room-item-checkbox { position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; accent-color: var(--primary); z-index: 10; cursor: pointer; }
         .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 28px; }
@@ -273,7 +271,6 @@
         .comment-box { background: var(--bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid var(--primary); font-size: 14px; }
         .booking-item { background: rgba(243, 156, 18, 0.1); padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; border: 1px solid rgba(243, 156, 18, 0.2); }
 
-        /* Широкие плитки оборудования */
         .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; padding: 0 4px; }
         .eq-btn { 
             padding: 24px 20px; font-size: 20px; font-weight: 700; background: var(--card-bg); color: var(--text); 
@@ -282,17 +279,6 @@
         }
         .eq-btn:active { transform: scale(0.98); }
         .eq-btn span { font-size: 32px; }
-
-        /* Карточки площадок */
-        .venue-card { display: flex; flex-direction: column; padding: 16px; margin-bottom: 12px; background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-        .venue-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-        .venue-name { font-size: 16px; font-weight: 700; }
-        .venue-date { font-size: 13px; color: var(--text-muted); background: var(--bg); padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
-        .venue-detail { font-size: 14px; margin-top: 4px; display: flex; gap: 8px; }
-        .venue-detail span { color: var(--text-muted); }
-        .venue-status { margin-top: 8px; font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 8px; display: inline-block; }
-        .venue-status.ok { background: rgba(39, 174, 96, 0.15); color: var(--success); }
-        .venue-status.missing { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
     </style>
 </head>
 <body>
@@ -316,12 +302,12 @@
 
         <div id="stats-box" class="stats-card hidden"></div>
 
-        <button class="secondary" onclick="showHistory()" style="margin-bottom: 16px; padding: 12px;">🕒 История действий</button>
-
-        <div id="daily-report-box" class="report-box hidden" style="margin-top: 16px;">
+        <div id="daily-report-box" class="report-box hidden">
             <b>📊 Сводка за вчера:</b>
             <div id="report-text" style="margin-top:5px;"></div>
         </div>
+
+        <button class="secondary" onclick="showHistory()" style="margin-bottom: 16px;">🕒 История действий</button>
 
         <div id="my-items-section" class="hidden" style="margin-bottom: 20px;">
             <h2 style="font-size: 16px; margin-bottom: 10px;">🖐 Мои вещи</h2>
@@ -355,7 +341,9 @@
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
         
-        <div id="equipment-categories-menu" class="eq-grid"></div>
+        <div id="equipment-categories-menu" class="eq-grid">
+            <!-- Кнопки категорий будут здесь -->
+        </div>
 
         <div id="equipment-items-view" class="hidden">
             <button class="secondary" style="margin-bottom: 16px; padding: 10px;" onclick="backToEquipmentMenu()">← Назад к категориям</button>
@@ -365,13 +353,19 @@
         </div>
     </div>
 
-    <div id="screen-venues" class="screen hidden">
+    <!-- НОВЫЙ ЭКРАН: ПЛОЩАДКИ (Синхронизация) -->
+    <div id="screen-sync" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
             <div class="sticky-title">Площадки</div>
-            <div style="width: 80px;"></div>
+            <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
-        <div id="venues-list" style="margin-top: 16px;"></div>
+        <div style="margin-top: 16px; text-align: center;">
+            <h2 style="font-size: 18px; margin-bottom: 16px;">Синхронизация с Google</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">Нажмите кнопку ниже, чтобы обновить данные из таблицы.</p>
+            <button onclick="syncGoogle()">🔄 Синхронизировать сейчас</button>
+            <div id="sync-status" style="margin-top: 20px; font-weight: 600;"></div>
+        </div>
     </div>
 
     <div id="screen-settings" class="screen hidden">
@@ -395,7 +389,6 @@
         <div id="settings-spots-list"></div>
 
         <h2 style="font-size: 16px; margin-top: 30px; color: var(--danger);">Разработка</h2>
-        <button class="secondary" onclick="syncVenues()" style="border-color: var(--success); color: var(--success);">🔄 Обновить площадки из Google</button>
         <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="clearDatabase()">🗑 Очистить базу товаров</button>
@@ -677,7 +670,7 @@ T2,,,"></textarea>
             <span class="icon">🏢</span>
             <span>Склад</span>
         </div>
-        <div class="nav-item" id="nav-venues" onclick="showVenues()">
+        <div class="nav-item" id="nav-sync" onclick="showSync()">
             <span class="icon">📍</span>
             <span>Площадки</span>
         </div>
@@ -701,7 +694,7 @@ T2,,,"></textarea>
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
         function updateNavActive(id) {
-            ["nav-main", "nav-equipment", "nav-rooms", "nav-history", "nav-settings", "nav-venues"].forEach(nav => {
+            ["nav-main", "nav-equipment", "nav-rooms", "nav-sync", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -960,40 +953,46 @@ T2,,,"></textarea>
             renderItemsGrid(filtered, "equipment-items-list");
         }
 
-        async function showVenues() {
-            showScreen("screen-venues"); 
-            updateNavActive("nav-venues");
-            const list = document.getElementById("venues-list"); 
-            list.innerHTML = "<p>Загрузка...</p>"; 
-            try {
-                const venues = await api("/api/venues");
-                if (!venues.length) {
-                    list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Данных нет. Нажмите 'Обновить из Google' в настройках.</p>";
-                    return;
-                }
-                list.innerHTML = venues.map(v => {
-                    let statusClass = v.missing && v.missing.toLowerCase() !== 'всего хватает' ? 'missing' : 'ok';
-                    return `
-                    <div class="venue-card">
-                        <div class="venue-header">
-                            <div class="venue-name">${v.name || '—'}</div>
-                            <div class="venue-date">${v.date || ''}</div>
-                        </div>
-                        <div class="venue-detail"><span>Админ:</span> ${v.admin || '—'}</div>
-                        <div class="venue-detail"><span>Счетчик:</span> ${v.counter || '—'}</div>
-                        <div class="venue-detail"><span>Запас:</span> ${v.reserve || '—'}</div>
-                        <div class="venue-status ${statusClass}">${v.missing || 'Нет данных'}</div>
-                    </div>`;
-                }).join("");
-            } catch (e) { list.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`; }
+        // --- НОВАЯ ЛОГИКА: ПЛОЩАДКИ (СИНХРОНИЗАЦИЯ) ---
+        function showSync() {
+            updateNavActive("nav-sync");
+            document.getElementById("sync-status").innerHTML = "";
+            showScreen("screen-sync");
+            // Автоматический запуск синхронизации при заходе на вкладку
+            syncGoogle();
         }
 
-        async function syncVenues() {
-            if (!confirm("Обновить данные из Google Таблиц?")) return;
+        async function syncGoogle() {
+            const statusBox = document.getElementById("sync-status");
+            statusBox.innerHTML = "<span style='color: var(--primary);'>⏳ Синхронизация...</span>";
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // Таймаут 3 секунды
+
             try {
-                await api("/api/sync_venues", { method: "POST" });
-                notify("Данные успешно загружены из Google Таблиц!");
-            } catch (e) { notify("Ошибка: " + e.message); }
+                const res = await fetch("/api/sync_google", {
+                    method: "GET",
+                    headers: { "X-Init-Data": tg.initData || "" },
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Ошибка сервера");
+                }
+
+                const data = await res.json();
+                statusBox.innerHTML = `<span style='color: var(--success);'>✅ ${data.message}</span>`;
+                loadItems(); // Обновляем данные на главной после синхронизации
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    statusBox.innerHTML = "<span style='color: var(--danger);'>❌ Превышено время ожидания (3 сек).</span>";
+                } else {
+                    statusBox.innerHTML = `<span style='color: var(--danger);'>❌ ${e.message}</span>`;
+                }
+            }
         }
 
         async function showRooms() { 
@@ -1212,16 +1211,16 @@ T2,,,"></textarea>
         }
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-venues"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-sync"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
             if (id === "screen-equipment") updateNavActive("nav-equipment");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
+            if (id === "screen-sync") updateNavActive("nav-sync");
             if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
-            if (id === "screen-venues") updateNavActive("nav-venues");
             window.scrollTo(0, 0);
         }
         
