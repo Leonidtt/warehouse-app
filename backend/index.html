@@ -130,6 +130,20 @@
         .item-card .meta { font-size: 12px; color: var(--text-muted); word-break: break-word; }
         .thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); margin-bottom: 10px; }
 
+        /* Стили для комнат */
+        .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; }
+        .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
+        .room-title { font-weight: 700; font-size: 16px; word-break: break-word; text-align: left; width: 100%; }
+        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; word-break: break-word; text-align: left; width: 100%; }
+        .room-arrow { font-size: 20px; color: var(--text-muted); padding-left: 10px; }
+
+        /* Стили для списка товаров внутри комнаты (с чекбоксом) */
+        .room-item-card { display: flex; align-items: center; padding: 12px; margin-bottom: 8px; cursor: default; }
+        .room-item-checkbox { width: 24px; height: 24px; min-width: 24px; margin: 0 12px 0 0; accent-color: var(--primary); }
+        .room-item-content { flex: 1; cursor: pointer; display: flex; flex-direction: column; }
+        .room-item-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+        .room-item-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
         .badge { 
             display: inline-flex; 
             align-items: center; 
@@ -137,8 +151,6 @@
             border-radius: 8px; 
             font-size: 11px; 
             font-weight: 600; 
-            margin-top: 6px;
-            margin-right: 4px;
         }
         .badge.eq { background: rgba(42, 171, 238, 0.15); color: var(--primary); }
         .badge.cons { background: rgba(230, 81, 0, 0.15); color: #e65100; }
@@ -174,7 +186,8 @@
             font-size: 10px;
             cursor: pointer;
             transition: color 0.2s;
-            padding: 6px 12px;
+            padding: 6px 4px;
+            flex: 1;
         }
 
         .nav-item.active { color: var(--primary); }
@@ -223,11 +236,6 @@
         .filters { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
         .filters select { padding: 10px 12px; font-size: 14px; border-radius: 10px; flex: 1; min-width: 100px; background: var(--card-bg); }
 
-               .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; }
-        .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
-        .room-title { font-weight: 700; font-size: 16px; word-break: break-word; text-align: left; width: 100%; }
-        .room-spots { font-size: 13px; color: var(--text-muted); margin-top: 4px; word-break: break-word; text-align: left; width: 100%; }
-        .room-arrow { font-size: 20px; color: var(--text-muted); padding-left: 10px; }
         .shelf-header { 
             background: var(--primary); color: white; padding: 14px 16px; border-radius: 12px; 
             margin-top: 16px; margin-bottom: 8px; font-weight: 700; cursor: pointer; 
@@ -258,6 +266,11 @@
 
         .comment-box { background: var(--bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid var(--primary); font-size: 14px; }
         .booking-item { background: rgba(243, 156, 18, 0.1); padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; border: 1px solid rgba(243, 156, 18, 0.2); }
+
+        /* Оборудование (4 кнопки) */
+        .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; }
+        .eq-btn { padding: 24px; font-size: 18px; font-weight: 700; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .eq-btn span { font-size: 24px; }
     </style>
 </head>
 <body>
@@ -311,6 +324,26 @@
         <div id="items-list" class="grid-container"></div>
     </div>
 
+    <!-- НОВАЯ ВКЛАДКА: ОБОРУДОВАНИЕ -->
+    <div id="screen-equipment" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">Оборудование</div>
+            <button class="sticky-scan" onclick="scanQr()">📷</button>
+        </div>
+        
+        <div id="equipment-categories-menu" class="eq-grid">
+            <!-- Кнопки категорий будут здесь -->
+        </div>
+
+        <div id="equipment-items-view" class="hidden">
+            <button class="secondary" style="margin-bottom: 16px; padding: 10px;" onclick="backToEquipmentMenu()">← Назад к категориям</button>
+            <h2 id="equipment-list-title" style="font-size: 18px; margin-bottom: 12px; text-align: center;"></h2>
+            <input class="search-box" type="text" id="eq-search-input" placeholder="🔍 Поиск в этой категории..." oninput="filterEquipmentItems()">
+            <div id="equipment-items-list" class="grid-container"></div>
+        </div>
+    </div>
+
     <div id="screen-settings" class="screen hidden">
         <div class="sticky-header">
             <button class="sticky-back" onclick="backToMain()">← Назад</button>
@@ -339,6 +372,7 @@
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
         <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
+        <button class="ok" onclick="exportStock()">📥 Выгрузить склад в Excel</button>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -352,11 +386,11 @@
 
     <div id="screen-rooms" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
-            <div class="sticky-title">Комнаты</div>
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">Склад (Комнаты)</div>
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
-        <div id="rooms-list"></div>
+        <div id="rooms-list" style="margin-top: 16px;"></div>
     </div>
 
     <div id="screen-room-view" class="screen hidden">
@@ -574,13 +608,13 @@ T2,,,"></textarea>
 
     <div id="screen-history" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div style="width: 80px;"></div>
             <div class="sticky-title">История действий</div>
             <div style="width: 80px;"></div>
         </div>
         
         <div style="margin-top: 16px;">
-            <button class="ok" onclick="downloadHistory()">📥 Скачать в Excel</button>
+            <button class="ok hidden" id="export-history-btn" onclick="downloadHistory()">📥 Скачать в Excel</button>
             <div id="history-list"></div>
         </div>
     </div>
@@ -599,14 +633,19 @@ T2,,,"></textarea>
         </div>
     </div>
 
+    <!-- НОВОЕ НИЖНЕЕ МЕНЮ -->
     <div class="bottom-nav">
         <div class="nav-item active" id="nav-main" onclick="backToMain()">
             <span class="icon">📦</span>
-            <span>Товары</span>
+            <span>Главная</span>
+        </div>
+        <div class="nav-item" id="nav-equipment" onclick="showEquipmentMenu()">
+            <span class="icon">📸</span>
+            <span>Оборудование</span>
         </div>
         <div class="nav-item" id="nav-rooms" onclick="showRooms()">
-            <span class="icon">🚪</span>
-            <span>Комнаты</span>
+            <span class="icon">🏢</span>
+            <span>Склад</span>
         </div>
         <div class="nav-item" id="nav-history" onclick="showHistory()">
             <span class="icon">🕒</span>
@@ -627,11 +666,12 @@ T2,,,"></textarea>
         tg.ready(); tg.expand();
 
         let currentItem = null, locations = [], allItems = [], spots = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
+        let currentEqCategory = "";
 
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
         function updateNavActive(id) {
-            ["nav-main", "nav-rooms", "nav-history", "nav-settings"].forEach(nav => {
+            ["nav-main", "nav-equipment", "nav-rooms", "nav-history", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -670,7 +710,8 @@ T2,,,"></textarea>
 
                 if (currentUser.role === "admin") { 
                     const navSettings = document.getElementById("nav-settings");
-                    if (navSettings) navSettings.classList.remove("hidden"); 
+                    if (navSettings) navSettings.classList.remove("hidden");
+                    document.getElementById("export-history-btn").classList.remove("hidden");
                 }
                 await loadLocations(); await loadSpots(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
@@ -710,12 +751,15 @@ T2,,,"></textarea>
 
         async function loadCategories() {
             categories = await api("/api/categories");
-            document.getElementById("add-category").innerHTML = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
-            document.getElementById("edit-category").innerHTML = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+            const catOpts = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+            document.getElementById("add-category").innerHTML = catOpts;
+            document.getElementById("edit-category").innerHTML = catOpts;
+            
             const list = document.getElementById("categories-list");
             if (list) {
                 list.innerHTML = categories.map(c => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${c.name}</b></div><div style="display:flex; gap:8px;"><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameCategory(${c.id}, '${c.name}')">✏️</button><button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="deleteCategory(${c.id})">🗑</button></div></div>`).join("");
             }
+            buildEquipmentMenu();
         }
         async function createCategory() { const name = document.getElementById("new-category-name").value.trim(); if (!name) return; try { await api("/api/categories", { method: "POST", body: JSON.stringify({ name }) }); notify("Добавлено"); document.getElementById("new-category-name").value = ""; loadCategories(); } catch (e) { notify(e.message); } }
         async function renameCategory(id, oldName) { const newName = prompt("Новое название категории:", oldName); if (!newName || newName === oldName) return; try { await api("/api/categories/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); notify("Обновлено"); loadCategories(); } catch (e) { notify(e.message); } }
@@ -743,6 +787,7 @@ T2,,,"></textarea>
         }
 
         function showSettings() { loadLocations(); loadCategories(); loadSpots(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        
         async function loadUsers() { 
             const list = document.getElementById("users-list"); 
             list.innerHTML = "<p>Загрузка...</p>"; 
@@ -795,24 +840,11 @@ T2,,,"></textarea>
         
         async function doReturnFromMain(code) { try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); notify("Возвращено"); loadItems(); } catch (e) { notify(e.message); } }
         
-        function filterItems() { 
-            const query = document.getElementById("search-input").value.toLowerCase(); 
-            const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
-            const filterSpot = document.getElementById("filter-spot").value;
-            const filterKind = document.getElementById("filter-kind").value;
-
-            const list = document.getElementById("items-list"); 
-            const filtered = allItems.filter(i => {
-                const matchesQuery = i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query));
-                const matchesLoc = !filterLoc || i.stocks.some(s => s.location_id === filterLoc);
-                const matchesSpot = !filterSpot || i.stocks.some(s => s.spot === filterSpot);
-                const matchesKind = !filterKind || i.kind === filterKind;
-                return matchesQuery && matchesLoc && matchesSpot && matchesKind;
-            });
-
-            if (!filtered.length) { list.innerHTML = "<p style='grid-column: 1/-1; text-align:center; color:var(--text-muted);'>Ничего не найдено</p>"; return; } 
+        function renderItemsGrid(itemsArray, containerId) {
+            const list = document.getElementById(containerId); 
+            if (!itemsArray.length) { list.innerHTML = "<p style='grid-column: 1/-1; text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
             
-            list.innerHTML = filtered.map(i => { 
+            list.innerHTML = itemsArray.map(i => { 
                 let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}${s.spot ? ` · ${s.spot}` : ""}</div>`).join(""); 
                 let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
@@ -836,7 +868,78 @@ T2,,,"></textarea>
             }).join(""); 
         }
 
-        async function showRooms() { showScreen("screen-rooms"); updateNavActive("nav-rooms"); const list = document.getElementById("rooms-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const rooms = await api("/api/locations_view"); list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div class="room-arrow">›</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } }
+        function filterItems() { 
+            const query = document.getElementById("search-input").value.toLowerCase(); 
+            const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
+            const filterSpot = document.getElementById("filter-spot").value;
+            const filterKind = document.getElementById("filter-kind").value;
+
+            const filtered = allItems.filter(i => {
+                const matchesQuery = i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query));
+                const matchesLoc = !filterLoc || i.stocks.some(s => s.location_id === filterLoc);
+                const matchesSpot = !filterSpot || i.stocks.some(s => s.spot === filterSpot);
+                const matchesKind = !filterKind || i.kind === filterKind;
+                return matchesQuery && matchesLoc && matchesSpot && matchesKind;
+            });
+
+            renderItemsGrid(filtered, "items-list");
+        }
+
+        function buildEquipmentMenu() {
+            const menu = document.getElementById("equipment-categories-menu");
+            if (!menu) return;
+            
+            const icons = { "Фотокомплекты": "📸", "Вспышки": "⚡", "Ноутбуки": "💻", "Принтеры": "🖨" };
+            menu.innerHTML = categories.map(c => `
+                <div class="eq-btn" onclick="openEquipmentCategory('${c.name}')">
+                    <div>${c.name}</div>
+                    <span>${icons[c.name] || "📦"}</span>
+                </div>
+            `).join("");
+        }
+
+        function showEquipmentMenu() {
+            updateNavActive("nav-equipment");
+            document.getElementById("equipment-categories-menu").classList.remove("hidden");
+            document.getElementById("equipment-items-view").classList.add("hidden");
+            showScreen("screen-equipment");
+        }
+
+        function openEquipmentCategory(catName) {
+            currentEqCategory = catName;
+            document.getElementById("equipment-categories-menu").classList.add("hidden");
+            document.getElementById("equipment-items-view").classList.remove("hidden");
+            document.getElementById("equipment-list-title").textContent = catName;
+            document.getElementById("eq-search-input").value = "";
+            
+            const filtered = allItems.filter(i => i.category === catName);
+            renderItemsGrid(filtered, "equipment-items-list");
+        }
+
+        function backToEquipmentMenu() {
+            document.getElementById("equipment-categories-menu").classList.remove("hidden");
+            document.getElementById("equipment-items-view").classList.add("hidden");
+        }
+
+        function filterEquipmentItems() {
+            const query = document.getElementById("eq-search-input").value.toLowerCase();
+            const filtered = allItems.filter(i => {
+                if (i.category !== currentEqCategory) return false;
+                return i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query);
+            });
+            renderItemsGrid(filtered, "equipment-items-list");
+        }
+
+        async function showRooms() { 
+            showScreen("screen-rooms"); 
+            updateNavActive("nav-rooms"); 
+            const list = document.getElementById("rooms-list"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const rooms = await api("/api/locations_view"); 
+                list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div class="room-arrow">›</div></div>`).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+        }
         
         async function openRoom(id, name) { 
             showScreen("screen-room-view"); currentRoomId = id; document.getElementById("room-title").textContent = name; 
@@ -851,7 +954,12 @@ T2,,,"></textarea>
                         const shelfId = `shelf-${index}`; 
                         html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▼</span></div><div class="shelf-content hidden" id="${shelfId}">`; 
                         data.shelves[shelfName].forEach(item => { 
-                            html += `<div class="card" style="display:flex; align-items:center; padding: 12px; margin-bottom:8px;"><input type="checkbox" data-code="${item.code}" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600; margin:0;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; 
+                            let badges = "";
+                            if (item.category) badges += `<span class="badge category">${item.category}</span>`;
+                            if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
+                            if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
+
+                            html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)"><div class="room-item-content" onclick="openItem('${item.code}')"><div class="room-item-name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div><div class="room-item-badges">${badges}</div></div></div>`; 
                         }); 
                         html += `</div>`; 
                     }); 
@@ -859,7 +967,12 @@ T2,,,"></textarea>
                 if (data.no_shelf.length > 0) { 
                     html += `<h2 style="font-size:16px; margin-top: 30px; color: var(--warning);">⚠️ Без полки</h2>`; 
                     data.no_shelf.forEach(item => { 
-                        html += `<div class="card" style="display:flex; align-items:center; padding: 12px; margin-bottom:8px;"><input type="checkbox" data-code="${item.code}" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600; margin:0;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; 
+                        let badges = "";
+                        if (item.category) badges += `<span class="badge category">${item.category}</span>`;
+                        if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
+                        if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
+
+                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)"><div class="room-item-content" onclick="openItem('${item.code}')"><div class="room-item-name">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div><div class="room-item-badges">${badges}</div></div></div>`; 
                     }); 
                 } 
                 list.innerHTML = html || "<p>В этой комнате пусто.</p>"; 
@@ -964,6 +1077,7 @@ T2,,,"></textarea>
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); notify("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         function downloadHistory() { window.open("/api/export_history", "_blank"); }
+        function exportStock() { window.open("/api/export_stock", "_blank"); }
 
         function showTerminal() {
             document.getElementById("terminal-sql").value = "";
@@ -1006,11 +1120,12 @@ T2,,,"></textarea>
         }
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
+            if (id === "screen-equipment") updateNavActive("nav-equipment");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
             if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
