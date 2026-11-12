@@ -23,7 +23,6 @@
         * { box-sizing: border-box; }
         body { font-family: var(--font); margin: 0; padding: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; -webkit-tap-highlight-color: transparent; transition: background 0.3s, color 0.3s; }
         
-        /* Исправление для инпутов, чтобы не вылезали */
         input, select, textarea { width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 16px; background: var(--card-bg); color: var(--text); outline: none; transition: border 0.2s; min-width: 0; }
         input:focus, select:focus, textarea:focus { border-color: var(--primary); }
         .input-group { margin-bottom: 14px; }
@@ -124,27 +123,10 @@
         .status-ok { background: rgba(39, 174, 96, 0.15); color: var(--success); }
         .status-bad { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
 
-         .date-row { 
-            display: flex !important; 
-            flex-direction: row !important; 
-            gap: 8px !important; 
-            width: 100% !important; 
-            max-width: 100% !important;
-            overflow: hidden !important; 
-        }
-        .date-row .input-group { 
-            flex: 1 1 0% !important; 
-            width: 0 !important; 
-            min-width: 0 !important; 
-            max-width: 50% !important; 
-            margin-bottom: 0 !important; 
-        }
-        .date-row input { 
-            width: 100% !important; 
-            padding: 12px 4px !important; 
-            font-size: 14px !important; 
-            box-sizing: border-box !important; 
-        }
+        /* Исправление дат */
+        .date-row { display: flex !important; flex-direction: row !important; gap: 8px !important; width: 100% !important; max-width: 100% !important; }
+        .date-row .input-group { flex: 1 1 0% !important; width: 0 !important; min-width: 0 !important; max-width: 50% !important; margin-bottom: 0 !important; }
+        .date-row input { width: 100% !important; padding: 12px 4px !important; font-size: 14px !important; box-sizing: border-box !important; text-align: center; }
     </style>
 </head>
 <body>
@@ -333,8 +315,8 @@
                 <h2 style="font-size: 16px; margin: 24px 0 10px;">Бронирование</h2>
                 <div id="bookings-list"></div>
                 <div class="date-row">
-                    <div class="input-group"><label>С</label><input type="text" id="book-from" placeholder="ДД.ММ.ГГГГ" maxlength="10">
-                    <div class="input-group"><label>По</label><input type="text" id="book-to" placeholder="ДД.ММ.ГГГГ" maxlength="10">
+                    <div class="input-group"><label>С</label><input type="text" id="book-from" placeholder="ДД.ММ.ГГГГ" maxlength="10"></div>
+                    <div class="input-group"><label>По</label><input type="text" id="book-to" placeholder="ДД.ММ.ГГГГ" maxlength="10"></div>
                 </div>
                 <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
             </div>
@@ -571,7 +553,6 @@ T2,,,"></textarea>
             try {
                 currentUser = await api("/api/me");
                 
-                // Если пользователь новый (is_registered = 0), показываем окно регистрации
                 if (currentUser.is_registered === 0) { 
                     document.getElementById("reg-name").value = currentUser.full_name || "";
                     showScreen("screen-register"); 
@@ -589,12 +570,11 @@ T2,,,"></textarea>
                     document.getElementById("export-history-btn").classList.remove("hidden");
                 }
                 
-                // Загружаем закэшированные площадки
                 const cached = localStorage.getItem("cachedPlatforms");
                 if (cached) {
                     try {
                         cachedPlatforms = JSON.parse(cached);
-                        renderPlatformsList(); // Отрисовываем сразу
+                        renderPlatformsList();
                     } catch(e) {}
                 }
                 
@@ -826,7 +806,6 @@ T2,,,"></textarea>
         function showPlatforms() {
             updateNavActive("nav-platforms");
             showScreen("screen-platforms");
-            // Если при заходе данные есть, они уже отрисованы. Если нет - пусто.
         }
 
         function parseDateStr(str) {
@@ -848,23 +827,19 @@ T2,,,"></textarea>
                 return;
             }
 
-            // 1. Фильтрация
             let filtered = cachedPlatforms.filter(row => {
                 const place = (row["Площадка"] || "").toLowerCase();
                 return place.includes(query);
             });
 
-            // 2. Сортировка
             filtered.sort((a, b) => {
                 const missingA = (a["чего не хватает"] || "").toUpperCase();
                 const missingB = (b["чего не хватает"] || "").toUpperCase();
                 const isOkA = missingA.includes("ХВАТАЕТ");
                 const isOkB = missingB.includes("ХВАТАЕТ");
 
-                // Плохие наверх
                 if (isOkA !== isOkB) return isOkA ? 1 : -1;
 
-                // Если оба плохие или оба хорошие, сортируем по дате (свежие выше)
                 const dateA = parseDateStr(a["дата"]);
                 const dateB = parseDateStr(b["дата"]);
                 return dateB - dateA;
@@ -1164,6 +1139,18 @@ T2,,,"></textarea>
                 resBox.innerHTML = `<div class="status-badge status-broken">Ошибка: ${e.message}</div>`;
             }
         }
+        
+        // Маска для ввода даты
+        document.addEventListener('input', function (e) {
+            if (e.target.id === 'book-from' || e.target.id === 'book-to') {
+                let v = e.target.value.replace(/\D/g, '').slice(0, 8); 
+                let res = '';
+                if (v.length > 0) res = v.slice(0, 2);
+                if (v.length > 2) res += '.' + v.slice(2, 4);
+                if (v.length > 4) res += '.' + v.slice(4, 8);
+                e.target.value = res;
+            }
+        });
         
         function showScreen(id) { 
             ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms"].forEach(s => { 
