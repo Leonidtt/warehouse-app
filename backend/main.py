@@ -15,17 +15,12 @@ import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import os
-import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "")
-SHEET_NAME = os.environ.get("SHEET_NAME", "КЦ")
-GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
-
 app = FastAPI()
 
 @app.exception_handler(Exception)
@@ -59,10 +54,6 @@ def init_db():
         min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0,
         kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '',
         category TEXT DEFAULT ''
-    )""")
-
-    c.execute("""CREATE TABLE IF NOT EXISTS venues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, date TEXT, admin TEXT, counter TEXT, reserve TEXT, missing TEXT
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
@@ -109,69 +100,6 @@ def init_db():
 
 init_db()
 
-# Функция синхронизации с Google Sheets
-def sync_venues_from_google():
-    if not GOOGLE_CREDS_JSON or not SPREADSHEET_ID:
-        print("Не настроены GOOGLE_CREDENTIALS_JSON или SPREADSHEET_ID")
-        return False
-    
-    try:
-        creds_dict = json.loads(GOOGLE_CREDS_JSON)
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-        data = sheet.get_all_values()
-        
-        if not data or len(data) < 2:
-            return False
-        
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("DELETE FROM venues")
-        
-        # Пропускаем заголовок (первую строку)
-        for row in data[1:]:
-            if len(row) < 4: continue
-            name = row[0].strip() if len(row) > 0 else ""
-            date = row[1].strip() if len(row) > 1 else ""
-            admin = row[2].strip() if len(row) > 2 else ""
-            counter = row[3].strip() if len(row) > 3 else ""
-            reserve = row[4].strip() if len(row) > 4 else ""
-            missing = row[5].strip() if len(row) > 5 else ""
-            
-            # Пропускаем пустые строки
-            if not name and not date: continue
-            
-            c.execute("INSERT INTO venues (name, date, admin, counter, reserve, missing) VALUES (?, ?, ?, ?, ?, ?)", 
-                      (name, date, admin, counter, reserve, missing))
-        
-        conn.commit()
-        conn.close()
-        print("Синхронизация площадок завершена успешно.")
-        return True
-    except Exception as e:
-        print(f"Ошибка синхронизации с Google: {e}")
-        return False
-
-# Фоновая задача для синхронизации по расписанию
-async def scheduler():
-    while True:
-        now = datetime.now(timezone.utc)
-        moscow_time = now.astimezone(timezone(timedelta(hours=3)))
-        
-        # Проверяем, не наступило ли время (00:00, 12:00 или 18:00)
-        if moscow_time.hour in [0, 12, 18] and moscow_time.minute == 0 and moscow_time.second < 10:
-            sync_venues_from_google()
-            await asyncio.sleep(60) # Ждем минуту, чтобы не запускать повторно в ту же секунду
-        else:
-            await asyncio.sleep(30)
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(scheduler())
-
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -203,6 +131,22 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
+# --- Инициализация Google ---
+def get_gspread_client():
+    creds_b64 = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_b64:
+        raise HTTPException(status_code=500, detail="Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
+    try:
+        creds_json = base64.b64decode(creds_b64).decode('utf-8')
+        creds_dict = json.loads(creds_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        return gspread.authorize(creds)
+    except Exception as e:
+        print(f"Ошибка авторизации Google: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка авторизации Google. Проверьте ключ.")
+
+# --- Классы ---
 class ItemCreate(BaseModel):
     code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
     spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
@@ -261,22 +205,10 @@ class UserUpdate(BaseModel):
 class TerminalRequest(BaseModel):
     sql: str
 
+# --- Эндпоинты ---
+
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
-
-@app.get("/api/venues")
-def get_venues(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data)
-    conn = get_conn()
-    rows = conn.execute("SELECT * FROM venues ORDER BY id DESC").fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/sync_venues")
-def sync_venues(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    success = sync_venues_from_google()
-    if success: return {"status": "ok", "message": "Данные обновлены из Google Таблиц"}
-    else: raise HTTPException(400, "Ошибка синхронизации. Проверьте настройки Google.")
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
@@ -886,6 +818,27 @@ def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None))
     except Exception as e:
         conn.close()
         raise HTTPException(400, detail=str(e))
+
+@app.get("/api/sync_google")
+def sync_google(x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data) # Доступно всем авторизованным
+    
+    try:
+        client = get_gspread_client()
+        # ВНИМАНИЕ: Сюда нужно вставить ID твоей таблицы и название листа
+        SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
+        SHEET_NAME = "кц"
+        
+        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
+        records = sheet.get_all_records()
+        
+        # Тут будет логика обновления базы из таблицы.
+        # Пока просто возвращаем количество строк для теста.
+        return {"status": "ok", "message": f"Успешно прочитано {len(records)} строк из Google Таблицы."}
+        
+    except Exception as e:
+        print(f"Ошибка Google: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/qr/{code}")
 def generate_qr(code: str):
