@@ -279,6 +279,27 @@ def export_history(x_init_data: Optional[str] = Header(None)):
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=history.csv"})
 
+@app.get("/api/export_stock")
+def export_stock(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT i.code, i.name, i.category, l.name as location, s.spot, s.quantity
+        FROM stock s
+        JOIN items i ON i.code = s.item_code
+        JOIN locations l ON l.id = s.location_id
+        WHERE s.quantity > 0
+        ORDER BY i.category, i.name, l.name
+    """).fetchall()
+    conn.close()
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=';') # Используем ; для нормального открытия в русском Excel
+    writer.writerow(["Категория", "Код", "Название", "Локация", "Полка", "Количество"])
+    for r in rows:
+        writer.writerow([r["category"], r["code"], r["name"], r["location"], r["spot"], r["quantity"]])
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=stock.csv"})
+
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
@@ -333,10 +354,11 @@ def room_detail(location_id: int):
     conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
     items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
-    item_names = {i["code"]: i["name"] for i in conn.execute("SELECT code, name FROM items").fetchall()}
+    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair FROM items").fetchall()}
     conn.close(); shelves = {}; no_shelf = []
     for item in items:
-        data = {"code": item["item_code"], "name": item_names.get(item["item_code"], "—"), "quantity": item["quantity"]}
+        detail = item_details.get(item["item_code"], {})
+        data = {"code": item["item_code"], "name": detail.get("name", "—"), "quantity": item["quantity"], "category": detail.get("category", ""), "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0)}
         spot = item["spot"].strip() if item["spot"] else ""
         if spot: shelves.setdefault(spot, []).append(data)
         else: no_shelf.append(data)
