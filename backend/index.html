@@ -36,14 +36,8 @@
 
         * { box-sizing: border-box; }
         body { 
-            font-family: var(--font); 
-            margin: 0; 
-            padding: 0; 
-            background: var(--bg); 
-            color: var(--text); 
-            padding-bottom: 80px;
-            -webkit-tap-highlight-color: transparent;
-            transition: background 0.3s, color 0.3s;
+            font-family: var(--font); margin: 0; padding: 0; background: var(--bg); color: var(--text); 
+            padding-bottom: 80px; -webkit-tap-highlight-color: transparent; transition: background 0.3s, color 0.3s;
         }
 
         .sticky-header {
@@ -63,8 +57,7 @@
 
         .card { 
             background: var(--card-bg); padding: 16px; border-radius: var(--radius); margin-bottom: 12px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; position: relative; overflow: hidden;
-            border: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid var(--border);
         }
         
         .item-card { cursor: pointer; justify-content: space-between; }
@@ -79,8 +72,7 @@
         .room-spots { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
         .room-arrow-circle { 
             width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; 
-            display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold;
-            box-shadow: 0 2px 6px rgba(42, 171, 238, 0.3);
+            display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold; box-shadow: 0 2px 6px rgba(42, 171, 238, 0.3);
         }
 
         /* Стили для карточек внутри комнаты (с чекбоксом) */
@@ -89,10 +81,8 @@
         .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 28px; }
         .room-item-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .room-item-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-
-        .badge { 
-            display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-top: 6px; margin-right: 4px;
-        }
+        
+        .badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-top: 6px; margin-right: 4px; }
         .badge.eq { background: rgba(42, 171, 238, 0.15); color: var(--primary); }
         .badge.cons { background: rgba(230, 81, 0, 0.15); color: #e65100; }
         .badge.price { background: rgba(39, 174, 96, 0.15); color: var(--success); }
@@ -104,31 +94,19 @@
         .badge.category { background: rgba(142, 68, 173, 0.15); color: var(--purple); }
 
         .bottom-nav {
-            position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background: var(--header-bg);
-            backdrop-filter: blur(10px); border-top: 1px solid var(--border); display: flex; justify-content: space-around;
-            align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom);
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background: var(--header-bg); backdrop-filter: blur(10px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom);
         }
-
-        .nav-item {
-            display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; cursor: pointer; transition: color 0.2s; padding: 6px 4px; flex: 1;
-        }
-
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; cursor: pointer; transition: color 0.2s; padding: 6px 4px; flex: 1; }
         .nav-item.active { color: var(--primary); }
         .nav-item .icon { font-size: 22px; margin-bottom: 2px; }
 
         .input-group { margin-bottom: 14px; }
         .input-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; margin-left: 4px; }
-        input, select, textarea { 
-            width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 16px; 
-            background: var(--card-bg); color: var(--text); outline: none; transition: border 0.2s;
-        }
+        input, select, textarea { width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 16px; background: var(--card-bg); color: var(--text); outline: none; transition: border 0.2s; }
         input:focus, select:focus, textarea:focus { border-color: var(--primary); }
         textarea { resize: vertical; min-height: 80px; }
 
-        button { 
-            width: 100%; padding: 16px; margin-bottom: 10px; border: none; border-radius: 12px; 
-            font-size: 16px; font-weight: 600; background: var(--primary); color: white; cursor: pointer; transition: opacity 0.2s;
-        }
+        button { width: 100%; padding: 16px; margin-bottom: 10px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; background: var(--primary); color: white; cursor: pointer; transition: opacity 0.2s; }
         button:active { opacity: 0.8; }
         button.secondary { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
         button.danger { background: var(--danger); }
@@ -170,17 +148,14 @@
         .comment-box { background: var(--bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid var(--primary); font-size: 14px; }
         .booking-item { background: rgba(243, 156, 18, 0.1); padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; border: 1px solid rgba(243, 156, 18, 0.2); }
 
-        /* Широкие плитки оборудования */
         .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; padding: 0 4px; }
         .eq-btn { 
             padding: 24px 20px; font-size: 20px; font-weight: 700; background: var(--card-bg); color: var(--text); 
-            border: 1px solid var(--border); border-radius: var(--radius); display: flex; justify-content: space-between; 
-            align-items: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.1s;
+            border: 1px solid var(--border); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.1s;
         }
         .eq-btn:active { transform: scale(0.98); }
         .eq-btn span { font-size: 32px; }
 
-        /* История на главной */
         .history-block { margin-top: 20px; }
         .history-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
         .history-item { background: var(--card-bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; border: 1px solid var(--border); font-size: 14px; }
@@ -237,7 +212,6 @@
         
         <div id="items-list" class="grid-container"></div>
 
-        <!-- Блок истории на главной -->
         <div class="history-block">
             <div class="history-title">
                 <span>🕒 История действий</span>
@@ -264,7 +238,6 @@
         </div>
     </div>
 
-    <!-- НОВАЯ ВКЛАДКА ПЛОЩАДКИ -->
     <div id="screen-areas" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
@@ -669,19 +642,16 @@ T2,,,"></textarea>
             } catch (e) { console.log("Stats error:", e); }
         }
 
-        // ЗАГРУЗКА ИСТОРИИ НА ГЛАВНУЮ
         async function loadMainHistory() {
             try {
                 const logs = await api("/api/history");
                 const list = document.getElementById("history-list-main");
                 if (!logs || !logs.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>История пуста</p>"; return; }
                 const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t;
-                // Показываем последние 10 записей для краткости
                 list.innerHTML = logs.slice(0, 10).map(l => `<div class="history-item"><div class="history-meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("");
             } catch (e) { console.log("History error:", e); }
         }
 
-        // НОВАЯ ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ GOOGLE SHEETS
         async function showAreas() {
             showScreen("screen-areas");
             updateNavActive("nav-areas");
@@ -695,23 +665,17 @@ T2,,,"></textarea>
                     return;
                 }
                 
-                // Строим таблицу
                 let html = `<table style="width:100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden;">`;
-                
-                // Заголовки
                 html += `<thead style="background: var(--primary); color: white;"><tr>`;
                 const keys = Object.keys(res.data[0]);
                 keys.forEach(k => { html += `<th style="padding: 10px; text-align: left; font-size: 12px;">${k}</th>`; });
                 html += `</tr></thead><tbody>`;
-                
-                // Данные
                 res.data.forEach(row => {
                     html += `<tr>`;
                     keys.forEach(k => { html += `<td style="padding: 10px; border-bottom: 1px solid var(--border); font-size: 14px;">${row[k] !== undefined ? row[k] : ''}</td>`; });
                     html += `</tr>`;
                 });
                 html += `</tbody></table>`;
-                
                 container.innerHTML = html;
             } catch (e) {
                 container.innerHTML = `<p style='text-align:center; color:var(--danger);'>Ошибка: ${e.message}</p>`;
