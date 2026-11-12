@@ -124,9 +124,27 @@
         .status-ok { background: rgba(39, 174, 96, 0.15); color: var(--success); }
         .status-bad { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
 
-        .date-row { display: flex; gap: 10px; width: 100%; }
-        .date-row .input-group { flex: 1; margin-bottom: 0; min-width: 0; max-width: calc(50% - 5px); }
-        .date-row input { width: 100%; padding: 12px 8px; font-size: 14px; box-sizing: border-box; }
+         .date-row { 
+            display: flex !important; 
+            flex-direction: row !important; 
+            gap: 8px !important; 
+            width: 100% !important; 
+            max-width: 100% !important;
+            overflow: hidden !important; 
+        }
+        .date-row .input-group { 
+            flex: 1 1 0% !important; 
+            width: 0 !important; 
+            min-width: 0 !important; 
+            max-width: 50% !important; 
+            margin-bottom: 0 !important; 
+        }
+        .date-row input { 
+            width: 100% !important; 
+            padding: 12px 4px !important; 
+            font-size: 14px !important; 
+            box-sizing: border-box !important; 
+        }
     </style>
 </head>
 <body>
