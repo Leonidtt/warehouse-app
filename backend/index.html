@@ -130,6 +130,7 @@
         .item-card .meta { font-size: 12px; color: var(--text-muted); word-break: break-word; }
         .thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); margin-bottom: 10px; }
 
+        /* Стили для комнат */
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 20px 16px; }
         .room-info { flex: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
         .room-title { font-weight: 700; font-size: 18px; color: var(--text); margin-bottom: 4px; }
@@ -140,6 +141,7 @@
             box-shadow: 0 2px 6px rgba(42, 171, 238, 0.3);
         }
 
+        /* Стили для карточек внутри комнаты (с чекбоксом) */
         .room-item-card { display: flex; flex-direction: column; padding: 12px; margin-bottom: 0; position: relative; cursor: pointer; justify-content: space-between; }
         .room-item-checkbox { position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; accent-color: var(--primary); z-index: 10; cursor: pointer; }
         .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 28px; }
@@ -271,6 +273,7 @@
         .comment-box { background: var(--bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid var(--primary); font-size: 14px; }
         .booking-item { background: rgba(243, 156, 18, 0.1); padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; border: 1px solid rgba(243, 156, 18, 0.2); }
 
+        /* Широкие плитки оборудования */
         .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; padding: 0 4px; }
         .eq-btn { 
             padding: 24px 20px; font-size: 20px; font-weight: 700; background: var(--card-bg); color: var(--text); 
@@ -279,6 +282,16 @@
         }
         .eq-btn:active { transform: scale(0.98); }
         .eq-btn span { font-size: 32px; }
+
+        /* Площадки */
+        .platform-card { padding: 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .platform-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .platform-date { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+        .platform-info { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+        .platform-info-row { display: flex; justify-content: space-between; }
+        .platform-status { margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; }
+        .status-ok { background: rgba(39, 174, 96, 0.15); color: var(--success); }
+        .status-bad { background: rgba(231, 76, 60, 0.15); color: var(--danger); }
     </style>
 </head>
 <body>
@@ -306,8 +319,6 @@
             <b>📊 Сводка за вчера:</b>
             <div id="report-text" style="margin-top:5px;"></div>
         </div>
-
-        <button class="secondary" onclick="showHistory()" style="margin-bottom: 16px;">🕒 История действий</button>
 
         <div id="my-items-section" class="hidden" style="margin-bottom: 20px;">
             <h2 style="font-size: 16px; margin-bottom: 10px;">🖐 Мои вещи</h2>
@@ -353,18 +364,16 @@
         </div>
     </div>
 
-    <!-- НОВЫЙ ЭКРАН: ПЛОЩАДКИ (Синхронизация) -->
-    <div id="screen-sync" class="screen hidden">
+    <div id="screen-platforms" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
             <div class="sticky-title">Площадки</div>
             <button class="sticky-scan" onclick="scanQr()">📷</button>
         </div>
-        <div style="margin-top: 16px; text-align: center;">
-            <h2 style="font-size: 18px; margin-bottom: 16px;">Синхронизация с Google</h2>
-            <p style="color: var(--text-muted); margin-bottom: 24px;">Нажмите кнопку ниже, чтобы обновить данные из таблицы.</p>
-            <button onclick="syncGoogle()">🔄 Синхронизировать сейчас</button>
-            <div id="sync-status" style="margin-top: 20px; font-weight: 600;"></div>
+        
+        <div style="margin-top: 16px;">
+            <button class="secondary" onclick="syncGoogle()" id="sync-btn">🔄 Синхронизировать данные</button>
+            <div id="platforms-list"></div>
         </div>
     </div>
 
@@ -632,7 +641,7 @@ T2,,,"></textarea>
 
     <div id="screen-history" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div style="width: 80px;"></div>
             <div class="sticky-title">История действий</div>
             <div style="width: 80px;"></div>
         </div>
@@ -666,13 +675,13 @@ T2,,,"></textarea>
             <span class="icon">📸</span>
             <span>Оборудование</span>
         </div>
+        <div class="nav-item" id="nav-platforms" onclick="showPlatforms()">
+            <span class="icon">📍</span>
+            <span>Площадки</span>
+        </div>
         <div class="nav-item" id="nav-rooms" onclick="showRooms()">
             <span class="icon">🏢</span>
             <span>Склад</span>
-        </div>
-        <div class="nav-item" id="nav-sync" onclick="showSync()">
-            <span class="icon">📍</span>
-            <span>Площадки</span>
         </div>
         <div class="nav-item hidden" id="nav-settings" onclick="showSettings()">
             <span class="icon">⚙️</span>
@@ -694,7 +703,7 @@ T2,,,"></textarea>
         function notify(msg) { if (tg.showAlert) tg.showAlert(msg); else alert(msg); }
 
         function updateNavActive(id) {
-            ["nav-main", "nav-equipment", "nav-rooms", "nav-sync", "nav-settings"].forEach(nav => {
+            ["nav-main", "nav-equipment", "nav-platforms", "nav-rooms", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -953,47 +962,65 @@ T2,,,"></textarea>
             renderItemsGrid(filtered, "equipment-items-list");
         }
 
-        // --- НОВАЯ ЛОГИКА: ПЛОЩАДКИ (СИНХРОНИЗАЦИЯ) ---
-        function showSync() {
-            updateNavActive("nav-sync");
-            document.getElementById("sync-status").innerHTML = "";
-            showScreen("screen-sync");
-            // Автоматический запуск синхронизации при заходе на вкладку
-            syncGoogle();
+        // --- Площадки ---
+        function showPlatforms() {
+            updateNavActive("nav-platforms");
+            showScreen("screen-platforms");
         }
 
         async function syncGoogle() {
-            const statusBox = document.getElementById("sync-status");
-            statusBox.innerHTML = "<span style='color: var(--primary);'>⏳ Синхронизация...</span>";
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // Таймаут 3 секунды
-
+            const btn = document.getElementById("sync-btn");
+            const list = document.getElementById("platforms-list");
+            
+            btn.disabled = true;
+            btn.textContent = "Загрузка...";
+            list.innerHTML = "<p style='text-align:center;'>Синхронизация...</p>";
+            
             try {
-                const res = await fetch("/api/sync_google", {
-                    method: "GET",
-                    headers: { "X-Init-Data": tg.initData || "" },
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || "Ошибка сервера");
+                const res = await api("/api/sync_google");
+                
+                if (!res.data || !res.data.length) {
+                    list.innerHTML = "<p style='text-align:center;'>Данных нет</p>";
+                    return;
                 }
 
-                const data = await res.json();
-                statusBox.innerHTML = `<span style='color: var(--success);'>✅ ${data.message}</span>`;
-                loadItems(); // Обновляем данные на главной после синхронизации
+                list.innerHTML = res.data.map(row => {
+                    const place = row["Площадка"] || "—";
+                    const date = row["дата"] || "";
+                    const admin = row["админ"] || "Не указан";
+                    const counter = row["счетчик"] || "0";
+                    const stock = row["запас"] || "";
+                    const missing = row["чего не хватает"] || "";
+                    
+                    const isOk = missing.toUpperCase().includes("ХВАТАЕТ");
+                    const statusClass = isOk ? "status-ok" : "status-bad";
+                    
+                    return `
+                    <div class="card platform-card">
+                        <div class="platform-title">
+                            <span>${place}</span>
+                            <span class="platform-date">${date}</span>
+                        </div>
+                        <div class="platform-info">
+                            <div class="platform-info-row"><span>👤 Админ:</span> <b>${admin}</b></div>
+                            <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
+                            ${stock ? `<div class="platform-info-row"><span>📦 Запас:</span> <b>${stock}</b></div>` : ""}
+                        </div>
+                        <div class="platform-status ${statusClass}">
+                            ${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}
+                        </div>
+                    </div>
+                    `;
+                }).join("");
+                
             } catch (e) {
-                clearTimeout(timeoutId);
-                if (e.name === 'AbortError') {
-                    statusBox.innerHTML = "<span style='color: var(--danger);'>❌ Превышено время ожидания (3 сек).</span>";
-                } else {
-                    statusBox.innerHTML = `<span style='color: var(--danger);'>❌ ${e.message}</span>`;
-                }
+                list.innerHTML = `<p style="color:var(--danger); text-align:center;">Ошибка: ${e.message}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "🔄 Синхронизировать данные";
             }
         }
+        // --------------
 
         async function showRooms() { 
             showScreen("screen-rooms"); 
@@ -1211,14 +1238,14 @@ T2,,,"></textarea>
         }
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-sync"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
             if (id === "screen-equipment") updateNavActive("nav-equipment");
+            if (id === "screen-platforms") updateNavActive("nav-platforms");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
-            if (id === "screen-sync") updateNavActive("nav-sync");
             if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
             window.scrollTo(0, 0);
