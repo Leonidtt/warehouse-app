@@ -250,9 +250,12 @@ def sync_google(x_init_data: Optional[str] = Header(None)):
         added_venues = 0
         
         for r in records:
-            name = r.get("Название", "").strip()
-            status = r.get("Статус", "Всё хватает").strip()
+            name = r.get("Площадка", "").strip() or r.get("Название", "").strip()
+            date_val = r.get("дата", "").strip() or r.get("Дата", "").strip()
+            
             if not name: continue
+            
+            status = date_val if date_val else "Всё хватает"
             
             existing = conn.execute("SELECT id FROM venues WHERE type = 'concert' AND name = ?", (name,)).fetchone()
             if existing:
@@ -262,28 +265,12 @@ def sync_google(x_init_data: Optional[str] = Header(None)):
                 added_venues += 1
                 
         conn.commit()
-        
-        rows = conn.execute("""
-            SELECT i.category, i.code, i.name, l.name as location, s.spot, s.quantity
-            FROM stock s
-            JOIN items i ON i.code = s.item_code
-            JOIN locations l ON l.id = s.location_id
-            WHERE s.quantity > 0
-            ORDER BY i.category, i.name
-        """).fetchall()
-        
-        data_to_write = [["Категория", "Код", "Название", "Локация", "Полка", "Количество"]]
-        for r in rows:
-            data_to_write.append([r["category"] or "", r["code"], r["name"], r["location"], r["spot"] or "", r["quantity"]])
-        
-        sheet.clear()
-        sheet.update(values=data_to_write, range_name="A1")
-        
         conn.close()
-        return {"status": "ok", "message": f"Синхронизировано. Добавлено: {added_venues}. Выгружено: {len(data_to_write) - 1}"}
+        
+        return {"status": "ok", "message": f"Синхронизировано. Добавлено концертов: {added_venues}"}
         
     except Exception as e:
-        raise HTTPException(500, f"Ошибка: {str(e)}")
+        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
 
 @app.get("/api/venues/{v_type}")
 def get_venues(v_type: str):
