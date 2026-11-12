@@ -6,3 +6,10 @@ Pillow==10.4.0
 httpx==0.27.2
 gspread
 google-auth
+fastapi
+uvicorn
+qrcode
+pillow
+python-multipart
+gspread
+google-auth
