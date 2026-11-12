@@ -293,7 +293,7 @@ def export_stock(x_init_data: Optional[str] = Header(None)):
     """).fetchall()
     conn.close()
     buf = io.StringIO()
-    writer = csv.writer(buf, delimiter=';') # Используем ; для нормального открытия в русском Excel
+    writer = csv.writer(buf, delimiter=';') 
     writer.writerow(["Категория", "Код", "Название", "Локация", "Полка", "Количество"])
     for r in rows:
         writer.writerow([r["category"], r["code"], r["name"], r["location"], r["spot"], r["quantity"]])
@@ -350,15 +350,25 @@ def locations_view():
     conn.close(); return result
 
 @app.get("/api/room_detail/{location_id}")
-def room_detail(location_id: int):
+def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
+    is_admin = False
+    try: is_admin = get_user(x_init_data)["role"] == "admin"
+    except: pass
     conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
     items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
-    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair FROM items").fetchall()}
+    # Берем все нужные поля для карточек
+    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close(); shelves = {}; no_shelf = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
-        data = {"code": item["item_code"], "name": detail.get("name", "—"), "quantity": item["quantity"], "category": detail.get("category", ""), "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0)}
+        data = {
+            "code": item["item_code"], "name": detail.get("name", "—"), "quantity": item["quantity"], 
+            "category": detail.get("category", ""), "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0),
+            "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", "")
+        }
+        if is_admin: data["price"] = detail.get("price", 0)
+        
         spot = item["spot"].strip() if item["spot"] else ""
         if spot: shelves.setdefault(spot, []).append(data)
         else: no_shelf.append(data)
