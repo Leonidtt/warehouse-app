@@ -25,8 +25,8 @@ import urllib3
 urllib3.disable_warnings()
 
 BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" # ID твоей таблицы
-SHEET_NAME = "Склад" # Название вкладки (листа)
+SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
+SHEET_NAME = "кц" 
 
 app = FastAPI()
 
@@ -199,73 +199,48 @@ class TerminalRequest(BaseModel):
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
-# ---------------- GOOGLE SYNC ----------------
+# ---------------- GOOGLE SYNC (Только чтение для отображения) ----------------
 @app.get("/api/sync_google")
 def sync_google(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     
-    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_json:
+    creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not creds_env:
         raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
     
     try:
-        # Подключаемся к Google
-            creds_dict = json.loads(creds_json)
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
+        # Декодируем Base64
+        decoded_bytes = base64.b64decode(creds_env)
+        creds_json = decoded_bytes.decode('utf-8')
+        creds_dict = json.loads(creds_json)
+            
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
         
-        # Читаем все данные
         all_values = sheet.get_all_values()
         if not all_values:
-            return {"status": "ok", "message": "Таблица пуста"}
+            return {"status": "ok", "data": []}
             
-        # Пропускаем первую строку (заголовки) и берем остальные
+        headers = all_values[0]
         data_rows = all_values[1:]
         
-        # === ЛОГИКА ОБНОВЛЕНИЯ БАЗЫ ===
-        conn = get_conn()
-        added = 0
-        updated = 0
-        
+        records = []
         for row in data_rows:
-            # Ожидаем колонки: 0-Код, 1-Название, 2-Категория, 3-Количество
-            
-            # Если строка пустая или нет кода/названия — пропускаем
-            if len(row) < 2 or not row[0].strip() or not row[1].strip():
-                continue
+            record = {}
+            for i, header in enumerate(headers):
+                # Игнорируем пустые заголовки
+                if header.strip() and i < len(row):
+                    record[header.strip()] = row[i].strip()
+            # Берем только строки, где есть хоть какие-то данные (например, есть Площадка)
+            if record.get("Площадка") or record.get("дата"):
+                records.append(record)
                 
-            code = row[0].strip()
-            name = row[1].strip()
-            category = row[2].strip() if len(row) > 2 else ""
-            
-            try:
-                qty = int(row[3]) if len(row) > 3 and row[3] else 0
-            except:
-                qty = 0
-
-            existing = conn.execute("SELECT code FROM items WHERE code = ?", (code,)).fetchone()
-            if existing:
-                conn.execute("UPDATE items SET name=?, category=? WHERE code=?", (name, category, code))
-                updated += 1
-            else:
-                # Если товара нет, создаем его (привязываем к локации с ID=1, обычно это Мастерская/Склад)
-                conn.execute("INSERT INTO items (code, name, kind, category) VALUES (?, ?, 'equipment', ?)", (code, name, category))
-                conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?, 1, ?)", (code, qty))
-                added += 1
-                
-        conn.commit()
-        conn.close()
-        
-        return {"status": "ok", "message": f"Успешно. Добавлено: {added}, обновлено: {updated}"}
+        return {"status": "ok", "data": records}
         
     except Exception as e:
-        raise HTTPException(500, f"Ошибка: {str(e)}")
+        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
 
 # --------------------------------------------
 
