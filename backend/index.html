@@ -976,7 +976,34 @@ T2,,,"></textarea>
             }
         }
         // ------------------------------------------
+            // ... (тут конец твоего кода, который ты прислал) ...
+            } catch (e) {
+                list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+            }
+        }
+        // ------------------------------------------
+        
+        // ВОТ СЮДА ВСТАВЛЯЕШЬ НОВУЮ ФУНКЦИЮ:
+        async function syncGoogle() {
+            if (!confirm("Запустить синхронизацию с Google Таблицей?")) return;
+            const btn = event.target;
+            btn.textContent = "⏳ Синхронизация...";
+            btn.disabled = true;
+            
+            try {
+                const res = await api("/api/sync_google");
+                notify(res.message || "Успешно синхронизировано");
+                await loadVenues('concert'); 
+            } catch (e) {
+                notify("Ошибка: " + e.message);
+            } finally {
+                btn.textContent = "🔄 Синхронизировать с Google";
+                btn.disabled = false;
+            }
+        }
+        // ------------------------------------------
 
+        async function showRooms() {  // (или другая функция, которая идет следом)
         async function showRooms() { 
             showScreen("screen-rooms"); 
             updateNavActive("nav-rooms"); 
