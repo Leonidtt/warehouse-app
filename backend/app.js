@@ -230,7 +230,7 @@ async function openRoom(id, name) {
                 const shelfId = `shelf-${index}`; 
                 html += `<div class="shelf-header" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName}</span><span class="shelf-arrow">▼</span></div><div class="shelf-content hidden" id="${shelfId}">`; 
                 data.shelves[shelfName].forEach(item => { 
-                    html += `<div class="card" style="display:flex; align-items:center; padding: 12px; margin-bottom:8px;"><input type="checkbox" data-code="${item.code}" style="width:22px; height:22px; margin-right:12px; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)"><div style="flex:1;" onclick="openItem('${item.code}')"><div class="name" style="font-size:15px; font-weight:600; margin:0;">${item.name}</div><div class="meta">${item.code} · ${item.quantity} шт</div></div></div>`; 
+                    html += `<div class="card" style="display:flex; align-items:center; padding: 12px; margin-bottom:8px;"><<input type="checkbox" data-code="${item.code}" style="width:24px; height:24px; min-width: 24px; margin: 0 12px 0 0; accent-color:var(--primary);" onchange="toggleSelectItem('${item.code}', this)">
                 }); 
                 html += `</div>`; 
             }); 
