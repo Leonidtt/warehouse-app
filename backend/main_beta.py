@@ -177,9 +177,6 @@ class CommentRequest(BaseModel):
     code: str; text: str
 class CheckoutRequest(BaseModel):
     code: str; taken_for: str = ""
-class BatchCheckoutRequest(BaseModel):
-    codes: List[str]
-    taken_for: str = ""
 class RegisterRequest(BaseModel):
     full_name: str
 class LocationCreate(BaseModel):
@@ -239,7 +236,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
             raise HTTPException(500, f"Лист '{sheet_name}' не найден. Доступные листы: {titles}")
         
         all_values = sheet.get_all_values()
-        if not all_values: return {"status": "ok", "data": []}
+        if not all_values: return {"status": "ok", "sheet_title": sheet.title, "data": []}
         
         headers = all_values[0]
         data_rows = all_values[1:]
@@ -265,7 +262,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                     record[h] = row[i].strip() if row[i] else ""
             records.append(record)
             
-        return {"status": "ok", "data": records}
+        return {"status": "ok", "sheet_title": sheet.title, "data": records}
     except HTTPException: raise
     except Exception as e:
         raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
@@ -546,45 +543,6 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
     conn.commit(); conn.close()
     if success:
         asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
-    return {"status": "ok", "success_count": len(success), "errors": errors}
-@app.post("/api/checkout_batch")
-async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data)
-    conn = get_conn()
-    success = []
-    errors = []
-
-    for code in req.codes:
-        item = conn.execute("SELECT kind, needs_repair, name FROM items WHERE code = ?", (code,)).fetchone()
-        if not item:
-            errors.append(f"{code}: не найден")
-            continue
-        if item["needs_repair"]:
-            errors.append(f"{item['name']}: в ремонте")
-            continue
-        if item["kind"] != "equipment":
-            errors.append(f"{item['name']}: расходник")
-            continue
-        if conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone():
-            errors.append(f"{item['name']}: уже выдан")
-            continue
-
-        stock = conn.execute("SELECT location_id FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (code,)).fetchone()
-        if not stock:
-            errors.append(f"{item['name']}: нет в наличии")
-            continue
-
-        conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (code, user["tg_id"], stock["location_id"], req.taken_for))
-        conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, stock["location_id"]))
-        conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (code,))
-        success.append(item["name"])
-
-    conn.commit()
-    conn.close()
-
-    if success:
-        asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
-
     return {"status": "ok", "success_count": len(success), "errors": errors}
 
 @app.post("/api/checkout")
