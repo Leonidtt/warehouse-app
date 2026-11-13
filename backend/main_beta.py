@@ -1,3 +1,6 @@
+# ==========================================
+# БЛОК 1: ИМПОРТЫ И НАСТРОЙКИ
+# ==========================================
 import sqlite3
 import json
 import hashlib
@@ -20,7 +23,6 @@ import os
 import traceback
 import pandas as pd
 import asyncio
-
 import gspread
 from google.oauth2.service_account import Credentials
 import urllib3
@@ -28,9 +30,13 @@ urllib3.disable_warnings()
 
 BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
+DB_PATH = "/data/warehouse_beta.db"
 
 app = FastAPI()
 
+# ==========================================
+# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
+# ==========================================
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
         conn = get_conn()
@@ -58,8 +64,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-DB_PATH = "/data/warehouse_beta.db"
-
 @app.get("/health")
 def healthcheck(): return {"status": "ok"}
 
@@ -72,6 +76,9 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
+# ==========================================
+# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
+# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -120,6 +127,9 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
+# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -188,6 +198,9 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
+# ==========================================
+# БЛОК 5: ЭНДПОИНТЫ (API)
+# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -216,12 +229,11 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        # --- ЖЕСТКИЙ ПОИСК ТОЛЬКО ПО ТОЧНОМУ НАЗВАНИЮ ---
         try:
             sheet = spreadsheet.worksheet(sheet_name)
         except Exception:
             titles = [s.title for s in spreadsheet.worksheets()]
-            raise HTTPException(500, f"Лист '{sheet_name}' не найден. Доступные листы: {titles}. Проверьте регистр и пробелы!")
+            raise HTTPException(500, f"Лист '{sheet_name}' не найден. Доступные листы: {titles}")
         
         all_values = sheet.get_all_values()
         if not all_values: return {"status": "ok", "data": []}
