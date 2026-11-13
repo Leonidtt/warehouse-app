@@ -3,7 +3,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -26,7 +26,7 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+BOT_TOKEN = "В9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 
 app = FastAPI()
@@ -157,15 +157,14 @@ class MoveRequest(BaseModel):
     code: str; from_location: int; to_location: int; quantity: int
 class BatchMoveRequest(BaseModel):
     codes: List[str]; from_location: int; to_location: int
+class BatchCheckoutRequest(BaseModel):
+    codes: List[str]; taken_for: str = ""
 class WriteoffRequest(BaseModel):
     code: str; location_id: int; quantity: int
 class BookingRequest(BaseModel):
     code: str; date_from: str; date_to: str
 class CommentRequest(BaseModel):
     code: str; text: str
-class BatchCheckoutRequest(BaseModel):
-    codes: List[str]
-    taken_for: str = ""
 class CheckoutRequest(BaseModel):
     code: str; taken_for: str = ""
 class RegisterRequest(BaseModel):
@@ -305,16 +304,18 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
 
 @app.get("/api/export_history")
-def export_history(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); rows = get_history(x_init_data); buf = io.StringIO(); writer = csv.writer(buf)
+def export_history(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
+    auth = x_init_data or init_data
+    get_user(auth); rows = get_history(auth); buf = io.StringIO(); writer = csv.writer(buf)
     writer.writerow(["Дата", "Тип", "Код", "Название", "Кол-во", "Пользователь"])
     for r in rows: writer.writerow([r["date"], r["type"], r["item_code"], r["name"], r["quantity"], r["user_name"]])
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=history.csv"})
 
 @app.get("/api/export_stock")
-def export_stock(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn()
+def export_stock(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
+    auth = x_init_data or init_data
+    check_admin(auth); conn = get_conn()
     rows = conn.execute("SELECT i.code, i.name, l.name as location, s.quantity FROM stock s JOIN items i ON i.code = s.item_code JOIN locations l ON l.id = s.location_id WHERE s.quantity > 0 AND i.is_archived = 0 ORDER BY l.name, i.name").fetchall()
     conn.close(); buf = io.StringIO(); writer = csv.writer(buf, delimiter=';')
     writer.writerow(["Код", "Название", "Локация", "Количество"])
@@ -323,8 +324,9 @@ def export_stock(x_init_data: Optional[str] = Header(None)):
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=stock.csv"})
 
 @app.get("/api/export_qr_sheet")
-def export_qr_sheet(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn()
+def export_qr_sheet(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
+    auth = x_init_data or init_data
+    check_admin(auth); conn = get_conn()
     items = conn.execute("SELECT code, name FROM items WHERE is_archived = 0 ORDER BY name").fetchall()
     conn.close()
     cols = 4; rows_count = (len(items) + cols - 1) // cols
