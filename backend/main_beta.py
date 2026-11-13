@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 import os
 import traceback
 import pandas as pd
-import asyncio # <--- ВАЖНО: добавлен импорт
+import asyncio
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -27,7 +27,7 @@ import urllib3
 urllib3.disable_warnings()
 
 BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
-SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
+SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 
 app = FastAPI()
 
@@ -38,10 +38,8 @@ async def notify_admin_about_error(error_text: str, user_info: str = "Неизв
         conn.close()
         async with httpx.AsyncClient() as client:
             for admin in admins:
-                msg = f"⚠️ **ОШИБКА**\n\n👤 Пользователь: {user_info}\n📝 Текст: {error_text}"
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": msg, "parse_mode": "Markdown"})
-    except Exception as e:
-        print(f"Не удалось отправить ошибку в ТГ: {e}")
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_info}\n📝 {error_text}"})
+    except: pass
 
 async def notify_admin_action(action_text: str):
     try:
@@ -56,8 +54,7 @@ async def notify_admin_action(action_text: str):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"ОШИБКА: {exc}\n{traceback.format_exc()}")
-    await notify_admin_about_error(str(exc), "Сервер (500)")
-    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера. Данные не сохранены."})
+    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера."})
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -165,14 +162,8 @@ def check_admin(x_init_data: Optional[str]):
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
 
-# Модели
-class ItemCreate(BaseModel):
-    code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
-    spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
-    kit_flash: str = ""; budget_tag: str = ""; serial_number: str = ""; buyout_status: str = ""
-    category: str = ""
 class MoveRequest(BaseModel):
-    code: str; from_location: int; to_location: int; quantity: int; to_spot: str = ""
+    code: str; from_location: int; to_location: int; quantity: int; to_spot: str = ""; from_spot: str = ""
 class BatchMoveRequest(BaseModel):
     codes: List[str]; from_location: int; to_location: int; to_spot: str = ""
 class WriteoffRequest(BaseModel):
@@ -225,33 +216,53 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(sheet_name)
+        sheet = None
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+        except:
+            normalized = sheet_name.strip().lower()
+            for s in spreadsheet.worksheets():
+                if s.title.strip().lower() == normalized:
+                    sheet = s; break
+            if not sheet:
+                for s in spreadsheet.worksheets():
+                    if normalized in s.title.strip().lower():
+                        sheet = s; break
+            if not sheet:
+                titles = [s.title for s in spreadsheet.worksheets()]
+                raise HTTPException(500, f"Лист '{sheet_name}' не найден. Есть: {titles}")
+        
         all_values = sheet.get_all_values()
         if not all_values: return {"status": "ok", "data": []}
         
         headers = all_values[0]
         data_rows = all_values[1:]
         records = []
+        is_th_sheet = "тх" in sheet_name.lower()
         
         for row in data_rows:
-            if not row or not row[0].strip(): continue
-            if len(row) > 1 and "1899" in row[1]: continue
+            if not row or len(row) == 0: continue
+            first_cell = row[0].strip() if row[0] else ""
+            if not first_cell: continue
+            if len(row) > 1 and "1899" in str(row[1]): continue
             
             record = {}
-            if not headers[0].strip():
-                record["Название"] = row[0].strip()
+            if is_th_sheet or not headers[0].strip():
+                record["Название"] = first_cell
                 start_idx = 1
             else:
                 start_idx = 0
                 
             for i in range(start_idx, len(headers)):
-                h = headers[i].strip()
+                h = headers[i].strip() if i < len(headers) else ""
                 if h and i < len(row):
                     record[h] = row[i].strip()
             records.append(record)
             
         return {"status": "ok", "data": records}
+    except HTTPException: raise
     except Exception as e:
         raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
 
@@ -354,6 +365,10 @@ def list_users(x_init_data: Optional[str] = Header(None)):
 def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn(); conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name, req.role, tg_id)); conn.commit(); conn.close(); return {"status": "ok"}
 
+@app.get("/api/locations")
+def list_locations(x_init_data: Optional[str] = Header(None)):
+    conn = get_conn(); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close(); return [dict(r) for r in rows]
+
 @app.get("/api/locations_view")
 def locations_view(x_init_data: Optional[str] = Header(None)):
     conn = get_conn(); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
@@ -434,6 +449,19 @@ def delete_category(cat_id: int, x_init_data: Optional[str] = Header(None)):
     conn.execute("UPDATE items SET category = '' WHERE category = ?", (cat["name"],))
     conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
     conn.commit(); conn.close(); return {"status": "ok"}
+
+@app.get("/api/stats")
+def get_stats(x_init_data: Optional[str] = Header(None)):
+    conn = get_conn(); cats = conn.execute("SELECT name FROM categories ORDER BY id").fetchall(); result = []
+    for c in cats:
+        name = c["name"]
+        total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ? AND i.is_archived = 0", (name,)).fetchone()["q"]
+        in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL AND i.is_archived = 0", (name,)).fetchone()["q"]
+        result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
+    no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
+    no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL AND i.is_archived = 0").fetchone()["q"]
+    if no_cat_total + no_cat_work > 0: result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
+    conn.close(); return result
 
 @app.get("/api/spots")
 def list_spots(x_init_data: Optional[str] = Header(None)):
@@ -551,11 +579,18 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
 async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(); co = conn.execute("SELECT id, location_id, spot FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if not co: conn.close(); raise HTTPException(400, "Не выдано")
+    
+    co_spot = co["spot"] or ""
+    if not co_spot:
+        last_move = conn.execute("SELECT to_spot FROM movements WHERE item_code = ? AND to_location = ? AND to_spot != '' ORDER BY created_at DESC LIMIT 1", (code, co["location_id"])).fetchone()
+        if last_move and last_move["to_spot"]:
+            co_spot = last_move["to_spot"]
+    
     conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["tg_id"], co["id"]))
     if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone(): 
-        conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (co["spot"] or "", code, co["location_id"]))
+        conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (co_spot, code, co["location_id"]))
     else: 
-        conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, co["location_id"], co["spot"] or ""))
+        conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, co["location_id"], co_spot))
     conn.commit()
     item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
     conn.close()
@@ -565,8 +600,11 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
 @app.post("/api/move")
 def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
-    if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
     if req.quantity <= 0: raise HTTPException(400, "Количество должно быть больше 0")
+    from_spot = req.from_spot or ""
+    to_spot_norm = req.to_spot or ""
+    if req.from_location == req.to_location and from_spot == to_spot_norm:
+        raise HTTPException(400, "Выберите другую комнату или полку")
     conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
     to_spot = req.to_spot
@@ -632,19 +670,6 @@ def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None
     conn.execute("INSERT INTO comments (item_code, user_id, text) VALUES (?,?,?)", (req.code, user["tg_id"], req.text))
     conn.commit(); conn.close(); return {"status": "ok"}
 
-@app.post("/api/inventory_finish")
-def inventory_finish(req: InventoryResult, x_init_data: Optional[str] = Header(None)):
-    user = check_admin(x_init_data); conn = get_conn(); missing_codes = []; extra_codes = []
-    try:
-        room_items = conn.execute("SELECT item_code FROM stock WHERE location_id = ? AND quantity > 0", (req.location_id,)).fetchall()
-        room_codes = [r["item_code"] for r in room_items]
-        missing_codes = [c for c in room_codes if c not in req.found]
-        for code in missing_codes: conn.execute("INSERT INTO lost_items (item_code, user_id) VALUES (?, ?)", (code, user["tg_id"]))
-        extra_codes = [c for c in req.found if c not in room_codes]
-        conn.commit()
-    except Exception as e: conn.rollback(); conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok", "missing": missing_codes, "extra": extra_codes}
-
 @app.post("/api/import_text")
 def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn(); added = 0; updated = 0
@@ -705,6 +730,29 @@ async def import_file(file: UploadFile = File(...), x_init_data: Optional[str] =
         req = ImportTextRequest(text=csv_buffer.getvalue())
         return import_text(req, x_init_data)
     except Exception as e: raise HTTPException(400, f"Ошибка чтения файла: {str(e)}")
+
+@app.post("/api/clear_database")
+def clear_database(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn()
+    try:
+        for table in ["items", "stock", "checkouts", "movements", "writeoffs", "bookings", "comments", "lost_items", "daily_reports"]:
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+    except Exception as e: conn.rollback(); conn.close(); raise HTTPException(400, str(e))
+    conn.close(); return {"status": "ok"}
+
+@app.post("/api/inventory_finish")
+def inventory_finish(req: InventoryResult, x_init_data: Optional[str] = Header(None)):
+    user = check_admin(x_init_data); conn = get_conn(); missing_codes = []; extra_codes = []
+    try:
+        room_items = conn.execute("SELECT item_code FROM stock WHERE location_id = ? AND quantity > 0", (req.location_id,)).fetchall()
+        room_codes = [r["item_code"] for r in room_items]
+        missing_codes = [c for c in room_codes if c not in req.found]
+        for code in missing_codes: conn.execute("INSERT INTO lost_items (item_code, user_id) VALUES (?, ?)", (code, user["tg_id"]))
+        extra_codes = [c for c in req.found if c not in room_codes]
+        conn.commit()
+    except Exception as e: conn.rollback(); conn.close(); raise HTTPException(400, str(e))
+    conn.close(); return {"status": "ok", "missing": missing_codes, "extra": extra_codes}
 
 @app.post("/api/execute_sql")
 def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None)):
