@@ -219,7 +219,7 @@ async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(No
 def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
     creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_env: raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON")
+    if not creds_env: return {"status": "error", "message": "Не настроены GOOGLE_CREDENTIALS_JSON на сервере."}
     try:
         decoded_bytes = base64.b64decode(creds_env)
         creds_json = decoded_bytes.decode('utf-8')
@@ -229,11 +229,16 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        try:
-            sheet = spreadsheet.worksheet(sheet_name)
-        except Exception:
-            titles = [s.title for s in spreadsheet.worksheets()]
-            raise HTTPException(500, f"Лист '{sheet_name}' не найден. Доступные листы: {titles}")
+        sheet = None
+        available_titles = []
+        for s in spreadsheet.worksheets():
+            available_titles.append(s.title)
+            if s.title.strip().lower() == sheet_name.strip().lower():
+                sheet = s
+                break
+        
+        if not sheet:
+            return {"status": "error", "message": f"Лист '{sheet_name}' не найден в Google Таблице.\n\nДоступные листы (проверь название):\n- " + "\n- ".join(available_titles)}
         
         all_values = sheet.get_all_values()
         if not all_values: return {"status": "ok", "sheet_title": sheet.title, "data": []}
@@ -263,9 +268,8 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
             records.append(record)
             
         return {"status": "ok", "sheet_title": sheet.title, "data": records}
-    except HTTPException: raise
     except Exception as e:
-        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
+        return {"status": "error", "message": f"Ошибка на сервере при чтении таблицы: {str(e)}"}
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
