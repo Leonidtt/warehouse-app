@@ -392,19 +392,19 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     items = conn.execute("SELECT s.item_code, s.quantity FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (location_id,)).fetchall()
     checkouts = conn.execute("SELECT c.item_code, u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
     
-    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
+    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
     
     result_items = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
-        data = {"code": item["item_code"], "name": detail.get("name", "—"), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
+        data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
         
     for c in checkouts:
         detail = item_details.get(c["item_code"], {})
-        data = {"code": c["item_code"], "name": detail.get("name", "—"), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": c["full_name"]}
+        data = {"code": c["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": c["full_name"]}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
         
@@ -427,14 +427,24 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
 @app.get("/api/stats")
 def get_stats(x_init_data: Optional[str] = Header(None)):
     conn = get_conn()
-    locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall()
+    default_cats = ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]
+    db_cats = [r["category"] for r in conn.execute("SELECT DISTINCT category FROM items WHERE category != '' AND is_archived = 0").fetchall()]
+    all_cats = list(dict.fromkeys(default_cats + db_cats))
+    
     result = []
-    for loc in locations:
-        total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND i.is_archived = 0", (loc["id"],)).fetchone()["q"]
-        in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE c.location_id = ? AND c.returned_at IS NULL AND i.is_archived = 0", (loc["id"],)).fetchone()["q"]
-        if total_qty + in_work > 0:
-            result.append({"name": loc["name"], "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
-    conn.close(); return result
+    for name in all_cats:
+        total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ? AND i.is_archived = 0", (name,)).fetchone()["q"]
+        in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL AND i.is_archived = 0", (name,)).fetchone()["q"]
+        result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
+        
+    no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
+    no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL AND i.is_archived = 0").fetchone()["q"]
+    
+    if no_cat_total + no_cat_work > 0:
+        result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
+        
+    conn.close()
+    return result
 
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
