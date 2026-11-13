@@ -29,12 +29,16 @@
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        .sticky-header { position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); min-height: 60px; border-radius: 0 0 20px 20px; margin-bottom: 16px; }
+        .sticky-header { 
+            position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
+            z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; 
+            border-bottom: 1px solid var(--border); min-height: 60px; 
+            border-radius: 0 0 20px 20px; margin-bottom: 16px; 
+        }
         .sticky-back { background: var(--card-bg); border: 1px solid var(--border); padding: 8px 16px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; transition: transform 0.1s; }
         .sticky-back:active { transform: scale(0.95); }
         .sticky-title { font-weight: 700; font-size: 17px; flex: 1; text-align: center; margin: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sticky-scan { background: var(--card-bg); border: 1px solid var(--border); padding: 8px 12px; border-radius: 12px; font-size: 16px; color: var(--primary); cursor: pointer; transition: transform 0.1s; }
-        .sticky-scan:active { transform: scale(0.95); }
+        .sticky-scan { background: none; border: none; padding: 8px; font-size: 20px; cursor: pointer; width: auto; margin: 0; box-shadow: none; }
 
         .grid-container { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 0 16px; }
         .card { background: var(--card-bg); padding: 16px; border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid var(--border); transition: transform 0.15s ease, box-shadow 0.15s ease; }
@@ -53,9 +57,9 @@
         .room-spots { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; font-weight: 500; }
         .room-arrow-circle { width: 36px; height: 36px; border-radius: 50%; background: rgba(0, 122, 255, 0.1); color: var(--primary); display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold; }
 
-        .room-item-card { display: flex; flex-direction: column; padding: 14px; margin-bottom: 0; position: relative; justify-content: space-between; }
+        .room-item-card { display: flex; flex-direction: column; padding: 14px; margin-bottom: 0; position: relative; cursor: pointer; justify-content: space-between; }
         .room-item-checkbox { position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; accent-color: var(--primary); z-index: 10; cursor: pointer; }
-        .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 32px; cursor: pointer; }
+        .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 32px; }
         .room-item-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .room-item-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
         
@@ -108,13 +112,6 @@
         .filters select { padding: 10px 14px; font-size: 14px; font-weight: 500; border-radius: 12px; flex: 1; min-width: 110px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
         .filters select.active-filter { border-color: var(--primary); background: rgba(0, 122, 255, 0.05); color: var(--primary); font-weight: 600; }
 
-        .shelf-header { background: var(--card-bg); color: var(--text); padding: 16px; border-radius: 16px; margin-top: 16px; margin-bottom: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: transform 0.1s; }
-        .shelf-header:active { transform: scale(0.98); }
-        .shelf-header.open { background: rgba(0, 122, 255, 0.05); border-color: rgba(0, 122, 255, 0.2); color: var(--primary); }
-        .shelf-content { margin-bottom: 16px; overflow: hidden; }
-        .shelf-arrow { font-size: 12px; transition: transform 0.3s; }
-        .shelf-header.open .shelf-arrow { transform: rotate(90deg); }
-
         .status-badge { display: block; padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 16px; text-align: center; letter-spacing: -0.2px; }
         .status-free { background: rgba(52, 199, 89, 0.12); color: var(--success); }
         .status-taken { background: rgba(255, 149, 0, 0.12); color: var(--warning); }
@@ -140,7 +137,6 @@
         .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; padding: 0 4px; }
         .eq-btn { padding: 24px; font-size: 18px; font-weight: 600; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.1s; letter-spacing: -0.3px; }
         .eq-btn:active { transform: scale(0.97); }
-        .eq-btn.selected { border-color: var(--primary); background: rgba(0, 122, 255, 0.06); }
         .eq-btn span { font-size: 32px; }
 
         .platform-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
@@ -166,12 +162,27 @@
         .toast.success { background: rgba(52, 199, 89, 0.95); box-shadow: 0 8px 24px rgba(52, 199, 89, 0.3); }
         .toast.error { background: rgba(255, 59, 48, 0.95); box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        #batch-actions { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
+        .batch-btn-group { display: flex; gap: 8px; }
+        .batch-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
     </style>
 </head>
 <body>
 
     <div id="toast-container"></div>
     <div id="scroll-top-btn" onclick="window.scrollTo({top:0, behavior:'smooth'})">↑</div>
+
+    <div id="batch-actions">
+        <div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
+            <div style="font-weight: 700; font-size: 18px; color: var(--primary);" id="selected-count">0</div>
+        </div>
+        <div class="batch-btn-group">
+            <button class="secondary" onclick="deselectAllInRoom()">Снять</button>
+            <button class="ok" onclick="showBatchMoveForm()">Переместить</button>
+        </div>
+    </div>
 
     <div id="screen-register" class="screen hidden" style="padding-top: 40px;">
         <h1 style="text-align: center; margin-bottom: 10px; font-size: 28px; letter-spacing: -1px;">Регистрация</h1>
@@ -219,8 +230,7 @@
         </div>
 
         <div class="filters">
-            <select id="filter-location" onchange="updateFilterSpots(); filterItems()"><option value="">Все комнаты</option></select>
-            <select id="filter-spot" onchange="filterItems()"><option value="">Все полки</option></select>
+            <select id="filter-location" onchange="filterItems()"><option value="">Все комнаты</option></select>
             <select id="filter-kind" onchange="filterItems()">
                 <option value="">Все типы</option>
                 <option value="equipment">Оборудование</option>
@@ -339,15 +349,12 @@
         <button onclick="createCategory()" class="secondary">Добавить категорию</button>
         <div id="categories-list"></div>
 
-        <h2 style="font-size: 20px; margin-top: 32px; font-weight: 700; letter-spacing: -0.5px;">Полки</h2>
-        <div id="settings-spots-list"></div>
-
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--danger); font-weight: 700; letter-spacing: -0.5px;">Разработка</h2>
         <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
+        <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="promptClearDatabase()">🗑 Очистить базу товаров</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-        <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Импорт/Экспорт</h2>
         <div class="input-group"><input type="file" id="import-file" accept=".csv, .xlsx, .xls" onchange="uploadExcel(this)"></div>
@@ -380,19 +387,39 @@
         <div class="sticky-header">
             <button class="sticky-back" onclick="showRooms()">← Назад</button>
             <div class="sticky-title" id="room-title">Комната</div>
-            <div style="width: 80px;"></div>
+            <button class="secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px; border-radius:8px;" onclick="selectAllInRoom()">Выбрать все</button>
         </div>
         
-        <button class="secondary" id="select-all-btn" onclick="selectAllInRoom()" style="margin-top: 16px; margin-bottom: 16px;">☑️ Выделить все</button>
-        <div id="room-items"></div>
-        
-        <div id="batch-actions" style="position: fixed; bottom: 90px; left: 16px; right: 16px; background: var(--card-bg); padding: 14px; border-radius: 18px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); z-index: 500; display: none; align-items: center; gap: 12px; border: 1px solid var(--border);">
-            <div style="flex: 1;">
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
-                <div style="font-size: 22px; font-weight: 700;" id="selected-count">0</div>
+        <div id="room-items" class="grid-container" style="padding: 0;"></div>
+    </div>
+
+    <div id="screen-move-item" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <div class="sticky-title">Перемещение</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="name" id="move-item-name">Товар</div>
+                <div class="meta" id="move-item-from">Откуда: —</div>
             </div>
-            <button class="secondary" style="width: auto; padding: 10px 14px; margin: 0; font-size: 13px;" onclick="deselectAllInRoom()">Снять</button>
-            <button class="ok" style="width: auto; padding: 10px 14px; margin: 0; font-size: 13px;" onclick="showBatchMoveForm()">📦 Переместить</button>
+            
+            <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">ШАГ 1. КУДА?</h3>
+            <div id="move-rooms-list" class="grid-container" style="padding: 0; gap: 8px; margin-bottom: 16px;"></div>
+            
+            <div id="move-step-2" class="hidden">
+                <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">ШАГ 2. ПОДТВЕРЖДЕНИЕ</h3>
+                <div class="card" style="background: rgba(52, 199, 89, 0.1); border-color: var(--success); margin-bottom: 16px;">
+                    <div style="font-size: 13px; color: var(--success);">Куда</div>
+                    <div style="font-weight: 700; font-size: 16px; color: var(--text);" id="move-confirm-text"></div>
+                </div>
+                <div class="input-group">
+                    <label>Количество</label>
+                    <input type="number" id="move-qty" value="1" min="1">
+                </div>
+                <button class="ok" id="move-confirm-btn" onclick="executeMoveItem()">Переместить</button>
+            </div>
         </div>
     </div>
 
@@ -438,43 +465,6 @@
 
             <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
             <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
-        </div>
-    </div>
-
-    <div id="screen-move-item" class="screen hidden">
-        <div class="sticky-header">
-            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
-            <div class="sticky-title">Переместить</div>
-            <div style="width: 80px;"></div>
-        </div>
-        <div style="margin-top: 16px;">
-            <div class="stats-card" style="margin-bottom: 16px;">
-                <div class="stats-title">Что перемещаем</div>
-                <div style="font-size: 17px; font-weight: 700; margin-bottom: 6px;" id="move-item-name"></div>
-                <div style="font-size: 13px; color: var(--text-muted); line-height: 1.5;" id="move-item-info"></div>
-            </div>
-            
-            <div id="move-step-1">
-                <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Шаг 1. Куда?</h3>
-                <div id="move-room-cards" class="eq-grid" style="padding: 0;"></div>
-            </div>
-            
-            <div id="move-step-2" class="hidden">
-                <button class="secondary" style="padding: 10px; margin-bottom: 16px; font-size: 13px;" onclick="backToMoveStep1()">← Другая комната</button>
-                <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Шаг 2. Полка</h3>
-                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Комната: <b id="move-selected-room"></b></div>
-                <div id="move-spot-chips" class="filters" style="flex-wrap: wrap;"></div>
-            </div>
-            
-            <div id="move-step-3" class="hidden">
-                <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Шаг 3. Подтверждение</h3>
-                <div class="status-badge status-free" style="text-align: left; padding: 16px;">
-                    <div style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Куда</div>
-                    <div style="font-size: 15px;" id="move-selected-path"></div>
-                </div>
-                <div class="input-group"><label>Количество</label><input id="move-qty" type="number" value="1" min="1"></div>
-                <button class="ok" onclick="executeMoveItem()" style="margin-top: 12px;">✅ Переместить</button>
-            </div>
         </div>
     </div>
 
@@ -543,15 +533,14 @@
             <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
             <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
             <div class="input-group"><label>Категория</label><select id="add-category"><option value="">Без категории</option></select></div>
-            <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
-            <div class="input-group"><label>Место</label><select id="add-spot"><option value="">Без места</option></select></div>
+            <div class="input-group"><label>Локация (Комната)</label><select id="add-location"></select></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
             <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
             <div class="input-group">
                 <label>Бюджет</label>
                 <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
             </div>
-            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например, Мартемьянов"></div>
             <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
             <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
             <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
@@ -559,7 +548,7 @@
                 <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
                 <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
             </div>
-            <button class="ok" id="add-save-btn" onclick="saveItem()">Сохранить</button>
+            <button class="ok" id="save-item-btn" onclick="saveItem()">Сохранить</button>
         </div>
     </div>
 
@@ -574,19 +563,6 @@
             <textarea id="terminal-sql" rows="6" placeholder="UPDATE items SET category = 'Фототехника' WHERE ..." style="font-family: monospace; font-size: 14px;"></textarea>
             <button onclick="executeTerminal()">Выполнить</button>
             <div id="terminal-result" style="margin-top: 20px;"></div>
-        </div>
-    </div>
-
-    <div id="screen-spot-qr" class="screen hidden">
-        <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
-            <div class="sticky-title">Создать полку</div>
-            <div style="width: 80px;"></div>
-        </div>
-        <div style="margin-top: 16px;">
-            <div class="input-group"><label>Название полки</label><input id="spot-name" placeholder="Например, Т1"></div>
-            <button onclick="createSpot()">Создать</button>
-            <div id="spot-qr-result" style="text-align:center; margin-top:20px;"></div>
         </div>
     </div>
 
@@ -610,12 +586,8 @@
         </div>
         <div style="margin-top: 16px;">
             <div class="input-group">
-                <label>1. Куда переместить (Комната)</label>
-                <select id="batch-to-location" onchange="updateBatchSpots()"></select>
-            </div>
-            <div class="input-group">
-                <label>2. На какую полку?</label>
-                <select id="batch-to-spot"><option value="">Без места</option></select>
+                <label>Куда переместить</label>
+                <select id="batch-to-location"></select>
             </div>
             <button onclick="executeBatchMove()" id="batch-confirm-btn" style="margin-top:20px;">Подтвердить</button>
         </div>
@@ -625,7 +597,7 @@
         <div class="nav-item active" id="nav-main" onclick="backToMain()"><span class="icon">📦</span><span>Главная</span></div>
         <div class="nav-item" id="nav-equipment" onclick="showEquipmentMenu()"><span class="icon">📸</span><span>Оборуд.</span></div>
         <div class="nav-item" id="nav-platforms" onclick="showPlatforms()"><span class="icon">📍</span><span>Площадки</span></div>
-        <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>ТХ</span></div>
+        <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>Теплоходы</span></div>
         <div class="nav-item" id="nav-rooms" onclick="showRooms()"><span class="icon">🏢</span><span>Склад</span></div>
         <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настр.</span></div>
     </div>
@@ -638,18 +610,21 @@
             HapticFeedback: { impactOccurred: () => {}, notificationOccurred: () => {} }
         };
         tg.ready(); tg.expand();
+        
         if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
 
-        let currentItem = null, locations = [], allItems = [], spots = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
+        let currentItem = null, locations = [], allItems = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let currentEqCategory = "";
         let currentTakeCategory = "";
         let cachedPlatforms = [];
         let cachedTH = [];
         let invScannedCodes = [];
         let autoRefreshInterval = null;
-        let moveTarget = { roomId: null, roomName: "", spot: "" };
 
-        window.onerror = function(message, source, lineno) {
+        let selectedMoveRoomId = null;
+        let selectedMoveRoomName = "";
+
+        window.onerror = function(message, source, lineno, colno, error) {
             const errorText = `JS Error: ${message} at ${source}:${lineno}`;
             console.error(errorText);
             fetch('/api/log_error', {
@@ -681,6 +656,7 @@
             const wrapper = document.getElementById(wrapperId);
             if (input.value.length > 0) wrapper.classList.add('has-text');
             else wrapper.classList.remove('has-text');
+            
             if (input.id === 'search-input') filterItems();
             if (input.id === 'eq-search-input') filterEquipmentItems();
             if (input.id === 'take-search-input') renderTakeItems();
@@ -691,6 +667,7 @@
             input.value = '';
             document.getElementById(wrapperId).classList.remove('has-text');
             input.focus();
+            
             if (inputId === 'search-input') filterItems();
             if (inputId === 'eq-search-input') filterEquipmentItems();
             if (inputId === 'take-search-input') renderTakeItems();
@@ -709,6 +686,11 @@
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
+        }
+
+        function openDevConsole() {
+            if (window.eruda) { window.eruda.init(); window.eruda.show(); }
+            else { notify("Консоль не загрузилась."); }
         }
 
         function promptClearDatabase() {
@@ -747,35 +729,40 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
+                
                 if (currentUser.is_registered === 0) { 
                     document.getElementById("reg-name").value = currentUser.full_name || "";
                     showScreen("screen-register"); 
                     return; 
                 }
+                
                 const userInfoEl = document.getElementById("user-info");
                 if (userInfoEl) {
                     userInfoEl.innerHTML = `${currentUser.full_name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
                 }
+
                 if (currentUser.role === "admin") { 
                     const navSettings = document.getElementById("nav-settings");
                     if (navSettings) navSettings.classList.remove("hidden");
                     document.getElementById("export-history-btn").classList.remove("hidden");
                 }
+                
                 const cached = localStorage.getItem("cachedPlatforms");
-                if (cached) { try { cachedPlatforms = JSON.parse(cached); } catch(e) {} }
+                if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
                 const cachedTh = localStorage.getItem("cachedTH");
-                if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); } catch(e) {} }
+                if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `
                     <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
                     <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
                 `;
 
-                await loadLocations(); await loadSpots(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
+                await loadLocations(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
 
                 if (autoRefreshInterval) clearInterval(autoRefreshInterval);
                 autoRefreshInterval = setInterval(() => { loadItems(); }, 15000);
+
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
         }
 
@@ -792,7 +779,7 @@
         }
 
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
-
+        
         async function loadMyBookings() { 
             try { 
                 const rows = await api("/api/my_bookings"); 
@@ -814,7 +801,7 @@
                 if (!stats.length) { document.getElementById("stats-box").classList.add("hidden"); return; }
                 const box = document.getElementById("stats-box");
                 box.classList.remove("hidden");
-                box.innerHTML = `<div class="stats-title">Обзор склада</div>` + stats.map(s => `
+                box.innerHTML = `<div class="stats-title">Обзор склада по категориям</div>` + stats.map(s => `
                     <div class="stat-row">
                         <div class="stat-name">${s.name}</div>
                         <div class="stat-nums"><span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}</div>
@@ -843,6 +830,7 @@
             const catOpts = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
             document.getElementById("add-category").innerHTML = catOpts;
             document.getElementById("edit-category").innerHTML = catOpts;
+            
             const list = document.getElementById("categories-list");
             if (list) {
                 list.innerHTML = categories.map(c => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${c.name}</b></div><div style="display:flex; gap:8px;"><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameCategory(${c.id}, '${c.name}')">✏️</button><button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="deleteCategory(${c.id})">🗑</button></div></div>`).join("");
@@ -853,31 +841,7 @@
         async function renameCategory(id, oldName) { const newName = prompt("Новое название категории:", oldName); if (!newName || newName === oldName) return; try { await api("/api/categories/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); showToast("Обновлено"); loadCategories(); } catch (e) { notify(e.message); } }
         async function deleteCategory(id) { if (!confirm("Удалить категорию?")) return; try { await api(`/api/categories/${id}`, { method: "DELETE" }); showToast("Удалено"); loadCategories(); } catch (e) { notify(e.message); } }
 
-        async function loadSpots() { 
-            spots = await api("/api/spots"); 
-            document.getElementById("add-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); 
-            const list = document.getElementById("settings-spots-list"); 
-            if (list) { 
-                list.innerHTML = spots.map(s => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${s.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameSpot('${s.name}')">✏️</button></div>`).join(""); 
-            } 
-        }
-        async function renameSpot(oldName) { const newName = prompt("Новое название полки:", oldName); if (!newName || newName === oldName) return; try { await api("/api/spots/update", { method: "POST", body: JSON.stringify({ old_name: oldName, new_name: newName }) }); showToast("Обновлено"); loadSpots(); } catch (e) { notify(e.message); } }
-        
-        function updateFilterSpots() {
-            const locId = parseInt(document.getElementById("filter-location").value);
-            const locSelect = document.getElementById("filter-location");
-            const spotSelect = document.getElementById("filter-spot");
-            if (locId) locSelect.classList.add("active-filter");
-            else locSelect.classList.remove("active-filter");
-            spotSelect.innerHTML = `<option value="">Все полки</option>`;
-            if (locId) {
-                const locSpots = allItems.filter(i => i.stocks.some(s => s.location_id === locId)).map(i => i.stocks.filter(s => s.location_id === locId).map(s => s.spot)).flat();
-                const uniqueSpots = [...new Set(locSpots)].filter(s => s);
-                spotSelect.innerHTML += uniqueSpots.map(s => `<option value="${s}">${s}</option>`).join("");
-            }
-        }
-
-        function showSettings() { loadLocations(); loadCategories(); loadSpots(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        function showSettings() { loadLocations(); loadCategories(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
         
         async function loadUsers() { 
             const list = document.getElementById("users-list"); 
@@ -912,7 +876,9 @@
         
         async function loadItems() { 
             const list = document.getElementById("items-list"); 
-            list.innerHTML = "<p>Загрузка...</p>"; 
+            if(list.innerHTML.includes("Ничего не найдено") || list.innerHTML.includes("Загрузка")) {
+                list.innerHTML = "<p>Загрузка...</p>"; 
+            }
             try { 
                 allItems = await api("/api/items"); 
                 filterItems(); 
@@ -957,6 +923,7 @@
         function renderItemsGrid(itemsArray, containerId) {
             const list = document.getElementById(containerId); 
             if (!itemsArray.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
+            
             const sorted = [...itemsArray].sort((a, b) => {
                 const aHeld = a.holders && a.holders.length > 0;
                 const bHeld = b.holders && b.holders.length > 0;
@@ -964,14 +931,16 @@
                 if (!aHeld && bHeld) return 1;
                 return 0;
             });
+
             list.innerHTML = sorted.map(i => { 
-                let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}${s.spot ? ` · ${s.spot}` : ""}</div>`).join(""); 
+                let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}</div>`).join(""); 
                 let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
                 let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
                 let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
                 let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
                 let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
+                
                 let heldHtml = "";
                 let heldText = "";
                 let dimmedClass = "";
@@ -981,6 +950,7 @@
                     heldText = `<div class="held-text">У ${i.holders[0].full_name}</div>`;
                 }
                 if (i.kind === 'consumable' && i.total === 0) dimmedClass = "dimmed";
+                
                 return `
                 <div class="card item-card ${dimmedClass}" onclick="openItem('${i.code}')">
                     ${heldHtml}
@@ -1000,15 +970,15 @@
         function filterItems() { 
             const query = document.getElementById("search-input").value.toLowerCase(); 
             const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
-            const filterSpot = document.getElementById("filter-spot").value;
             const filterKind = document.getElementById("filter-kind").value;
+
             const filtered = allItems.filter(i => {
                 const matchesQuery = i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query));
                 const matchesLoc = !filterLoc || i.stocks.some(s => s.location_id === filterLoc);
-                const matchesSpot = !filterSpot || i.stocks.some(s => s.spot === filterSpot);
                 const matchesKind = !filterKind || i.kind === filterKind;
-                return matchesQuery && matchesLoc && matchesSpot && matchesKind;
+                return matchesQuery && matchesLoc && matchesKind;
             });
+
             renderItemsGrid(filtered, "items-list");
         }
 
@@ -1038,6 +1008,7 @@
             document.getElementById("equipment-list-title").textContent = catName;
             document.getElementById("eq-search-input").value = "";
             document.getElementById("eq-search-wrapper").classList.remove("has-text");
+            
             const filtered = allItems.filter(i => i.category === catName);
             renderItemsGrid(filtered, "equipment-items-list");
         }
@@ -1056,20 +1027,16 @@
             renderItemsGrid(filtered, "equipment-items-list");
         }
 
-        function scanQr() {
-            if (!tg.showScanQrPopup) { notify("Сканер доступен только с телефона"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
-                if (text) { openItem(text.trim()); return true; }
-            });
-        }
-
         function showTakeScreen() {
             currentTakeCategory = "";
             document.getElementById("take-cat-all-btn").classList.add("active-filter");
+            
             const catList = document.getElementById("take-categories-list");
             catList.innerHTML = categories.map(c => `<button class="secondary" style="width: auto; padding: 10px 18px; margin: 0; font-size: 14px; border-radius: 20px;" onclick="filterTakeCategory('${c.name}', this)">${c.name}</button>`).join("");
+            
             document.getElementById("take-search-input").value = "";
             document.getElementById("take-search-wrapper").classList.remove("has-text");
+            
             renderTakeItems();
             showScreen("screen-take");
         }
@@ -1085,13 +1052,17 @@
         function renderTakeItems() {
             const list = document.getElementById("take-items-list");
             const query = document.getElementById("take-search-input").value.toLowerCase();
+            
             let available = allItems.filter(i => i.kind === 'equipment' && i.total > 0 && !i.needs_repair && (!i.holders || i.holders.length === 0));
+            
             if (currentTakeCategory) available = available.filter(i => i.category === currentTakeCategory);
             if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
+
             if (!available.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>";
                 return;
             }
+
             list.innerHTML = available.map(i => {
                 let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}</div>`).join(""); 
                 return `
@@ -1102,6 +1073,13 @@
                 </div>
                 `;
             }).join("");
+        }
+
+        function scanQr() { 
+            if (!tg.showScanQrPopup) { notify("Сканер доступен только с телефона"); return; } 
+            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { 
+                if (text) { openItem(text.trim()); return true; } 
+            }); 
         }
 
         function scanTakeQr() {
@@ -1126,7 +1104,8 @@
 
         function showPlatforms() {
             updateNavActive("nav-platforms");
-            if (cachedPlatforms.length) renderPlatformsList();
+            if (!cachedPlatforms.length) { syncGoogle('кц'); }
+            else { renderPlatformsList(); }
             showScreen("screen-platforms");
         }
 
@@ -1143,11 +1122,14 @@
         function renderPlatformsList() {
             const list = document.getElementById("platforms-list");
             const query = document.getElementById("platform-search").value.toLowerCase();
+            
             if (!cachedPlatforms.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Нажмите «Обновить данные», чтобы загрузить.</p>";
                 return;
             }
+
             let filtered = cachedPlatforms.filter(row => (row["Площадка"] || "").toLowerCase().includes(query));
+
             filtered.sort((a, b) => {
                 const missingA = (a["чего не хватает"] || "").toUpperCase();
                 const missingB = (b["чего не хватает"] || "").toUpperCase();
@@ -1156,10 +1138,12 @@
                 if (isOkA !== isOkB) return isOkA ? 1 : -1;
                 return parseDateStr(b["дата"]) - parseDateStr(a["дата"]);
             });
+
             if (!filtered.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>";
                 return;
             }
+
             list.innerHTML = filtered.map(row => {
                 const place = row["Площадка"] || "—";
                 const date = row["дата"] || "";
@@ -1167,8 +1151,15 @@
                 const counter = row["счетчик"] || "0";
                 const stock = row["запас"] || "";
                 const missing = row["чего не хватает"] || "";
-                const isOk = missing.toUpperCase().includes("ХВАТАЕТ");
-                const statusClass = isOk ? "status-ok" : "status-bad";
+                
+                let statusHtml = "";
+                if (missing) {
+                    const isOk = missing.toUpperCase().includes("ХВАТАЕТ");
+                    statusHtml = `<div class="platform-status ${isOk ? 'status-ok' : 'status-bad'}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}</div>`;
+                } else {
+                    statusHtml = `<div class="platform-status" style="background:var(--skeleton-bg); color:var(--text-muted);">⚪ Нет данных</div>`;
+                }
+                
                 return `
                 <div class="card platform-card">
                     <div class="platform-title"><span>${place}</span><span class="platform-date">${date}</span></div>
@@ -1177,7 +1168,7 @@
                         <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
                         ${stock ? `<div class="platform-info-row"><span>📦 Запас:</span> <b>${stock}</b></div>` : ""}
                     </div>
-                    <div class="platform-status ${statusClass}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}</div>
+                    ${statusHtml}
                 </div>
                 `;
             }).join("");
@@ -1187,21 +1178,25 @@
 
         function showTH() {
             updateNavActive("nav-th");
-            if (cachedTH.length) renderTHList();
+            if (!cachedTH.length) { syncGoogle('тх мск'); }
+            else { renderTHList(); }
             showScreen("screen-th");
         }
 
         function renderTHList() {
             const list = document.getElementById("th-list");
             const query = document.getElementById("th-search").value.toLowerCase();
+            
             if (!cachedTH.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Нажмите «Обновить данные», чтобы загрузить.</p>";
                 return;
             }
+
             let filtered = cachedTH.filter(row => {
                 const name = row["Название"] || Object.values(row)[0] || "";
-                return String(name).toLowerCase().includes(query);
+                return name.toLowerCase().includes(query);
             });
+
             filtered.sort((a, b) => {
                 const askA = (a["Что просят"] || a["что просят"] || "").toUpperCase();
                 const askB = (b["Что просят"] || b["что просят"] || "").toUpperCase();
@@ -1210,10 +1205,12 @@
                 if (isOkA !== isOkB) return isOkA ? 1 : -1;
                 return parseDateStr(b["Дата"] || b["дата"] || "") - parseDateStr(a["Дата"] || a["дата"] || "");
             });
+
             if (!filtered.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>";
                 return;
             }
+
             list.innerHTML = filtered.map(row => {
                 const name = row["Название"] || Object.values(row)[0] || "—";
                 const date = row["Дата"] || row["дата"] || "";
@@ -1223,19 +1220,26 @@
                 const frames = row["Рамки"] || row["рамки"] || "";
                 const types = row["По видам"] || row["по видам"] || "";
                 const ask = row["Что просят"] || row["что просят"] || "";
-                const isOk = ask.toUpperCase().includes("ХВАТАЕТ");
-                const statusClass = isOk ? "status-ok" : "status-bad";
+                
+                let statusHtml = "";
+                if (ask) {
+                    const isOk = ask.toUpperCase().includes("ХВАТАЕТ");
+                    statusHtml = `<div class="platform-status ${isOk ? 'status-ok' : 'status-bad'}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${ask}`}</div>`;
+                } else {
+                    statusHtml = `<div class="platform-status" style="background:var(--skeleton-bg); color:var(--text-muted);">⚪ Статус не указан</div>`;
+                }
+                
                 return `
                 <div class="card platform-card">
                     <div class="platform-title"><span>${name}</span><span class="platform-date">${date}</span></div>
                     <div class="platform-info">
                         <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
-                        <div class="platform-info-row"><span>📄 Бумага:</span> <b>${paper}</b></div>
-                        <div class="platform-info-row"><span>🎵 Винил:</span> <b>${vinyl}</b></div>
-                        <div class="platform-info-row"><span>🖼 Рамки:</span> <b>${frames}</b></div>
+                        ${paper ? `<div class="platform-info-row"><span>📄 Бумага:</span> <b>${paper}</b></div>` : ""}
+                        ${vinyl ? `<div class="platform-info-row"><span>🎵 Винил:</span> <b>${vinyl}</b></div>` : ""}
+                        ${frames ? `<div class="platform-info-row"><span>🖼 Рамки:</span> <b>${frames}</b></div>` : ""}
                         ${types && types !== "Нет (указать каких)" ? `<div class="platform-info-row"><span>📦 Виды:</span> <b>${types}</b></div>` : ""}
                     </div>
-                    <div class="platform-status ${statusClass}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${ask}`}</div>
+                    ${statusHtml}
                 </div>
                 `;
             }).join("");
@@ -1246,6 +1250,7 @@
         async function syncGoogle(sheetName) {
             const btn = sheetName === 'кц' ? document.getElementById("sync-btn-plat") : document.getElementById("sync-btn-th");
             setLoading(btn, true, "Загрузка...");
+            
             try {
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
@@ -1273,11 +1278,12 @@
         async function showRooms() { 
             showScreen("screen-rooms"); 
             updateNavActive("nav-rooms"); 
+            document.getElementById("batch-actions").style.display = "none";
             const list = document.getElementById("rooms-list"); 
             list.innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`; 
             try { 
                 const rooms = await api("/api/locations_view"); 
-                list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">📦 Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div class="room-arrow-circle">›</div></div>`).join(""); 
+                list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">📦 Товаров: ${r.count} шт.</div></div><div class="room-arrow-circle">›</div></div>`).join(""); 
             } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
         }
         
@@ -1288,84 +1294,42 @@
             list.innerHTML = `<p>Загрузка...</p>`; 
             try { 
                 const data = await api(`/api/room_detail/${id}`); 
-                let html = ""; 
-                const shelfKeys = Object.keys(data.shelves).sort(); 
-                const accordionMode = shelfKeys.length > 2;
-                if (shelfKeys.length > 0) { 
-                    shelfKeys.forEach((shelfName, index) => { 
-                        const shelfId = `shelf-${index}`; 
-                        const isOpen = !accordionMode; 
-                        const openClass = isOpen ? "open" : "";
-                        const hiddenClass = isOpen ? "" : "hidden";
-                        html += `<div class="shelf-header ${openClass}" id="header-${shelfId}" onclick="toggleShelf('${shelfId}')"><span>📦 Полка: ${shelfName} (${data.shelves[shelfName].length})</span><span class="shelf-arrow">▶</span></div><div class="grid-container shelf-content ${hiddenClass}" id="${shelfId}" style="padding:0; margin-bottom: 16px;">`; 
-                        data.shelves[shelfName].forEach(item => { 
-                            let badges = "";
-                            if (item.category) badges += `<span class="badge category">${item.category}</span>`;
-                            if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
-                            if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
-                            if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
-                            if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
-                            if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
-                            html += `
-                            <div class="card room-item-card">
-                                <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
-                                <div class="room-item-content" onclick="openItem('${item.code}')">
-                                    <div class="room-item-name">${item.name}</div>
-                                    <div class="room-item-meta">${item.code} · ${item.quantity} шт</div>
-                                    <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
-                                </div>
-                            </div>`; 
-                        }); 
-                        html += `</div>`; 
-                    }); 
-                } 
-                if (data.no_shelf.length > 0) { 
-                    html += `<h2 style="font-size:18px; margin-top: 30px; color: var(--warning); font-weight: 700;">⚠️ Без полки / На руках</h2><div class="grid-container" style="padding:0;">`; 
-                    data.no_shelf.forEach(item => { 
-                        let badges = "";
-                        if (item.category) badges += `<span class="badge category">${item.category}</span>`;
-                        if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
-                        if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
-                        html += `
-                        <div class="card room-item-card">
-                            <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
-                            <div class="room-item-content" onclick="openItem('${item.code}')">
-                                <div class="room-item-name">${item.name}</div>
-                                <div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div>
-                                <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
-                            </div>
-                        </div>`; 
-                    }); 
-                    html += `</div>`;
-                } 
-                list.innerHTML = html || "<p>В этой комнате пусто.</p>"; 
+                if (!data.items || data.items.length === 0) {
+                    list.innerHTML = "<p>В этой комнате пусто.</p>"; 
+                    return;
+                }
+                
+                list.innerHTML = data.items.map(item => { 
+                    let badges = "";
+                    if (item.category) badges += `<span class="badge category">${item.category}</span>`;
+                    if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
+                    if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
+                    if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
+                    if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
+                    if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
+                    if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
+
+                    return `
+                    <div class="card room-item-card">
+                        <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
+                        <div class="room-item-content" onclick="openItem('${item.code}')">
+                            <div class="room-item-name">${item.name}</div>
+                            <div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div>
+                            <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
+                        </div>
+                    </div>`; 
+                }).join(""); 
                 setTimeout(updateBatchUI, 0);
             } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
         }
         
-        function toggleShelf(shelfId) { 
-            const content = document.getElementById(shelfId); 
-            const header = document.getElementById(`header-${shelfId}`); 
-            haptic('light');
-            if (content.classList.contains("hidden")) { 
-                content.classList.remove("hidden"); header.classList.add("open"); 
-            } else { 
-                content.classList.add("hidden"); header.classList.remove("open"); 
-            } 
-        }
-        
         function updateBatchUI() {
-            const total = document.querySelectorAll('#room-items input[type="checkbox"]').length;
-            const selectedCount = document.getElementById("selected-count");
-            if (selectedCount) selectedCount.textContent = selectedItems.length;
             const bar = document.getElementById("batch-actions");
-            const selectAllBtn = document.getElementById("select-all-btn");
-            if (selectedItems.length === 0) {
-                bar.style.display = "none";
-                if (selectAllBtn && total > 0) selectAllBtn.style.display = "block";
-            } else {
+            if (selectedItems.length > 0) {
                 bar.style.display = "flex";
-                if (selectAllBtn) selectAllBtn.style.display = "none";
+                document.getElementById("selected-count").textContent = selectedItems.length;
+            } else {
+                bar.style.display = "none";
             }
         }
 
@@ -1375,7 +1339,7 @@
             document.querySelectorAll('#room-items input[type="checkbox"]').forEach(cb => {
                 cb.checked = true;
                 const code = cb.getAttribute("data-code");
-                if (code) selectedItems.push(code);
+                if (code && !selectedItems.includes(code)) selectedItems.push(code);
             });
             updateBatchUI();
         }
@@ -1395,32 +1359,19 @@
         }
         
         function showBatchMoveForm() { 
-            document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}" ${l.id === currentRoomId ? 'selected' : ''}>${l.name}</option>`).join(""); 
-            document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); 
+            document.getElementById("batch-to-location").innerHTML = locations.filter(l => l.id !== currentRoomId).map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
             showScreen("screen-batch-move"); 
-        }
-
-        function updateBatchSpots() {
-            const locId = parseInt(document.getElementById("batch-to-location").value);
-            const spotSelect = document.getElementById("batch-to-spot");
-            spotSelect.innerHTML = `<option value="">Без места</option>`;
-            if (locId) {
-                const locSpots = allItems.filter(i => i.stocks.some(s => s.location_id === locId)).map(i => i.stocks.filter(s => s.location_id === locId).map(s => s.spot)).flat();
-                const uniqueSpots = [...new Set(locSpots)].filter(s => s);
-                spotSelect.innerHTML += uniqueSpots.map(s => `<option value="${s}">${s}</option>`).join("");
-            }
         }
         
         async function executeBatchMove() { 
             const btn = document.getElementById("batch-confirm-btn");
             const toLocation = parseInt(document.getElementById("batch-to-location").value); 
-            const toSpot = document.getElementById("batch-to-spot").value; 
             setLoading(btn, true, "Перемещение...");
             try { 
-                await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation, to_spot: toSpot }) }); 
+                await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation }) }); 
                 showToast("Перемещено!"); 
-                selectedItems = [];
-                openRoom(currentRoomId, document.getElementById("room-title").textContent);
+                document.getElementById("batch-actions").style.display = "none";
+                showRooms(); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
 
@@ -1458,6 +1409,7 @@
                 let msg = "";
                 if (res.missing && res.missing.length > 0) msg += `Не найдено: ${res.missing.length} шт.\n`;
                 if (res.extra && res.extra.length > 0) msg += `Лишние (не по базе): ${res.extra.length} шт.\n`;
+                
                 if (msg) {
                     showToast("Есть расхождения", 'error');
                     alert(msg + "\nПотеряшки:\n" + (res.missing || []).join('\n') + "\nЛишние:\n" + (res.extra || []).join('\n'));
@@ -1472,22 +1424,29 @@
             try { 
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`); 
                 document.getElementById("item-title").textContent = currentItem.name; 
+                
                 const repairBtn = document.getElementById("repair-btn"); 
                 if (currentItem.kind === 'consumable') { repairBtn.style.display = 'none'; } else { repairBtn.style.display = 'block'; } 
+                
                 const editBtn = document.getElementById("edit-btn"); 
                 if (currentUser.role === 'admin') { editBtn.style.display = 'block'; } else { editBtn.style.display = 'none'; } 
+                
                 let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; 
                 let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; 
                 let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; 
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; 
                 let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; 
                 let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : ""; 
+                
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { 
                     document.getElementById("kit-box").classList.remove("hidden"); 
                     document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; 
                     document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; 
                     document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; 
-                } else { document.getElementById("kit-box").classList.add("hidden"); } 
+                } else { 
+                    document.getElementById("kit-box").classList.add("hidden"); 
+                } 
+                
                 let statusHtml = ""; 
                 if (currentItem.needs_repair) { 
                     statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; 
@@ -1498,11 +1457,13 @@
                         statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; 
                     } else { 
                         let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); 
-                        let places = currentItem.stocks.map(s => s.location_name + (s.spot ? ` (${s.spot})` : "")).filter((v,i,a)=>a.indexOf(v)===i).join(", "); 
+                        let places = currentItem.stocks.map(s => s.location_name).filter((v,i,a)=>a.indexOf(v)===i).join(", "); 
                         statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
                     } 
                 } 
+                
                 document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
+                
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
                 renderActions(); 
@@ -1526,6 +1487,7 @@
             if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } 
             showScreen("screen-edit-item"); 
         }
+        
         function toggleEditFields() { if (document.getElementById("edit-kind").value === "consumable") { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } }
         
         async function saveEditItem() { 
@@ -1548,9 +1510,20 @@
                 openItem(currentItem.code); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
+        
         async function deleteItemFromEdit() { if (!confirm(`Отправить в архив "${currentItem.name}"?`)) return; try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); showToast("В архиве"); backToMain(); } catch (e) { notify(e.message); } }
         
-        async function showItemHistory() { showScreen("screen-item-history"); const list = document.getElementById("item-history-list"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api(`/api/history`); const filtered = logs.filter(l => l.item_code === currentItem.code); if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } list.innerHTML = filtered.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type === 'checkout' ? 'Взял' : l.type === 'return' ? 'Вернул' : l.type === 'move' ? 'Переместил' : 'Списал'} — ${l.user_name} (${l.quantity} шт)</div></div>`).join(""); } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function showItemHistory() { 
+            showScreen("screen-item-history"); 
+            const list = document.getElementById("item-history-list"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const logs = await api(`/api/history`); 
+                const filtered = logs.filter(l => l.item_code === currentItem.code); 
+                if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } 
+                list.innerHTML = filtered.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type === 'checkout' ? 'Взял' : l.type === 'return' ? 'Вернул' : l.type === 'move' ? 'Переместил' : 'Списал'} — ${l.user_name} (${l.quantity} шт)</div></div>`).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
 
         function renderActions() { 
             const box = document.getElementById("actions"); 
@@ -1559,6 +1532,7 @@
             const myCheckout = currentItem.holders.find(h => h.user_id === myId); 
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId); 
             let html = ""; 
+            
             if (currentItem.needs_repair) { 
                 html += `<div class="status-badge status-broken">Выдача заблокирована</div>`; 
             } else if (isEq) { 
@@ -1572,94 +1546,72 @@
             } else { 
                 html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
             } 
-            const hasStock = currentItem.stocks.some(s => s.quantity > 0);
-            if (hasStock) {
-                html += `<button class="secondary" onclick="showMoveScreen()" style="margin-top:20px;">📦 Переместить</button>`;
-            }
+            
+            if (currentItem.stocks.some(s => s.quantity > 0)) { 
+                html += `<button class="secondary" onclick="showMoveItemScreen()" style="margin-top:20px;">📦 Переместить</button>`;
+            } 
             box.innerHTML = html; 
         }
         
-        function showMoveScreen() {
-            const stock = currentItem.stocks.filter(s => s.quantity > 0);
-            if (!stock.length) { notify("Нечего перемещать"); return; }
-            moveTarget = { roomId: null, roomName: "", spot: "" };
+        function showMoveItemScreen() {
+            selectedMoveRoomId = null; selectedMoveRoomName = "";
             document.getElementById("move-item-name").textContent = currentItem.name;
-            const srcHtml = stock.map(s => `📍 ${s.location_name}${s.spot ? ' / ' + s.spot : ''} — ${s.quantity} шт`).join('<br>');
-            document.getElementById("move-item-info").innerHTML = `Код: ${currentItem.code}<br>${srcHtml}`;
-            const roomsHtml = locations.map(l => `
-                <div class="eq-btn" onclick="selectMoveRoom(${l.id}, '${l.name.replace(/'/g, "\\'")}')">
-                    <div>${l.name}</div>
-                    <span>🏢</span>
+            const fromLoc = currentItem.stocks.find(s => s.quantity > 0);
+            document.getElementById("move-item-from").textContent = `Откуда: ${fromLoc ? fromLoc.location_name : "?"}`;
+            
+            const roomsList = document.getElementById("move-rooms-list");
+            roomsList.innerHTML = locations.filter(l => !fromLoc || l.id !== fromLoc.location_id).map(l => `
+                <div class="card room-card" style="padding:16px;" onclick="selectMoveRoom(${l.id}, '${l.name}')">
+                    <div class="room-title" style="font-size:16px;">${l.name}</div>
+                    <div class="room-arrow-circle">›</div>
                 </div>
             `).join("");
-            document.getElementById("move-room-cards").innerHTML = roomsHtml;
-            document.getElementById("move-step-1").classList.remove("hidden");
+            
             document.getElementById("move-step-2").classList.add("hidden");
-            document.getElementById("move-step-3").classList.add("hidden");
+            document.getElementById("move-qty").value = 1;
             showScreen("screen-move-item");
         }
 
-        function backToMoveStep1() {
-            document.getElementById("move-step-1").classList.remove("hidden");
-            document.getElementById("move-step-2").classList.add("hidden");
-            document.getElementById("move-step-3").classList.add("hidden");
-        }
-
-        function selectMoveRoom(roomId, roomName) {
-            moveTarget.roomId = roomId;
-            moveTarget.roomName = roomName;
-            document.getElementById("move-selected-room").textContent = roomName;
-            const roomSpots = [...new Set(
-                allItems.flatMap(i => i.stocks.filter(s => s.location_id === roomId).map(s => s.spot)).filter(s => s)
-            )];
-            const chipsHtml = `
-                <button class="secondary" style="width: auto; padding: 10px 16px; margin: 0; font-size: 14px; border-radius: 20px;" onclick="selectMoveSpot('', this)">Без полки</button>
-                ${roomSpots.map(s => `<button class="secondary" style="width: auto; padding: 10px 16px; margin: 0; font-size: 14px; border-radius: 20px;" onclick="selectMoveSpot('${s.replace(/'/g, "\\'")}', this)">${s}</button>`).join("")}
-            `;
-            document.getElementById("move-spot-chips").innerHTML = chipsHtml;
+        function selectMoveRoom(id, name) {
+            haptic('light');
+            selectedMoveRoomId = id;
+            selectedMoveRoomName = name;
+            document.getElementById("move-confirm-text").textContent = name;
             document.getElementById("move-step-2").classList.remove("hidden");
-            document.getElementById("move-step-3").classList.add("hidden");
-        }
-
-        function selectMoveSpot(spot, btn) {
-            moveTarget.spot = spot;
-            document.querySelectorAll("#move-spot-chips button").forEach(b => b.classList.remove("active-filter"));
-            if (btn) btn.classList.add("active-filter");
-            document.getElementById("move-selected-path").textContent = `${moveTarget.roomName}${spot ? ' / ' + spot : ' / Без полки'}`;
-            document.getElementById("move-step-3").classList.remove("hidden");
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         }
 
         async function executeMoveItem() {
-            const stock = currentItem.stocks.filter(s => s.quantity > 0);
-            const srcStock = stock[0];
-            const qty = parseInt(document.getElementById("move-qty").value) || 0;
-            if (qty <= 0) { notify("Количество > 0"); return; }
-            if (srcStock.location_id === moveTarget.roomId && (srcStock.spot || "") === (moveTarget.spot || "")) {
-                notify("Туда же — выберите другую полку или комнату"); return;
-            }
-            const btn = document.querySelector("#move-step-3 .ok");
+            const btn = document.getElementById("move-confirm-btn");
+            const qty = parseInt(document.getElementById("move-qty").value);
+            const fromLoc = currentItem.stocks.find(s => s.quantity > 0);
+            if (!fromLoc) { notify("Нет в наличии"); return; }
+            if (qty <= 0 || qty > fromLoc.quantity) { notify("Неверное количество"); return; }
+            
             setLoading(btn, true, "Перемещение...");
             try {
                 await api("/api/move", { method: "POST", body: JSON.stringify({ 
                     code: currentItem.code, 
-                    from_location: srcStock.location_id, 
-                    to_location: moveTarget.roomId, 
-                    quantity: qty, 
-                    to_spot: moveTarget.spot, 
-                    from_spot: srcStock.spot || ""
+                    from_location: fromLoc.location_id, 
+                    to_location: selectedMoveRoomId, 
+                    quantity: qty 
                 }) });
                 showToast("Перемещено!");
                 openItem(currentItem.code);
-            } catch (e) { notify(e.message); setLoading(btn, false); }
+            } catch (e) {
+                notify(e.message);
+                setLoading(btn, false);
+            }
         }
-        
+
         async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div><div style="text-align:center; padding: 16px;"><div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Текст для QR:</div><div style="font-family: monospace; font-size: 16px; font-weight: bold;">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
+        
+        function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
         
         async function loadBookings(code) { 
             const list = document.getElementById("bookings-list"); 
@@ -1674,38 +1626,44 @@
                 list.innerHTML = rows.length ? rows.map(r => `<div class="booking-item"><b>${r.full_name}</b>: ${formatBack(r.date_from)} — ${formatBack(r.date_to)}</div>`).join("") : ""; 
             } catch (e) { list.innerHTML = ""; } 
         }
+        
         async function doBook() { 
             const fromRaw = document.getElementById("book-from").value; 
             const toRaw = document.getElementById("book-to").value; 
             if (!fromRaw || !toRaw) return; 
+            
             const formatDate = (str) => {
                 const parts = str.split('.');
                 if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
                 return str;
             };
+
             try { 
                 await api("/api/bookings", { method: "POST", body: JSON.stringify({ code: currentItem.code, date_from: formatDate(fromRaw), date_to: formatDate(toRaw) }) }); 
                 showToast("Забронировано"); 
                 loadBookings(currentItem.code); 
             } catch (e) { notify(e.message); } 
         }
+        
         async function loadComments(code) { const list = document.getElementById("comments-list"); try { const rows = await api(`/api/comments/${code}`); list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); } catch (e) { list.innerHTML = ""; } }
         async function doComment() { const text = document.getElementById("comment-text").value.trim(); if (!text) return; try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } }
+        
         async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
+        
         async function saveItem() { 
-            const btn = document.getElementById("add-save-btn"); 
+            const btn = document.getElementById("save-item-btn"); 
             const code = document.getElementById("add-code").value.trim(); 
             const name = document.getElementById("add-name").value.trim(); 
             const loc = parseInt(document.getElementById("add-location").value); 
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } 
+            
             const formData = new FormData(); 
             formData.append("code", code); 
             formData.append("name", name); 
             formData.append("kind", document.getElementById("add-kind").value); 
             formData.append("category", document.getElementById("add-category").value); 
             formData.append("location_id", loc); 
-            formData.append("spot", document.getElementById("add-spot").value); 
             formData.append("price", document.getElementById("add-price").value); 
             formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
             formData.append("serial_number", document.getElementById("add-serial-number").value); 
@@ -1717,8 +1675,13 @@
                 formData.append("quantity", document.getElementById("add-qty").value); 
                 formData.append("min_stock", document.getElementById("add-min-stock").value); 
             } 
+            
             setLoading(btn, true, "Сохранение..."); 
-            try { await api("/api/items", { method: "POST", body: formData }); showToast("Добавлено"); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } 
+            try { 
+                await api("/api/items", { method: "POST", body: formData }); 
+                showToast("Добавлено"); 
+                backToMain(); 
+            } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
         async function uploadExcel(input) {
@@ -1726,6 +1689,7 @@
             const file = input.files[0];
             const formData = new FormData();
             formData.append("file", file);
+            
             showToast("Загрузка файла...");
             try {
                 const res = await api("/api/import_file", { method: "POST", body: formData });
@@ -1733,11 +1697,8 @@
                 input.value = '';
             } catch (e) { notify(e.message); }
         }
-
-        function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
-        async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); showToast("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         
-        async function showHistory() { const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
         
         async function downloadHistory() {
             try {
@@ -1775,7 +1736,11 @@
             } catch (e) { notify("Ошибка скачивания: " + e.message); }
         }
 
-        function showTerminal() { document.getElementById("terminal-sql").value = ""; document.getElementById("terminal-result").innerHTML = ""; showScreen("screen-terminal"); }
+        function showTerminal() {
+            document.getElementById("terminal-sql").value = "";
+            document.getElementById("terminal-result").innerHTML = "";
+            showScreen("screen-terminal");
+        }
 
         async function executeTerminal() {
             const sql = document.getElementById("terminal-sql").value.trim();
@@ -1817,7 +1782,7 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-history", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
@@ -1826,6 +1791,7 @@
             if (id === "screen-platforms") updateNavActive("nav-platforms");
             if (id === "screen-th") updateNavActive("nav-th");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
+            if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
             window.scrollTo(0, 0);
         }
