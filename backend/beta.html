@@ -350,6 +350,7 @@
         <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="promptClearDatabase()">🗑 Очистить базу товаров</button>
+        <button class="danger" onclick="localStorage.clear(); location.reload();">🔄 Сбросить кэш браузера</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         
@@ -1109,6 +1110,7 @@
         async function executeBatchTake() {
             if (!selectedTakeItems.length) return;
             try {
+                // Пытаемся использовать массовый эндпоинт
                 const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
                 if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
                 if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
@@ -1116,7 +1118,30 @@
                 updateTakeBatchUI();
                 loadItems();
                 backToMain();
-            } catch (e) { notify(e.message); }
+            } catch (e) {
+                // Если сервер вернул 405 Method Not Allowed (значит бэкенд старый), делаем по одному
+                if (e.message.includes("Method Not Allowed") || e.message.includes("Not Found")) {
+                    showToast("Обновляем по одному...", "success");
+                    let successCount = 0;
+                    let errors = [];
+                    for (let code of selectedTakeItems) {
+                        try {
+                            await api("/api/checkout", { method: "POST", body: JSON.stringify({ code: code, taken_for: "" }) });
+                            successCount++;
+                        } catch (err) {
+                            errors.push(code + ": " + err.message);
+                        }
+                    }
+                    if (successCount > 0) showToast(`Взято: ${successCount} шт.`);
+                    if (errors.length > 0) alert("Ошибки:\n" + errors.join("\n"));
+                    selectedTakeItems = [];
+                    updateTakeBatchUI();
+                    loadItems();
+                    backToMain();
+                } else {
+                    notify(e.message);
+                }
+            }
         }
 
         function scanQr() { 
@@ -1231,6 +1256,13 @@
             setLoading(btn, true, "Загрузка...");
             try {
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
+                
+                if (res.status === "error") {
+                    alert("ОШИБКА СИНХРОНИЗАЦИИ:\n\n" + res.message);
+                    showToast("Ошибка синхронизации", "error");
+                    return;
+                }
+                
                 if (res.data && res.data.length) {
                     if (sheetName === 'кц') { 
                         localStorage.removeItem("cachedPlatforms_v8");
@@ -1244,13 +1276,17 @@
                         localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
+                    
                     if (res.sheet_title && res.sheet_title.toLowerCase() !== sheetName.toLowerCase()) {
                         notify(`Внимание! Сервер прочитал лист: ${res.sheet_title}`);
                     } else {
                         showToast("Данные обновлены");
                     }
-                } else { showToast("Данных нет"); }
-            } catch (e) { notify("Ошибка: " + e.message); } 
+                } else { showToast("Данных нет (лист пуст)"); }
+            } catch (e) { 
+                alert("ОШИБКА СЕТИ:\n" + e.message);
+                notify("Ошибка: " + e.message); 
+            } 
             finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
         }
 
