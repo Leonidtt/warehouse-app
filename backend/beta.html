@@ -72,7 +72,6 @@
         .badge.buyout { background: var(--purple); color: white; }
         .badge.repair { background: var(--danger); color: white; }
         .badge.low { background: var(--warning); color: white; }
-        .badge.category { background: rgba(175, 82, 222, 0.12); color: var(--purple); }
         .badge.on-hand { background: var(--warning); color: white; }
 
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 75px; background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
@@ -163,9 +162,10 @@
         .toast.error { background: rgba(255, 59, 48, 0.95); box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-        #batch-actions { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
-        .batch-btn-group { display: flex; gap: 8px; }
-        .batch-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
+        /* Плавающие панели */
+        .floating-bar { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
+        .floating-btn-group { display: flex; gap: 8px; }
+        .floating-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -173,14 +173,27 @@
     <div id="toast-container"></div>
     <div id="scroll-top-btn" onclick="window.scrollTo({top:0, behavior:'smooth'})">↑</div>
 
-    <div id="batch-actions">
+    <!-- ПАНЕЛЬ ДЛЯ КОМНАТ (ПЕРЕМЕЩЕНИЕ) -->
+    <div id="batch-actions" class="floating-bar">
         <div>
             <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
             <div style="font-weight: 700; font-size: 18px; color: var(--primary);" id="selected-count">0</div>
         </div>
-        <div class="batch-btn-group">
+        <div class="floating-btn-group">
             <button class="secondary" onclick="deselectAllInRoom()">Снять</button>
             <button class="ok" onclick="showBatchMoveForm()">Переместить</button>
+        </div>
+    </div>
+
+    <!-- ПАНЕЛЬ ДЛЯ ВЗЯТИЯ ТЕХНИКИ -->
+    <div id="take-batch-actions" class="floating-bar" style="border-color: var(--success);">
+        <div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
+            <div style="font-weight: 700; font-size: 18px; color: var(--success);" id="take-selected-count">0</div>
+        </div>
+        <div class="floating-btn-group">
+            <button class="secondary" onclick="deselectAllTakeItems()">Снять</button>
+            <button class="ok" onclick="executeBatchTake()">Взять</button>
         </div>
     </div>
 
@@ -194,27 +207,10 @@
         <button onclick="doRegister()" id="reg-btn" style="margin-top: 10px;">Зарегистрироваться</button>
     </div>
 
-    <!-- НОВЫЙ ЭКРАН ПРОФИЛЯ -->
-    <div id="screen-edit-profile" class="screen hidden" style="padding-top: 40px;">
-        <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
-            <div class="sticky-title">Профиль</div>
-            <div style="width: 80px;"></div>
-        </div>
-        <h1 style="text-align: center; margin-bottom: 10px; font-size: 24px; letter-spacing: -1px;">Ваши данные</h1>
-        <p style="text-align: center; color: var(--text-muted); margin-bottom: 30px; font-size: 15px;">Измените вашу Фамилию и Имя</p>
-        <div class="input-group">
-            <label>Фамилия и Имя</label>
-            <input id="profile-name" placeholder="Например, Петров Иван">
-        </div>
-        <button onclick="saveProfile()" id="save-profile-btn" class="ok" style="margin-top: 10px;">Сохранить</button>
-    </div>
-
     <div id="screen-main" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
-            <!-- Добавлен onclick и курсор -->
-            <div class="sticky-title" id="user-info" onclick="showEditProfile()" style="cursor: pointer;">Учёт</div>
+            <div class="sticky-title" id="user-info">Учёт</div>
             <div style="width: 80px;"></div>
         </div>
 
@@ -272,9 +268,6 @@
         </div>
         
         <div style="margin-top: 16px;">
-            <p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 0; margin-bottom: 16px;">Выберите товар из списка или отсканируйте QR</p>
-            <button class="ok" onclick="scanTakeQr()" style="font-size: 18px; padding: 20px; margin-bottom: 24px; border-radius: 18px; box-shadow: 0 8px 24px rgba(52, 199, 89, 0.3);">📷 Сканировать QR-код</button>
-            
             <div class="search-wrapper" id="take-search-wrapper">
                 <span class="search-icon">🔍</span>
                 <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper'); renderTakeItems()">
@@ -296,19 +289,12 @@
             <div class="sticky-title">Оборудование</div>
             <div style="width: 80px;"></div>
         </div>
-        
-        <div id="equipment-categories-menu" class="eq-grid"></div>
-
-        <div id="equipment-items-view" class="hidden">
-            <button class="secondary" style="margin-bottom: 16px; padding: 10px;" onclick="backToEquipmentMenu()">← Назад к категориям</button>
-            <h2 id="equipment-list-title" style="font-size: 20px; margin-bottom: 16px; text-align: center; font-weight: 700; letter-spacing: -0.5px;"></h2>
-            
+        <div id="equipment-items-view">
             <div class="search-wrapper" id="eq-search-wrapper">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="eq-search-input" placeholder="Поиск в этой категории..." oninput="handleSearchInput(this, 'eq-search-wrapper')">
-                <span class="search-clear" onclick="clearSearch('eq-search-input', 'eq-search-wrapper')">✕</span>
+                <input type="text" id="eq-search-input" placeholder="Поиск..." oninput="handleSearchInput(this, 'eq-search-wrapper'); filterEquipmentItems()">
+                <span class="search-clear" onclick="clearSearch('eq-search-input', 'eq-search-wrapper'); filterEquipmentItems()">✕</span>
             </div>
-            
             <div id="equipment-items-list" class="grid-container" style="padding: 0;"></div>
         </div>
     </div>
@@ -319,7 +305,6 @@
             <div class="sticky-title">Площадки</div>
             <div style="width: 80px;"></div>
         </div>
-        
         <div style="margin-top: 16px;">
             <div class="search-wrapper" id="plat-search-wrapper">
                 <span class="search-icon">🔍</span>
@@ -337,7 +322,6 @@
             <div class="sticky-title">Теплоходы</div>
             <div style="width: 80px;"></div>
         </div>
-        
         <div style="margin-top: 16px;">
             <div class="search-wrapper" id="th-search-wrapper">
                 <span class="search-icon">🔍</span>
@@ -360,11 +344,6 @@
         <div class="input-group"><input id="new-location-name" placeholder="Название новой комнаты"></div>
         <button onclick="createLocation()" class="secondary">Добавить комнату</button>
         <div id="locations-list"></div>
-
-        <h2 style="font-size: 20px; margin-top: 32px; font-weight: 700; letter-spacing: -0.5px;">Категории</h2>
-        <div class="input-group"><input id="new-category-name" placeholder="Название новой категории"></div>
-        <button onclick="createCategory()" class="secondary">Добавить категорию</button>
-        <div id="categories-list"></div>
 
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--danger); font-weight: 700; letter-spacing: -0.5px;">Разработка</h2>
         <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
@@ -406,8 +385,7 @@
             <div class="sticky-title" id="room-title">Комната</div>
             <button class="secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px; border-radius:8px;" onclick="selectAllInRoom()">Выбрать все</button>
         </div>
-        
-        <div id="room-items" class="grid-container" style="padding: 0;"></div>
+        <div id="room-items" class="grid-container" style="padding:0;"></div>
     </div>
 
     <div id="screen-move-item" class="screen hidden">
@@ -520,7 +498,6 @@
         <div style="margin-top: 16px;">
             <div class="input-group"><label>Название</label><input id="edit-name"></div>
             <div class="input-group"><label>Тип</label><select id="edit-kind" onchange="toggleEditFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
-            <div class="input-group"><label>Категория</label><select id="edit-category"><option value="">Без категории</option></select></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="edit-serial-number"></div>
             <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
             <div class="input-group">
@@ -549,15 +526,14 @@
             <div class="input-group"><label>Код</label><input id="add-code" placeholder="Например, ITEM-1"></div>
             <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
             <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
-            <div class="input-group"><label>Категория</label><select id="add-category"><option value="">Без категории</option></select></div>
-            <div class="input-group"><label>Локация (Комната)</label><select id="add-location"></select></div>
+            <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
             <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
             <div class="input-group">
                 <label>Бюджет</label>
                 <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
             </div>
-            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например, Мартемьянов"></div>
+            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
             <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
             <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
             <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
@@ -603,7 +579,7 @@
         </div>
         <div style="margin-top: 16px;">
             <div class="input-group">
-                <label>Куда переместить</label>
+                <label>1. Куда переместить (Комната)</label>
                 <select id="batch-to-location"></select>
             </div>
             <button onclick="executeBatchMove()" id="batch-confirm-btn" style="margin-top:20px;">Подтвердить</button>
@@ -630,7 +606,7 @@
         
         if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
 
-        let currentItem = null, locations = [], allItems = [], categories = [], currentUser = null, selectedItems = [], currentRoomId = null;
+        let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let currentEqCategory = "";
         let currentTakeCategory = "";
         let cachedPlatforms = [];
@@ -638,8 +614,11 @@
         let invScannedCodes = [];
         let autoRefreshInterval = null;
 
+        let moveFromLocId = null;
         let selectedMoveRoomId = null;
         let selectedMoveRoomName = "";
+        
+        let selectedTakeItems = [];
 
         window.onerror = function(message, source, lineno, colno, error) {
             const errorText = `JS Error: ${message} at ${source}:${lineno}`;
@@ -774,7 +753,7 @@
                     <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
                 `;
 
-                await loadLocations(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
+                await loadLocations(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
 
                 if (autoRefreshInterval) clearInterval(autoRefreshInterval);
@@ -793,30 +772,6 @@
                 showToast("Добро пожаловать!");
                 init(); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
-        }
-
-        // --- ПРОФИЛЬ ---
-        function showEditProfile() {
-            document.getElementById("profile-name").value = currentUser.full_name || "";
-            showScreen("screen-edit-profile");
-        }
-
-        async function saveProfile() {
-            const btn = document.getElementById("save-profile-btn");
-            const newName = document.getElementById("profile-name").value.trim();
-            if (newName.length < 3) { notify("Введите Фамилию и Имя"); return; }
-            
-            setLoading(btn, true, "Сохранение...");
-            try {
-                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: newName }) });
-                showToast("Профиль обновлен");
-                currentUser.full_name = newName;
-                document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
-                backToMain();
-            } catch (e) {
-                notify(e.message);
-                setLoading(btn, false);
-            }
         }
 
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
@@ -842,7 +797,7 @@
                 if (!stats.length) { document.getElementById("stats-box").classList.add("hidden"); return; }
                 const box = document.getElementById("stats-box");
                 box.classList.remove("hidden");
-                box.innerHTML = `<div class="stats-title">Обзор склада по категориям</div>` + stats.map(s => `
+                box.innerHTML = `<div class="stats-title">Обзор склада</div>` + stats.map(s => `
                     <div class="stat-row">
                         <div class="stat-name">${s.name}</div>
                         <div class="stat-nums"><span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}</div>
@@ -866,23 +821,7 @@
         async function createLocation() { const name = document.getElementById("new-location-name").value.trim(); if (!name) return; try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); showToast("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); } }
         async function renameLocation(id, oldName) { const newName = prompt("Новое название комнаты:", oldName); if (!newName || newName === oldName) return; try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); showToast("Обновлено"); loadLocations(); } catch (e) { notify(e.message); } }
 
-        async function loadCategories() {
-            categories = await api("/api/categories");
-            const catOpts = `<option value="">Без категории</option>` + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
-            document.getElementById("add-category").innerHTML = catOpts;
-            document.getElementById("edit-category").innerHTML = catOpts;
-            
-            const list = document.getElementById("categories-list");
-            if (list) {
-                list.innerHTML = categories.map(c => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${c.name}</b></div><div style="display:flex; gap:8px;"><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameCategory(${c.id}, '${c.name}')">✏️</button><button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="deleteCategory(${c.id})">🗑</button></div></div>`).join("");
-            }
-            buildEquipmentMenu();
-        }
-        async function createCategory() { const name = document.getElementById("new-category-name").value.trim(); if (!name) return; try { await api("/api/categories", { method: "POST", body: JSON.stringify({ name }) }); showToast("Добавлено"); document.getElementById("new-category-name").value = ""; loadCategories(); } catch (e) { notify(e.message); } }
-        async function renameCategory(id, oldName) { const newName = prompt("Новое название категории:", oldName); if (!newName || newName === oldName) return; try { await api("/api/categories/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); showToast("Обновлено"); loadCategories(); } catch (e) { notify(e.message); } }
-        async function deleteCategory(id) { if (!confirm("Удалить категорию?")) return; try { await api(`/api/categories/${id}`, { method: "DELETE" }); showToast("Удалено"); loadCategories(); } catch (e) { notify(e.message); } }
-
-        function showSettings() { loadLocations(); loadCategories(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        function showSettings() { loadLocations(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
         
         async function loadUsers() { 
             const list = document.getElementById("users-list"); 
@@ -980,7 +919,6 @@
                 let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
                 let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
-                let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
                 
                 let heldHtml = "";
                 let heldText = "";
@@ -1000,7 +938,7 @@
                     ${placesHtml}
                     <div style="margin-top:8px;">
                         <span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'Оборуд.' : 'Расходник'}</span>
-                        ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}
+                        ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}
                     </div>
                     ${heldText}
                 </div>
@@ -1023,60 +961,35 @@
             renderItemsGrid(filtered, "items-list");
         }
 
-        function buildEquipmentMenu() {
-            const menu = document.getElementById("equipment-categories-menu");
-            if (!menu) return;
-            const icons = { "Фотокомплекты": "📸", "Вспышки": "⚡", "Ноутбуки": "💻", "Принтеры": "🖨" };
-            menu.innerHTML = categories.map(c => `
-                <div class="eq-btn" onclick="openEquipmentCategory('${c.name}')">
-                    <div>${c.name}</div>
-                    <span>${icons[c.name] || "📦"}</span>
-                </div>
-            `).join("");
-        }
-
         function showEquipmentMenu() {
             updateNavActive("nav-equipment");
-            document.getElementById("equipment-categories-menu").classList.remove("hidden");
-            document.getElementById("equipment-items-view").classList.add("hidden");
             showScreen("screen-equipment");
-        }
-
-        function openEquipmentCategory(catName) {
-            currentEqCategory = catName;
-            document.getElementById("equipment-categories-menu").classList.add("hidden");
-            document.getElementById("equipment-items-view").classList.remove("hidden");
-            document.getElementById("equipment-list-title").textContent = catName;
             document.getElementById("eq-search-input").value = "";
             document.getElementById("eq-search-wrapper").classList.remove("has-text");
-            
-            const filtered = allItems.filter(i => i.category === catName);
-            renderItemsGrid(filtered, "equipment-items-list");
-        }
-
-        function backToEquipmentMenu() {
-            document.getElementById("equipment-categories-menu").classList.remove("hidden");
-            document.getElementById("equipment-items-view").classList.add("hidden");
+            renderItemsGrid(allItems, "equipment-items-list");
         }
 
         function filterEquipmentItems() {
             const query = document.getElementById("eq-search-input").value.toLowerCase();
             const filtered = allItems.filter(i => {
-                if (i.category !== currentEqCategory) return false;
                 return i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query);
             });
             renderItemsGrid(filtered, "equipment-items-list");
         }
 
+        // --- Взять технику (Массовый выбор) ---
         function showTakeScreen() {
             currentTakeCategory = "";
             document.getElementById("take-cat-all-btn").classList.add("active-filter");
             
             const catList = document.getElementById("take-categories-list");
-            catList.innerHTML = categories.map(c => `<button class="secondary" style="width: auto; padding: 10px 18px; margin: 0; font-size: 14px; border-radius: 20px;" onclick="filterTakeCategory('${c.name}', this)">${c.name}</button>`).join("");
+            catList.innerHTML = `<button class="secondary" style="width: auto; padding: 10px 18px; margin: 0; font-size: 14px; border-radius: 20px;" onclick="filterTakeCategory('equipment', this)">Оборудование</button>`;
             
             document.getElementById("take-search-input").value = "";
             document.getElementById("take-search-wrapper").classList.remove("has-text");
+            
+            selectedTakeItems = [];
+            updateTakeBatchUI();
             
             renderTakeItems();
             showScreen("screen-take");
@@ -1095,8 +1008,6 @@
             const query = document.getElementById("take-search-input").value.toLowerCase();
             
             let available = allItems.filter(i => i.kind === 'equipment' && i.total > 0 && !i.needs_repair && (!i.holders || i.holders.length === 0));
-            
-            if (currentTakeCategory) available = available.filter(i => i.category === currentTakeCategory);
             if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
 
             if (!available.length) {
@@ -1106,14 +1017,54 @@
 
             list.innerHTML = available.map(i => {
                 let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}</div>`).join(""); 
+                const isChecked = selectedTakeItems.includes(i.code) ? "checked" : "";
                 return `
-                <div class="card item-card" onclick="openItem('${i.code}')">
-                    <div class="name">${i.name}</div>
-                    <div class="meta">${i.code} · Доступно: ${i.total} шт</div>
-                    ${placesHtml}
+                <div class="card room-item-card">
+                    <input type="checkbox" class="room-item-checkbox" ${isChecked} onchange="toggleTakeSelect('${i.code}', this)">
+                    <div class="room-item-content" onclick="openItem('${i.code}')">
+                        <div class="room-item-name">${i.name}</div>
+                        <div class="room-item-meta">${i.code} · Доступно: ${i.total} шт</div>
+                        ${placesHtml}
+                    </div>
                 </div>
                 `;
             }).join("");
+        }
+
+        function toggleTakeSelect(code, cb) {
+            haptic('light');
+            if (cb.checked) { if(!selectedTakeItems.includes(code)) selectedTakeItems.push(code); }
+            else { selectedTakeItems = selectedTakeItems.filter(c => c !== code); }
+            updateTakeBatchUI();
+        }
+
+        function updateTakeBatchUI() {
+            const bar = document.getElementById("take-batch-actions");
+            if (selectedTakeItems.length > 0) {
+                bar.style.display = "flex";
+                document.getElementById("take-selected-count").textContent = selectedTakeItems.length;
+            } else {
+                bar.style.display = "none";
+            }
+        }
+
+        function deselectAllTakeItems() {
+            selectedTakeItems = [];
+            document.querySelectorAll('#take-items-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+            updateTakeBatchUI();
+        }
+
+        async function executeBatchTake() {
+            if (!selectedTakeItems.length) return;
+            try {
+                const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
+                if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
+                if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
+                selectedTakeItems = [];
+                updateTakeBatchUI();
+                loadItems();
+                backToMain();
+            } catch (e) { notify(e.message); }
         }
 
         function scanQr() { 
@@ -1143,6 +1094,7 @@
             });
         }
 
+        // --- Площадки и Теплоходы ---
         function showPlatforms() {
             updateNavActive("nav-platforms");
             if (!cachedPlatforms.length) { syncGoogle('кц'); }
@@ -1235,12 +1187,12 @@
 
             let filtered = cachedTH.filter(row => {
                 const name = row["Название"] || Object.values(row)[0] || "";
-                return name.toLowerCase().includes(query);
+                return String(name).toLowerCase().includes(query);
             });
 
             filtered.sort((a, b) => {
-                const askA = (a["Что просят"] || a["что просят"] || "").toUpperCase();
-                const askB = (b["Что просят"] || b["что просят"] || "").toUpperCase();
+                const askA = String(a["Что просят"] || a["что просят"] || "").toUpperCase();
+                const askB = String(b["Что просят"] || b["что просят"] || "").toUpperCase();
                 const isOkA = askA.includes("ХВАТАЕТ");
                 const isOkB = askB.includes("ХВАТАЕТ");
                 if (isOkA !== isOkB) return isOkA ? 1 : -1;
@@ -1255,16 +1207,18 @@
             list.innerHTML = filtered.map(row => {
                 const name = row["Название"] || Object.values(row)[0] || "—";
                 const date = row["Дата"] || row["дата"] || "";
-                const counter = row["Счетчик"] || row["счетчик"] || "0";
-                const paper = row["запас бумаги"] || row["Запас бумаги"] || "";
-                const vinyl = row["Винил"] || row["винил"] || "";
-                const frames = row["Рамки"] || row["рамки"] || "";
-                const types = row["По видам"] || row["по видам"] || "";
                 const ask = row["Что просят"] || row["что просят"] || "";
+                
+                let infoHtml = "";
+                // Выводим ВСЕ поля, которые есть в строке, кроме названия, даты и статуса
+                for (const [k, v] of Object.entries(row)) {
+                    if (["Название", "Дата", "дата", "Что просят", "что просят"].includes(k) || !v) continue;
+                    infoHtml += `<div class="platform-info-row"><span>${k}:</span> <b>${v}</b></div>`;
+                }
                 
                 let statusHtml = "";
                 if (ask) {
-                    const isOk = ask.toUpperCase().includes("ХВАТАЕТ");
+                    const isOk = String(ask).toUpperCase().includes("ХВАТАЕТ");
                     statusHtml = `<div class="platform-status ${isOk ? 'status-ok' : 'status-bad'}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${ask}`}</div>`;
                 } else {
                     statusHtml = `<div class="platform-status" style="background:var(--skeleton-bg); color:var(--text-muted);">⚪ Статус не указан</div>`;
@@ -1274,11 +1228,7 @@
                 <div class="card platform-card">
                     <div class="platform-title"><span>${name}</span><span class="platform-date">${date}</span></div>
                     <div class="platform-info">
-                        <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
-                        ${paper ? `<div class="platform-info-row"><span>📄 Бумага:</span> <b>${paper}</b></div>` : ""}
-                        ${vinyl ? `<div class="platform-info-row"><span>🎵 Винил:</span> <b>${vinyl}</b></div>` : ""}
-                        ${frames ? `<div class="platform-info-row"><span>🖼 Рамки:</span> <b>${frames}</b></div>` : ""}
-                        ${types && types !== "Нет (указать каких)" ? `<div class="platform-info-row"><span>📦 Виды:</span> <b>${types}</b></div>` : ""}
+                        ${infoHtml}
                     </div>
                     ${statusHtml}
                 </div>
@@ -1316,6 +1266,7 @@
             }
         }
 
+        // --- Комнаты ---
         async function showRooms() { 
             showScreen("screen-rooms"); 
             updateNavActive("nav-rooms"); 
@@ -1335,35 +1286,37 @@
             list.innerHTML = `<p>Загрузка...</p>`; 
             try { 
                 const data = await api(`/api/room_detail/${id}`); 
-                if (!data.items || data.items.length === 0) {
-                    list.innerHTML = "<p>В этой комнате пусто.</p>"; 
-                    return;
+                let html = ""; 
+                
+                if (data.items.length > 0) {
+                    data.items.forEach(item => {
+                        let badges = "";
+                        if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
+                        if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
+                        if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
+                        if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
+                        if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
+                        if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
+
+                        html += `
+                        <div class="card room-item-card">
+                            <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
+                            <div class="room-item-content" onclick="openItem('${item.code}')">
+                                <div class="room-item-name">${item.name}</div>
+                                <div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div>
+                                <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
+                            </div>
+                        </div>`; 
+                    });
+                } else {
+                    html = "<p>В этой комнате пусто.</p>";
                 }
                 
-                list.innerHTML = data.items.map(item => { 
-                    let badges = "";
-                    if (item.category) badges += `<span class="badge category">${item.category}</span>`;
-                    if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
-                    if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
-                    if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
-                    if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
-                    if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
-                    if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
-
-                    return `
-                    <div class="card room-item-card">
-                        <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
-                        <div class="room-item-content" onclick="openItem('${item.code}')">
-                            <div class="room-item-name">${item.name}</div>
-                            <div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div>
-                            <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
-                        </div>
-                    </div>`; 
-                }).join(""); 
+                list.innerHTML = html; 
                 setTimeout(updateBatchUI, 0);
             } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
         }
-        
+
         function updateBatchUI() {
             const bar = document.getElementById("batch-actions");
             if (selectedItems.length > 0) {
@@ -1400,13 +1353,14 @@
         }
         
         function showBatchMoveForm() { 
-            document.getElementById("batch-to-location").innerHTML = locations.filter(l => l.id !== currentRoomId).map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
+            document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
             showScreen("screen-batch-move"); 
         }
         
         async function executeBatchMove() { 
             const btn = document.getElementById("batch-confirm-btn");
             const toLocation = parseInt(document.getElementById("batch-to-location").value); 
+            if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; }
             setLoading(btn, true, "Перемещение...");
             try { 
                 await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation }) }); 
@@ -1416,6 +1370,7 @@
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
 
+        // --- ИНВЕНТАРИЗАЦИЯ ---
         function showInventory() {
             invScannedCodes = [];
             document.getElementById("inv-scanned-list").innerHTML = "";
@@ -1461,6 +1416,7 @@
             } catch (e) { notify(e.message); setLoading(btn, false); }
         }
 
+        // --- ОСТАЛЬНОЕ ---
         async function openItem(code) { 
             try { 
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`); 
@@ -1477,7 +1433,6 @@
                 let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; 
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; 
                 let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; 
-                let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : ""; 
                 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { 
                     document.getElementById("kit-box").classList.remove("hidden"); 
@@ -1502,11 +1457,11 @@
                         statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
                     } 
                 } 
-                
-                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
+                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
                 
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
+                
                 renderActions(); 
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
@@ -1516,7 +1471,6 @@
         function showEditForm() { 
             document.getElementById("edit-name").value = currentItem.name; 
             document.getElementById("edit-kind").value = currentItem.kind; 
-            document.getElementById("edit-category").value = currentItem.category || ""; 
             document.getElementById("edit-price").value = currentItem.price || 0; 
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
             document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
@@ -1535,7 +1489,6 @@
             const btn = document.querySelector("#screen-edit-item .ok"); 
             const name = document.getElementById("edit-name").value.trim(); 
             const kind = document.getElementById("edit-kind").value; 
-            const category = document.getElementById("edit-category").value; 
             const price = parseFloat(document.getElementById("edit-price").value) || 0; 
             const budget_tag = document.getElementById("edit-budget-tag").value; 
             const serial_number = document.getElementById("edit-serial-number").value.trim(); 
@@ -1544,15 +1497,22 @@
             const kit_lens = document.getElementById("edit-kit-lens").value.trim(); 
             const kit_flash = document.getElementById("edit-kit-flash").value.trim(); 
             const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; 
+            
             setLoading(btn, true, "Сохранение..."); 
             try { 
-                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category }) }); 
+                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) }); 
                 showToast("Сохранено"); 
                 openItem(currentItem.code); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
-        async function deleteItemFromEdit() { if (!confirm(`Отправить в архив "${currentItem.name}"?`)) return; try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); showToast("В архиве"); backToMain(); } catch (e) { notify(e.message); } }
+        async function deleteItemFromEdit() { 
+            if (!confirm(`Отправить в архив "${currentItem.name}"?`)) return; 
+            try { 
+                await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); 
+                showToast("В архиве"); backToMain(); 
+            } catch (e) { notify(e.message); } 
+        }
         
         async function showItemHistory() { 
             showScreen("screen-item-history"); 
@@ -1577,9 +1537,11 @@
             if (currentItem.needs_repair) { 
                 html += `<div class="status-badge status-broken">Выдача заблокирована</div>`; 
             } else if (isEq) { 
-                if (myCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; } 
-                else if (otherCheckout) { html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; } 
-                else { 
+                if (myCheckout) { 
+                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
+                } else if (otherCheckout) { 
+                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
+                } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) { 
                         html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
                     } 
@@ -1588,71 +1550,105 @@
                 html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
             } 
             
-            if (currentItem.stocks.some(s => s.quantity > 0)) { 
-                html += `<button class="secondary" onclick="showMoveItemScreen()" style="margin-top:20px;">📦 Переместить</button>`;
+            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join(""); 
+            if (stockOpts) { 
+                html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
             } 
             box.innerHTML = html; 
         }
         
+        async function markRepair() { 
+            try { 
+                const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); 
+                showToast(res.message); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        async function markLost() { 
+            if (!confirm("Сообщить всем, что вещи нет?")) return; 
+            try { 
+                const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); 
+                showToast(res.message); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        async function doCheckout() { 
+            try { 
+                await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); 
+                showToast("Выдано"); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        async function doCheckoutFor() { 
+            const person = prompt("Для кого?"); 
+            if (person === null) return; 
+            try { 
+                await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); 
+                showToast("Выдано"); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        async function doReturn() { 
+            try { 
+                await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); 
+                showToast("Возвращено"); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        // --- ПЕРЕМЕЩЕНИЕ ТОВАРА ---
         function showMoveItemScreen() {
-            selectedMoveRoomId = null; selectedMoveRoomName = "";
             document.getElementById("move-item-name").textContent = currentItem.name;
-            const fromLoc = currentItem.stocks.find(s => s.quantity > 0);
-            document.getElementById("move-item-from").textContent = `Откуда: ${fromLoc ? fromLoc.location_name : "?"}`;
+            const stock = currentItem.stocks.find(s => s.quantity > 0);
+            moveFromLocId = stock ? stock.location_id : null;
+            document.getElementById("move-item-from").textContent = "Откуда: " + (stock ? stock.location_name : "Неизвестно");
             
-            const roomsList = document.getElementById("move-rooms-list");
-            roomsList.innerHTML = locations.filter(l => !fromLoc || l.id !== fromLoc.location_id).map(l => `
-                <div class="card room-card" style="padding:16px;" onclick="selectMoveRoom(${l.id}, '${l.name}')">
-                    <div class="room-title" style="font-size:16px;">${l.name}</div>
+            document.getElementById("move-step-2").classList.add("hidden");
+            
+            const list = document.getElementById("move-rooms-list");
+            list.innerHTML = locations.filter(l => l.id !== moveFromLocId).map(l => `
+                <div class="card room-card" onclick="selectMoveRoom(${l.id}, '${l.name}')">
+                    <div class="room-info"><div class="room-title">${l.name}</div></div>
                     <div class="room-arrow-circle">›</div>
                 </div>
             `).join("");
             
-            document.getElementById("move-step-2").classList.add("hidden");
-            document.getElementById("move-qty").value = 1;
             showScreen("screen-move-item");
         }
-
+        
         function selectMoveRoom(id, name) {
-            haptic('light');
             selectedMoveRoomId = id;
             selectedMoveRoomName = name;
             document.getElementById("move-confirm-text").textContent = name;
             document.getElementById("move-step-2").classList.remove("hidden");
-            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            document.getElementById("move-confirm-btn").scrollIntoView({ behavior: 'smooth' });
         }
-
+        
         async function executeMoveItem() {
+            const qty = parseInt(document.getElementById("move-qty").value) || 1;
+            if (!selectedMoveRoomId) return;
             const btn = document.getElementById("move-confirm-btn");
-            const qty = parseInt(document.getElementById("move-qty").value);
-            const fromLoc = currentItem.stocks.find(s => s.quantity > 0);
-            if (!fromLoc) { notify("Нет в наличии"); return; }
-            if (qty <= 0 || qty > fromLoc.quantity) { notify("Неверное количество"); return; }
-            
             setLoading(btn, true, "Перемещение...");
             try {
-                await api("/api/move", { method: "POST", body: JSON.stringify({ 
-                    code: currentItem.code, 
-                    from_location: fromLoc.location_id, 
-                    to_location: selectedMoveRoomId, 
-                    quantity: qty 
-                }) });
-                showToast("Перемещено!");
-                openItem(currentItem.code);
-            } catch (e) {
-                notify(e.message);
-                setLoading(btn, false);
-            }
+                await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: moveFromLocId, to_location: selectedMoveRoomId, quantity: qty }) });
+                showToast("Перемещено!"); openItem(currentItem.code);
+            } catch (e) { notify(e.message); setLoading(btn, false); }
         }
-
-        async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
-        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         
-        function showQr() { const url = `/api/qr/${currentItem.code}`; document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; document.getElementById("actions").innerHTML = ""; document.getElementById("booking-section").classList.add("hidden"); }
+        async function doWriteoff() { 
+            const loc = parseInt(document.getElementById("wo-loc").value); 
+            const qty = parseInt(document.getElementById("wo-qty").value) || 0; 
+            try { 
+                await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); 
+                showToast("Списано"); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        function showQr() { 
+            const url = `/api/qr/${currentItem.code}`; 
+            document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div><div class="qr-text-box"><div class="label">Текст для QR:</div><div class="value">${currentItem.code}</div></div>`; 
+            document.getElementById("actions").innerHTML = ""; 
+            document.getElementById("booking-section").classList.add("hidden"); 
+        }
         
         async function loadBookings(code) { 
             const list = document.getElementById("bookings-list"); 
@@ -1686,11 +1682,33 @@
             } catch (e) { notify(e.message); } 
         }
         
-        async function loadComments(code) { const list = document.getElementById("comments-list"); try { const rows = await api(`/api/comments/${code}`); list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); } catch (e) { list.innerHTML = ""; } }
-        async function doComment() { const text = document.getElementById("comment-text").value.trim(); if (!text) return; try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } }
+        async function loadComments(code) { 
+            const list = document.getElementById("comments-list"); 
+            try { 
+                const rows = await api(`/api/comments/${code}`); 
+                list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); 
+            } catch (e) { list.innerHTML = ""; } 
+        }
         
-        async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
-        function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
+        async function doComment() { 
+            const text = document.getElementById("comment-text").value.trim(); 
+            if (!text) return; 
+            try { 
+                await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); 
+                document.getElementById("comment-text").value = ""; 
+                loadComments(currentItem.code); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        async function showAddForm() { 
+            try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} 
+            toggleFields(); showScreen("screen-add"); 
+        }
+        
+        function toggleFields() { 
+            if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } 
+            else { document.getElementById("consumable-fields").classList.add("hidden"); } 
+        }
         
         async function saveItem() { 
             const btn = document.getElementById("save-item-btn"); 
@@ -1703,7 +1721,6 @@
             formData.append("code", code); 
             formData.append("name", name); 
             formData.append("kind", document.getElementById("add-kind").value); 
-            formData.append("category", document.getElementById("add-category").value); 
             formData.append("location_id", loc); 
             formData.append("price", document.getElementById("add-price").value); 
             formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
@@ -1712,6 +1729,7 @@
             formData.append("kit_body", document.getElementById("add-kit-body").value); 
             formData.append("kit_lens", document.getElementById("add-kit-lens").value); 
             formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
+            
             if (document.getElementById("add-kind").value === "consumable") { 
                 formData.append("quantity", document.getElementById("add-qty").value); 
                 formData.append("min_stock", document.getElementById("add-min-stock").value); 
@@ -1720,8 +1738,7 @@
             setLoading(btn, true, "Сохранение..."); 
             try { 
                 await api("/api/items", { method: "POST", body: formData }); 
-                showToast("Добавлено"); 
-                backToMain(); 
+                showToast("Добавлено"); backToMain(); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
@@ -1739,7 +1756,17 @@
             } catch (e) { notify(e.message); }
         }
         
-        async function showHistory() { updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; try { const logs = await api("/api/history"); const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } }
+        async function showHistory() { 
+            updateNavActive("nav-history"); 
+            const list = document.getElementById("history-list"); 
+            showScreen("screen-history"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const logs = await api("/api/history"); 
+                const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; 
+                list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
         
         async function downloadHistory() {
             try {
@@ -1823,7 +1850,7 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-edit-profile", "screen-main", "screen-take", "screen-item", "screen-add", "screen-history", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
