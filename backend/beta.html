@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <!-- ========================================== -->
 <!-- БЛОК 1: НАСТРОЙКИ И СТИЛИ (CSS)            -->
 <!-- ========================================== -->
@@ -32,12 +33,7 @@
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        .sticky-header { 
-            position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
-            z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; 
-            border-bottom: 1px solid var(--border); min-height: 60px; 
-            border-radius: 0 0 20px 20px; margin-bottom: 16px; 
-        }
+        .sticky-header { position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); min-height: 60px; border-radius: 0 0 20px 20px; margin-bottom: 16px; }
         .sticky-back { background: var(--card-bg); border: 1px solid var(--border); padding: 8px 16px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; transition: transform 0.1s; }
         .sticky-back:active { transform: scale(0.95); }
         .sticky-title { font-weight: 700; font-size: 17px; flex: 1; text-align: center; margin: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -76,6 +72,7 @@
         .badge.repair { background: var(--danger); color: white; }
         .badge.low { background: var(--warning); color: white; }
         .badge.on-hand { background: var(--warning); color: white; }
+        .badge.category { background: rgba(175, 82, 222, 0.12); color: var(--purple); }
 
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 75px; background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; font-weight: 500; cursor: pointer; transition: color 0.2s; padding: 8px 2px; flex: 1; position: relative; }
@@ -121,9 +118,10 @@
 
         .stats-card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin: 16px 0; border: 1px solid var(--border); box-shadow: var(--shadow); }
         .stats-title { font-size: 12px; font-weight: 700; margin-bottom: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); transition: background 0.1s; }
+        .stat-row:hover, .stat-row:active { background: rgba(0,122,255,0.05); border-radius: 8px; padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; }
         .stat-row:last-child { border-bottom: none; padding-bottom: 0; }
-        .stat-name { font-size: 15px; font-weight: 600; }
+        .stat-name { font-size: 15px; font-weight: 600; color: var(--primary); }
         .stat-nums { font-size: 13px; color: var(--text-muted); text-align: right; font-weight: 500; }
         .stat-total { font-size: 18px; font-weight: 700; color: var(--text); margin-right: 8px; }
 
@@ -214,7 +212,7 @@
     <div id="screen-main" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
-            <div class="sticky-title" id="user-info">Учёт</div>
+            <div class="sticky-title" id="user-info" onclick="editMyName()" style="cursor:pointer;">Учёт</div>
             <div style="width: 80px;"></div>
         </div>
 
@@ -262,6 +260,15 @@
         </div>
         
         <div id="items-list" class="grid-container"></div>
+    </div>
+
+    <div id="screen-category-stats" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title" id="cat-stats-title">Категория</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="cat-stats-items" class="grid-container" style="padding:0; margin-top:16px;"></div>
     </div>
 
     <div id="screen-take" class="screen hidden">
@@ -735,6 +742,10 @@
                 if (currentUser.role === "admin") { 
                     document.getElementById("nav-settings").classList.remove("hidden");
                     document.getElementById("export-history-btn").classList.remove("hidden");
+                } else {
+                    // Скрываем Склад и Настройки для сотрудников
+                    document.getElementById("nav-rooms").classList.add("hidden");
+                    document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
                 const cached = localStorage.getItem("cachedPlatforms");
@@ -764,6 +775,38 @@
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
 
+        function editMyName() {
+            const overlayId = 'modal-myname-' + Date.now();
+            const overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(5px);';
+            overlay.innerHTML = `
+                <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
+                    <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить моё имя</h3>
+                    <input id="edit-myname-input-${overlayId}" type="text" value="${currentUser.full_name || ''}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <div style="display:flex; gap:10px;">
+                        <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
+                        <button class="ok" style="margin:0; flex:1;" onclick="saveMyName('${overlayId}', this)">Сохранить</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById(`edit-myname-input-${overlayId}`).focus();
+        }
+
+        async function saveMyName(overlayId, btn) {
+            const name = document.getElementById(`edit-myname-input-${overlayId}`).value.trim();
+            if (name.length < 3) { notify("Введите Фамилию и Имя"); return; }
+            setLoading(btn, true, '...');
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
+                currentUser.full_name = name;
+                document.getElementById("user-info").innerHTML = `${name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                document.getElementById(overlayId).remove();
+                showToast("Имя сохранено");
+            } catch (e) { notify(e.message); setLoading(btn, false); }
+        }
+
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
         
         async function loadMyBookings() { 
@@ -782,8 +825,20 @@
                 if (!stats.length) { document.getElementById("stats-box").classList.add("hidden"); return; }
                 const box = document.getElementById("stats-box");
                 box.classList.remove("hidden");
-                box.innerHTML = `<div class="stats-title">Обзор склада</div>` + stats.map(s => `<div class="stat-row"><div class="stat-name">${s.name}</div><div class="stat-nums"><span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}</div></div>`).join("");
+                box.innerHTML = `<div class="stats-title">Обзор склада (по категориям)</div>` + stats.map(s => `
+                    <div class="stat-row" onclick="openCategoryStats('${s.name}')">
+                        <div class="stat-name">${s.name}</div>
+                        <div class="stat-nums"><span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}</div>
+                    </div>
+                `).join("");
             } catch (e) { console.log("Stats error:", e); }
+        }
+
+        function openCategoryStats(catName) {
+            document.getElementById("cat-stats-title").textContent = catName === 'Без категории' ? 'Без категории' : catName;
+            const filtered = allItems.filter(i => (i.category || 'Без категории') === catName);
+            renderItemsGrid(filtered, "cat-stats-items");
+            showScreen("screen-category-stats");
         }
 
         async function loadLocations() { 
@@ -909,6 +964,7 @@
                 let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
                 let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
+                let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
                 
                 let heldHtml = "", heldText = "", dimmedClass = "";
                 if (i.holders && i.holders.length > 0) {
@@ -918,7 +974,7 @@
                 }
                 if (i.kind === 'consumable' && i.total === 0) dimmedClass = "dimmed";
                 
-                return `<div class="card item-card ${dimmedClass}" onclick="openItem('${i.code}')">${heldHtml}<div class="name">${i.name}</div><div class="meta">${i.code} · ${i.total} шт ${i.serial_number ? `· S/N: ${i.serial_number}` : ""}</div>${placesHtml}<div style="margin-top:8px;"><span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'Оборуд.' : 'Расходник'}</span>${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}</div>${heldText}</div>`; 
+                return `<div class="card item-card ${dimmedClass}" onclick="openItem('${i.code}')">${heldHtml}<div class="name">${i.name}</div><div class="meta">${i.code} · ${i.total} шт ${i.serial_number ? `· S/N: ${i.serial_number}` : ""}</div>${placesHtml}<div style="margin-top:8px;"><span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'Оборуд.' : 'Расходник'}</span>${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}</div>${heldText}</div>`; 
             }).join(""); 
         }
 
@@ -1123,7 +1179,6 @@
                 const name = row["Название"] || Object.values(row)[0] || "—";
                 const date = row["Дата"] || row["дата"] || "";
                 
-                // Ищем ключ, который отвечает за статус (просят / нужно)
                 const keys = Object.keys(row);
                 const askKey = keys.find(k => k.toLowerCase().includes('просят') || k.toLowerCase().includes('нужно') || k.toLowerCase().includes('статус'));
                 const ask = askKey ? row[askKey] : Object.values(row).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || "";
@@ -1149,8 +1204,18 @@
             try {
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
-                    if (sheetName === 'кц') { cachedPlatforms = res.data; localStorage.setItem("cachedPlatforms", JSON.stringify(cachedPlatforms)); renderPlatformsList(); } 
-                    else { cachedTH = res.data; localStorage.setItem("cachedTH", JSON.stringify(cachedTH)); renderTHList(); }
+                    if (sheetName === 'кц') { 
+                        localStorage.removeItem("cachedPlatforms");
+                        cachedPlatforms = res.data; 
+                        localStorage.setItem("cachedPlatforms", JSON.stringify(cachedPlatforms)); 
+                        renderPlatformsList(); 
+                    } 
+                    else { 
+                        localStorage.removeItem("cachedTH");
+                        cachedTH = res.data; 
+                        localStorage.setItem("cachedTH", JSON.stringify(cachedTH)); 
+                        renderTHList(); 
+                    }
                     showToast("Данные обновлены");
                 } else { showToast("Данных нет"); }
             } catch (e) { notify("Ошибка: " + e.message); } 
@@ -1174,7 +1239,6 @@
             try { 
                 const data = await api(`/api/room_detail/${id}`); 
                 
-                // ФОЛЛБЕК: Поддержка как нового, так и старого бэкенда
                 let items = [];
                 if (data.items) items = data.items;
                 else if (data.shelves) {
@@ -1186,6 +1250,7 @@
                 if (items && items.length > 0) {
                     items.forEach(item => {
                         let badges = "";
+                        if (item.category) badges += `<span class="badge category">${item.category}</span>`;
                         if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
                         if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
                         if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
@@ -1266,6 +1331,7 @@
                 let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; 
                 let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; 
                 let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; 
+                let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : "";
                 
                 if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { 
                     document.getElementById("kit-box").classList.remove("hidden"); 
@@ -1286,7 +1352,7 @@
                         statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
                     } 
                 } 
-                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
+                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
                 
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
@@ -1520,7 +1586,7 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
