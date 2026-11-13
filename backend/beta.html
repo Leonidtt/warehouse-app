@@ -735,10 +735,10 @@
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
-                // Используем новые ключи кэша (_v3), чтобы сбросить старые данные (концерты)
-                const cached = localStorage.getItem("cachedPlatforms_v3");
+                // v6: Сбрасываем старый кэш, который мог содержать концерты вместо теплоходов
+                const cached = localStorage.getItem("cachedPlatforms_v6");
                 if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
-                const cachedTh = localStorage.getItem("cachedTH_v3");
+                const cachedTh = localStorage.getItem("cachedTH_v6");
                 if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
@@ -1202,15 +1202,15 @@
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
                     if (sheetName === 'кц') { 
-                        localStorage.removeItem("cachedPlatforms_v3");
+                        localStorage.removeItem("cachedPlatforms_v6");
                         cachedPlatforms = res.data; 
-                        localStorage.setItem("cachedPlatforms_v3", JSON.stringify(cachedPlatforms)); 
+                        localStorage.setItem("cachedPlatforms_v6", JSON.stringify(cachedPlatforms)); 
                         renderPlatformsList(); 
                     } 
                     else { 
-                        localStorage.removeItem("cachedTH_v3");
+                        localStorage.removeItem("cachedTH_v6");
                         cachedTH = res.data; 
-                        localStorage.setItem("cachedTH_v3", JSON.stringify(cachedTH)); 
+                        localStorage.setItem("cachedTH_v6", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
                     showToast("Данные обновлены");
