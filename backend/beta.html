@@ -608,7 +608,6 @@
         tg.ready(); tg.expand();
         if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
         
-        // Отключаем свайп вниз для закрытия приложения, чтобы можно было скроллить таблицы
         if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
 
         let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
@@ -735,7 +734,6 @@
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
-                // v6: Сбрасываем старый кэш, который мог содержать концерты вместо теплоходов
                 const cached = localStorage.getItem("cachedPlatforms_v6");
                 if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
                 const cachedTh = localStorage.getItem("cachedTH_v6");
@@ -1050,9 +1048,29 @@
             if (!available.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>"; return; }
 
             list.innerHTML = available.map(i => {
-                let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}</div>`).join(""); 
+                let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="font-size:12px; color:var(--text-muted); margin-top:2px;">📍 ${s.location_name}</div>`).join(""); 
+                
+                let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
+                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
+                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
+                let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
+                let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
+                let snText = i.serial_number ? `<span style="font-size:12px; color:var(--text-muted);">S/N: ${i.serial_number}</span>` : "";
+
                 const isChecked = selectedTakeItems.includes(i.code) ? "checked" : "";
-                return `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" ${isChecked} onchange="toggleTakeSelect('${i.code}', this)"><div class="room-item-content" onclick="openItem('${i.code}')"><div class="room-item-name">${i.name}</div><div class="room-item-meta">${i.code} · Доступно: ${i.total} шт</div>${placesHtml}</div></div>`;
+                return `
+                <div class="card room-item-card">
+                    <input type="checkbox" class="room-item-checkbox" ${isChecked} onchange="toggleTakeSelect('${i.code}', this)">
+                    <div class="room-item-content" onclick="openItem('${i.code}')">
+                        <div class="room-item-name">${i.name}</div>
+                        <div class="room-item-meta">${i.code} · Доступно: ${i.total} шт ${snText ? `· ${snText}` : ""}</div>
+                        ${placesHtml}
+                        <div style="margin-top:8px;">
+                            <span class="badge eq">Оборуд.</span>
+                            ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${brokenBadge}
+                        </div>
+                    </div>
+                </div>`;
             }).join("");
         }
 
