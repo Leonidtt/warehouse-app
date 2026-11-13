@@ -26,7 +26,7 @@ import urllib3
 urllib3.disable_warnings()
 
 # --- ТОКЕН БЕТА-БОТА ---
-BOT_TOKEN = "ВАШ_БЕТА_ТОКЕН_ЗДЕСЬ"
+BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 SHEET_NAME = "кц" 
