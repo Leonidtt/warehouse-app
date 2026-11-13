@@ -26,7 +26,7 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-BOT_TOKEN = "В9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 
 app = FastAPI()
@@ -216,21 +216,12 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        sheet = None
+        # --- ЖЕСТКИЙ ПОИСК ТОЛЬКО ПО ТОЧНОМУ НАЗВАНИЮ ---
         try:
             sheet = spreadsheet.worksheet(sheet_name)
-        except:
-            normalized = sheet_name.strip().lower()
-            for s in spreadsheet.worksheets():
-                if s.title.strip().lower() == normalized:
-                    sheet = s; break
-            if not sheet:
-                for s in spreadsheet.worksheets():
-                    if normalized in s.title.strip().lower():
-                        sheet = s; break
-            if not sheet:
-                titles = [s.title for s in spreadsheet.worksheets()]
-                raise HTTPException(500, f"Лист '{sheet_name}' не найден. Есть: {titles}")
+        except Exception:
+            titles = [s.title for s in spreadsheet.worksheets()]
+            raise HTTPException(500, f"Лист '{sheet_name}' не найден. Доступные листы: {titles}. Проверьте регистр и пробелы!")
         
         all_values = sheet.get_all_values()
         if not all_values: return {"status": "ok", "data": []}
@@ -449,7 +440,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         if is_admin: item_data["price"] = it["price"]
         result.append(item_data)
     conn.close(); return result
@@ -464,7 +455,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
     if is_admin: result["price"] = item["price"]
     return result
 
