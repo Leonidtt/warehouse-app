@@ -1264,6 +1264,7 @@
                 }
                 
                 if (res.data && res.data.length) {
+                 alert(`Сервер прочитал лист: "${res.sheet_title || 'неизвестно'}"\nСтрок получено: ${res.data.length}`);
                     if (sheetName === 'кц') { 
                         localStorage.removeItem("cachedPlatforms_v8");
                         cachedPlatforms = res.data; 
