@@ -119,7 +119,7 @@
         .stats-card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin: 16px 0; border: 1px solid var(--border); box-shadow: var(--shadow); }
         .stats-title { font-size: 12px; font-weight: 700; margin-bottom: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
         .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); transition: background 0.1s; }
-        .stat-row:hover, .stat-row:active { background: rgba(0,122,255,0.05); border-radius: 8px; padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; }
+        .stat-row:active { background: rgba(0,122,255,0.05); border-radius: 8px; padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; }
         .stat-row:last-child { border-bottom: none; padding-bottom: 0; }
         .stat-name { font-size: 15px; font-weight: 600; color: var(--primary); }
         .stat-nums { font-size: 13px; color: var(--text-muted); text-align: right; font-weight: 500; }
@@ -262,6 +262,7 @@
         <div id="items-list" class="grid-container"></div>
     </div>
 
+    <!-- ЭКРАН: СЕТКА КАТЕГОРИИ (при нажатии на название) -->
     <div id="screen-category-stats" class="screen hidden">
         <div class="sticky-header">
             <button class="sticky-back" onclick="backToMain()">← Назад</button>
@@ -269,6 +270,16 @@
             <div style="width: 80px;"></div>
         </div>
         <div id="cat-stats-items" class="grid-container" style="padding:0; margin-top:16px;"></div>
+    </div>
+
+    <!-- ЭКРАН: ДЕТАЛЬНАЯ ТАБЛИЦА (при нажатии на цифры) -->
+    <div id="screen-category-detailed" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title" id="cat-detailed-title">Детали</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="cat-detailed-list" style="margin-top: 16px; padding: 0 16px;"></div>
     </div>
 
     <div id="screen-take" class="screen hidden">
@@ -601,7 +612,6 @@
 
     <div class="bottom-nav">
         <div class="nav-item active" id="nav-main" onclick="backToMain()"><span class="icon">📦</span><span>Главная</span></div>
-        <div class="nav-item" id="nav-equipment" onclick="showEquipmentMenu()"><span class="icon">📸</span><span>Оборуд.</span></div>
         <div class="nav-item" id="nav-platforms" onclick="showPlatforms()"><span class="icon">📍</span><span>Площадки</span></div>
         <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>Теплоходы</span></div>
         <div class="nav-item" id="nav-rooms" onclick="showRooms()"><span class="icon">🏢</span><span>Склад</span></div>
@@ -683,7 +693,7 @@
         });
 
         function updateNavActive(id) {
-            ["nav-main", "nav-equipment", "nav-platforms", "nav-th", "nav-rooms", "nav-settings"].forEach(nav => {
+            ["nav-main", "nav-platforms", "nav-th", "nav-rooms", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -743,7 +753,6 @@
                     document.getElementById("nav-settings").classList.remove("hidden");
                     document.getElementById("export-history-btn").classList.remove("hidden");
                 } else {
-                    // Скрываем Склад и Настройки для сотрудников
                     document.getElementById("nav-rooms").classList.add("hidden");
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
@@ -826,9 +835,11 @@
                 const box = document.getElementById("stats-box");
                 box.classList.remove("hidden");
                 box.innerHTML = `<div class="stats-title">Обзор склада (по категориям)</div>` + stats.map(s => `
-                    <div class="stat-row" onclick="openCategoryStats('${s.name}')">
-                        <div class="stat-name">${s.name}</div>
-                        <div class="stat-nums"><span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}</div>
+                    <div class="stat-row" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div class="stat-name" onclick="openCategoryStats('${s.name}')" style="cursor:pointer; flex:1;">${s.name}</div>
+                        <div class="stat-nums" onclick="openCategoryDetailedTable('${s.name}')" style="cursor:pointer;">
+                            <span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}
+                        </div>
                     </div>
                 `).join("");
             } catch (e) { console.log("Stats error:", e); }
@@ -839,6 +850,54 @@
             const filtered = allItems.filter(i => (i.category || 'Без категории') === catName);
             renderItemsGrid(filtered, "cat-stats-items");
             showScreen("screen-category-stats");
+        }
+
+        function openCategoryDetailedTable(catName) {
+            document.getElementById("cat-detailed-title").textContent = catName + " (Детали)";
+            const filtered = allItems.filter(i => (i.category || 'Без категории') === catName);
+            const list = document.getElementById("cat-detailed-list");
+
+            if (!filtered.length) {
+                list.innerHTML = "<p style='text-align:center; color:var(--text-muted); margin-top:20px;'>Нет товаров в этой категории.</p>";
+                showScreen("screen-category-detailed");
+                return;
+            }
+
+            let html = `<div style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
+                <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left; min-width: 400px;">
+                <tr style="border-bottom: 2px solid var(--border); background: var(--skeleton-bg);">
+                    <th style="padding: 10px; font-weight: 600;">Товар / Комплект</th>
+                    <th style="padding: 10px; font-weight: 600;">Где</th>
+                    <th style="padding: 10px; font-weight: 600;">У кого</th>
+                </tr>`;
+
+            filtered.forEach(i => {
+                let kitArr = [];
+                if (i.kit_body) kitArr.push(`📷 ${i.kit_body}`);
+                if (i.kit_lens) kitArr.push(`🔭 ${i.kit_lens}`);
+                if (i.kit_flash) kitArr.push(`⚡ ${i.kit_flash}`);
+                const kitHtml = kitArr.length ? `<div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height: 1.4;">${kitArr.join('<br>')}</div>` : '';
+
+                const locations = i.stocks.map(s => s.location_name).join(', ') || '—';
+                const holders = i.holders.map(h => h.full_name).join(', ') || '—';
+
+                let rowBg = i.holders.length > 0 ? 'rgba(255, 149, 0, 0.08)' : 'transparent';
+                let holderColor = i.holders.length > 0 ? 'var(--warning)' : 'var(--text)';
+
+                html += `<tr style="border-bottom: 1px solid var(--border); background: ${rowBg};">
+                    <td style="padding: 10px; vertical-align: top; max-width: 150px;">
+                        <div style="font-weight: 600; color: var(--primary);">${i.name}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">${i.code}</div>
+                        ${kitHtml}
+                    </td>
+                    <td style="padding: 10px; vertical-align: top; font-weight: 500;">${locations}</td>
+                    <td style="padding: 10px; vertical-align: top; color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${holders}</td>
+                </tr>`;
+            });
+
+            html += `</table></div>`;
+            list.innerHTML = html;
+            showScreen("screen-category-detailed");
         }
 
         async function loadLocations() { 
@@ -1586,7 +1645,7 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
