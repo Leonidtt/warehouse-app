@@ -1,5 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
+<!-- ========================================== -->
+<!-- БЛОК 1: НАСТРОЙКИ И СТИЛИ (CSS)            -->
+<!-- ========================================== -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -162,12 +165,15 @@
         .toast.error { background: rgba(255, 59, 48, 0.95); box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* Плавающие панели */
         .floating-bar { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
         .floating-btn-group { display: flex; gap: 8px; }
         .floating-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
     </style>
 </head>
+
+<!-- ========================================== -->
+<!-- БЛОК 2: ЭКРАНЫ И РАЗМЕТКА (HTML)           -->
+<!-- ========================================== -->
 <body>
 
     <div id="toast-container"></div>
@@ -595,6 +601,9 @@
         <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настр.</span></div>
     </div>
 
+<!-- ========================================== -->
+<!-- БЛОК 3: ОСНОВНАЯ ЛОГИКА (JS)               -->
+<!-- ========================================== -->
     <script>
         const tg = window.Telegram?.WebApp || {
             ready: () => {}, expand: () => {}, showAlert: (msg) => alert(msg),
@@ -808,7 +817,7 @@
                         <div><b>${u.full_name}</b> ${held}</div>
                         <div style="display:flex; gap:6px; align-items:center;">
                             ${roleBtn}
-                            <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserName(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
+                            <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserNameModal(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
                         </div>
                     </div>`;
                 }).join(""); 
@@ -821,10 +830,35 @@
             try { await api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: full_name, role: newRole }) }); showToast("Роль обновлена"); loadUsers(); } catch (e) { notify(e.message); }
         }
 
-        function editUserName(tg_id, full_name, role) {
-            const newName = prompt("Фамилия и Имя пользователя:", full_name);
-            if (newName === null || newName.trim() === "" || newName === full_name) return;
-            api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: newName.trim(), role: role }) }).then(() => { showToast("Имя сохранено"); loadUsers(); }).catch(e => notify(e.message));
+        function editUserNameModal(tg_id, oldName, role) {
+            const overlayId = 'modal-user-' + Date.now();
+            const overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(5px);';
+            overlay.innerHTML = `
+                <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
+                    <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить имя</h3>
+                    <input id="edit-user-input-${overlayId}" type="text" value="${oldName}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <div style="display:flex; gap:10px;">
+                        <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
+                        <button class="ok" style="margin:0; flex:1;" onclick="saveUserName(${tg_id}, '${role}', '${overlayId}', this)">Сохранить</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById(`edit-user-input-${overlayId}`).focus();
+        }
+
+        async function saveUserName(tg_id, role, overlayId, btn) {
+            const name = document.getElementById(`edit-user-input-${overlayId}`).value.trim();
+            if (!name) return;
+            setLoading(btn, true, '...');
+            try { 
+                await api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: name, role: role }) }); 
+                showToast("Имя сохранено"); 
+                document.getElementById(overlayId).remove();
+                loadUsers(); 
+            } catch (e) { notify(e.message); setLoading(btn, false); }
         }
 
         function showUsers() { loadUsers(); showScreen("screen-users"); }
@@ -913,10 +947,13 @@
             document.getElementById("eq-items-view").classList.add("hidden");
             
             const eqItems = allItems.filter(i => i.kind === 'equipment');
-            const cats = [...new Set(eqItems.map(i => i.category || 'Без категории'))].sort();
+            const dbCats = eqItems.map(i => i.category).filter(Boolean);
+            const defaultCats = ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"];
+            const allCats = [...new Set([...defaultCats, ...dbCats])].sort();
+            
             const icons = { "Фотокомплекты": "📸", "Вспышки": "⚡", "Ноутбуки": "💻", "Принтеры": "🖨", "Без категории": "📦" };
             
-            document.getElementById("eq-categories-menu").innerHTML = cats.map(c => `
+            document.getElementById("eq-categories-menu").innerHTML = allCats.map(c => `
                 <div class="eq-btn" onclick="openEqCategory('${c}')"><div>${c}</div><span>${icons[c] || "📦"}</span></div>
             `).join("");
         }
@@ -1085,12 +1122,15 @@
             list.innerHTML = filtered.map(row => {
                 const name = row["Название"] || Object.values(row)[0] || "—";
                 const date = row["Дата"] || row["дата"] || "";
-                // Ищем статус везде, где есть слово "ХВАТАЕТ"
-                const ask = Object.values(row).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || row["Что просят"] || row["что просят"] || "";
+                
+                // Ищем ключ, который отвечает за статус (просят / нужно)
+                const keys = Object.keys(row);
+                const askKey = keys.find(k => k.toLowerCase().includes('просят') || k.toLowerCase().includes('нужно') || k.toLowerCase().includes('статус'));
+                const ask = askKey ? row[askKey] : Object.values(row).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || "";
                 
                 let infoHtml = "";
                 for (const [k, v] of Object.entries(row)) {
-                    if (["Название", "Дата", "дата", "Что просят", "что просят"].includes(k) || !v) continue;
+                    if (["Название", "Дата", "дата"].includes(k) || k === askKey || !v) continue;
                     infoHtml += `<div class="platform-info-row"><span>${k}:</span> <b>${v}</b></div>`;
                 }
                 
@@ -1133,10 +1173,18 @@
             const list = document.getElementById("room-items"); list.innerHTML = `<p>Загрузка...</p>`; 
             try { 
                 const data = await api(`/api/room_detail/${id}`); 
-                let html = ""; 
                 
-                if (data.items && data.items.length > 0) {
-                    data.items.forEach(item => {
+                // ФОЛЛБЕК: Поддержка как нового, так и старого бэкенда
+                let items = [];
+                if (data.items) items = data.items;
+                else if (data.shelves) {
+                    items = Object.values(data.shelves).flat();
+                    items = items.concat(data.no_shelf || []);
+                }
+                
+                let html = ""; 
+                if (items && items.length > 0) {
+                    items.forEach(item => {
                         let badges = "";
                         if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
                         if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
@@ -1145,7 +1193,7 @@
                         if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
                         if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
 
-                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)"><div class="room-item-content" onclick="openItem('${item.code}')"><div class="room-item-name">${item.name}</div><div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div></div>`; 
+                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)"><div class="room-item-content" onclick="openItem('${item.code}')"><div class="room-item-name">${item.name}</div><div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div></div>`; 
                     });
                 } else {
                     html = "<p>В этой комнате пусто.</p>";
@@ -1428,13 +1476,13 @@
         }
         
         function downloadFile(url, filename) {
-            const fullUrl = url + (url.includes('?') ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData || "");
+            const fullUrl = window.location.origin + url + (url.includes('?') ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData || "");
             if (tg.downloadFile) {
                 tg.downloadFile({ url: fullUrl, filename: filename }, (accepted) => {
                     if (!accepted) notify("Скачивание отменено");
                 });
             } else {
-                window.open(fullUrl, '_blank');
+                tg.openLink(fullUrl);
             }
         }
 
