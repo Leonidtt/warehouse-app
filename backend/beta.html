@@ -300,29 +300,6 @@
         </div>
     </div>
 
-    <div id="screen-equipment" class="screen hidden">
-        <div class="sticky-header">
-            <div style="width: 80px;"></div>
-            <div class="sticky-title">Оборудование</div>
-            <div style="width: 80px;"></div>
-        </div>
-        
-        <div id="eq-categories-menu" class="eq-grid"></div>
-
-        <div id="eq-items-view" class="hidden">
-            <button class="secondary" style="margin-bottom: 16px; padding: 10px;" onclick="showEquipmentMenu()">← Назад к категориям</button>
-            <h2 id="eq-list-title" style="font-size: 20px; margin-bottom: 16px; text-align: center; font-weight: 700; letter-spacing: -0.5px;"></h2>
-            
-            <div class="search-wrapper" id="eq-search-wrapper">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="eq-search-input" placeholder="Поиск в категории..." oninput="handleSearchInput(this, 'eq-search-wrapper'); filterEquipmentItems()">
-                <span class="search-clear" onclick="clearSearch('eq-search-input', 'eq-search-wrapper'); filterEquipmentItems()">✕</span>
-            </div>
-            
-            <div id="equipment-items-list" class="grid-container" style="padding: 0;"></div>
-        </div>
-    </div>
-
     <div id="screen-platforms" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
@@ -630,6 +607,9 @@
         };
         tg.ready(); tg.expand();
         if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
+        
+        // Отключаем свайп вниз для закрытия приложения, чтобы можно было скроллить таблицы
+        if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
 
         let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let cachedPlatforms = [], cachedTH = [], invScannedCodes = [], autoRefreshInterval = null;
@@ -669,7 +649,6 @@
             else wrapper.classList.remove('has-text');
             
             if (input.id === 'search-input') filterItems();
-            if (input.id === 'eq-search-input') filterEquipmentItems();
             if (input.id === 'take-search-input') renderTakeItems();
             if (input.id === 'th-search') filterTH();
         }
@@ -680,7 +659,6 @@
             input.focus();
             
             if (inputId === 'search-input') filterItems();
-            if (inputId === 'eq-search-input') filterEquipmentItems();
             if (inputId === 'take-search-input') renderTakeItems();
             if (inputId === 'platform-search') filterPlatforms();
             if (inputId === 'th-search') filterTH();
@@ -757,9 +735,10 @@
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
-                const cached = localStorage.getItem("cachedPlatforms");
+                // Используем новые ключи кэша (_v3), чтобы сбросить старые данные (концерты)
+                const cached = localStorage.getItem("cachedPlatforms_v3");
                 if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
-                const cachedTh = localStorage.getItem("cachedTH");
+                const cachedTh = localStorage.getItem("cachedTH_v3");
                 if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
@@ -1052,47 +1031,6 @@
             renderItemsGrid(filtered, "items-list");
         }
 
-        // --- ОБОРУДОВАНИЕ (С КАТЕГОРИЯМИ) ---
-        function showEquipmentMenu() {
-            updateNavActive("nav-equipment");
-            showScreen("screen-equipment");
-            document.getElementById("eq-search-input").value = "";
-            document.getElementById("eq-search-wrapper").classList.remove("has-text");
-            document.getElementById("eq-categories-menu").classList.remove("hidden");
-            document.getElementById("eq-items-view").classList.add("hidden");
-            
-            const eqItems = allItems.filter(i => i.kind === 'equipment');
-            const dbCats = eqItems.map(i => i.category).filter(Boolean);
-            const defaultCats = ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"];
-            const allCats = [...new Set([...defaultCats, ...dbCats])].sort();
-            
-            const icons = { "Фотокомплекты": "📸", "Вспышки": "⚡", "Ноутбуки": "💻", "Принтеры": "🖨", "Без категории": "📦" };
-            
-            document.getElementById("eq-categories-menu").innerHTML = allCats.map(c => `
-                <div class="eq-btn" onclick="openEqCategory('${c}')"><div>${c}</div><span>${icons[c] || "📦"}</span></div>
-            `).join("");
-        }
-
-        function openEqCategory(catName) {
-            currentEqCategory = catName;
-            document.getElementById("eq-categories-menu").classList.add("hidden");
-            document.getElementById("eq-items-view").classList.remove("hidden");
-            document.getElementById("eq-list-title").textContent = catName;
-            document.getElementById("eq-search-input").value = "";
-            document.getElementById("eq-search-wrapper").classList.remove("has-text");
-            filterEquipmentItems();
-        }
-
-        function filterEquipmentItems() {
-            const query = document.getElementById("eq-search-input").value.toLowerCase();
-            const filtered = allItems.filter(i => {
-                if (i.kind !== 'equipment') return false;
-                if ((i.category || 'Без категории') !== currentEqCategory) return false;
-                return i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query);
-            });
-            renderItemsGrid(filtered, "equipment-items-list");
-        }
-
         // --- Взять технику (Массовый выбор) ---
         function showTakeScreen() {
             document.getElementById("take-search-input").value = "";
@@ -1264,15 +1202,15 @@
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
                     if (sheetName === 'кц') { 
-                        localStorage.removeItem("cachedPlatforms");
+                        localStorage.removeItem("cachedPlatforms_v3");
                         cachedPlatforms = res.data; 
-                        localStorage.setItem("cachedPlatforms", JSON.stringify(cachedPlatforms)); 
+                        localStorage.setItem("cachedPlatforms_v3", JSON.stringify(cachedPlatforms)); 
                         renderPlatformsList(); 
                     } 
                     else { 
-                        localStorage.removeItem("cachedTH");
+                        localStorage.removeItem("cachedTH_v3");
                         cachedTH = res.data; 
-                        localStorage.setItem("cachedTH", JSON.stringify(cachedTH)); 
+                        localStorage.setItem("cachedTH_v3", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
                     showToast("Данные обновлены");
