@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Склад (Бета)</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <style>
         :root {
             --bg: #f5f5f7; --card-bg: #ffffff; --text: #1d1d1f; --text-muted: #86868b;
@@ -30,13 +29,12 @@
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        /* Шапка: теперь закругленная снизу и с отступом */
         .sticky-header { 
             position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
             z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; 
             border-bottom: 1px solid var(--border); min-height: 60px; 
             border-radius: 0 0 20px 20px; 
-            margin-bottom: 16px; /* Отступ, чтобы контент не прилипал */
+            margin-bottom: 16px; 
         }
         .sticky-back { background: var(--card-bg); border: 1px solid var(--border); padding: 8px 16px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; transition: transform 0.1s; }
         .sticky-back:active { transform: scale(0.95); }
@@ -52,7 +50,6 @@
         
         .held-indicator { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--warning); border-radius: 20px 0 0 20px; }
         .held-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--primary-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; position: absolute; top: 16px; right: 16px; box-shadow: 0 2px 8px rgba(0, 122, 255, 0.4); }
-        
         .held-text { font-size: 12px; color: var(--warning); font-weight: 600; margin-top: 4px; }
 
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 20px 16px; }
@@ -76,11 +73,12 @@
         .badge.repair { background: var(--danger); color: white; }
         .badge.low { background: var(--warning); color: white; }
         .badge.category { background: rgba(175, 82, 222, 0.12); color: var(--purple); }
+        .badge.on-hand { background: var(--warning); color: white; }
 
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 75px; background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; font-weight: 500; cursor: pointer; transition: color 0.2s; padding: 8px 4px; flex: 1; position: relative; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; font-weight: 500; cursor: pointer; transition: color 0.2s; padding: 8px 2px; flex: 1; position: relative; }
         .nav-item.active { color: var(--primary); }
-        .nav-item .icon { font-size: 24px; margin-bottom: 2px; transition: transform 0.2s; }
+        .nav-item .icon { font-size: 22px; margin-bottom: 2px; transition: transform 0.2s; }
         .nav-item.active .icon { transform: translateY(-2px); }
         .nav-item.active::after { content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
 
@@ -103,6 +101,7 @@
         button.active-filter { background: rgba(0, 122, 255, 0.1); color: var(--primary); border: 1px solid var(--primary); font-weight: 700; }
 
         .take-btn { background: linear-gradient(135deg, #007aff, #00c6ff); font-size: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4); margin-top: 16px; margin-bottom: 24px; border-radius: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .qr-btn-main { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px; font-size: 17px; border-radius: 16px; display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 24px; margin-top: 16px; }
 
         .screen { padding: 0 16px 20px; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -170,9 +169,6 @@
         .toast.success { background: rgba(52, 199, 89, 0.95); box-shadow: 0 8px 24px rgba(52, 199, 89, 0.3); }
         .toast.error { background: rgba(255, 59, 48, 0.95); box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
-
-        /* Кнопка QR на главной во всю ширину */
-        .qr-btn-main { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px; font-size: 17px; border-radius: 16px; display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 24px; }
     </style>
 </head>
 <body>
@@ -197,10 +193,11 @@
             <div style="width: 80px;"></div>
         </div>
 
-        <!-- Новая кнопка QR на главной -->
         <button class="qr-btn-main" onclick="scanQr()">
             <span style="font-size: 24px;">📷</span> Сканировать QR-код
         </button>
+
+        <button class="take-btn" onclick="showTakeScreen()">📤 Взять технику</button>
 
         <div id="stats-box" class="stats-card hidden"></div>
 
@@ -208,8 +205,6 @@
             <b>📊 Сводка за вчера:</b>
             <div id="report-text" style="margin-top:5px;"></div>
         </div>
-
-        <button class="take-btn" onclick="showTakeScreen()">📤 Взять технику</button>
 
         <button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
 
@@ -249,7 +244,7 @@
         <div class="sticky-header">
             <button class="sticky-back" onclick="backToMain()">← Назад</button>
             <div class="sticky-title">Взять технику</div>
-            <div style="width: 80px;"></div>
+            <button class="sticky-scan" onclick="scanTakeQr()">📷</button>
         </div>
         
         <div style="margin-top: 16px;">
@@ -307,8 +302,26 @@
                 <input type="text" id="platform-search" placeholder="Поиск по площадке..." oninput="handleSearchInput(this, 'plat-search-wrapper'); filterPlatforms()">
                 <span class="search-clear" onclick="clearSearch('platform-search', 'plat-search-wrapper'); filterPlatforms()">✕</span>
             </div>
-            <button class="secondary" onclick="syncGoogle()" id="sync-btn">🔄 Обновить данные</button>
+            <button class="secondary" onclick="syncGoogle('кц')" id="sync-btn-plat">🔄 Обновить данные</button>
             <div id="platforms-list"></div>
+        </div>
+    </div>
+
+    <div id="screen-th" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">ТХ (МСК)</div>
+            <div style="width: 80px;"></div>
+        </div>
+        
+        <div style="margin-top: 16px;">
+            <div class="search-wrapper" id="th-search-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="th-search" placeholder="Поиск по теплоходу..." oninput="handleSearchInput(this, 'th-search-wrapper'); filterTH()">
+                <span class="search-clear" onclick="clearSearch('th-search', 'th-search-wrapper'); filterTH()">✕</span>
+            </div>
+            <button class="secondary" onclick="syncGoogle('тх мск')" id="sync-btn-th">🔄 Обновить данные</button>
+            <div id="th-list"></div>
         </div>
     </div>
 
@@ -338,12 +351,14 @@
         <button class="danger" onclick="promptClearDatabase()">🗑 Очистить базу товаров</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
-        <button class="secondary" onclick="showImportForm()">📁 Импорт данных</button>
         <button class="secondary" onclick="showSpotQrForm()">🔲 Создать полку</button>
         
-        <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Экспорт и Проверка</h2>
+        <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Импорт/Экспорт</h2>
+        <div class="input-group"><input type="file" id="import-file" accept=".csv, .xlsx, .xls" onchange="uploadExcel(this)"></div>
         <button class="ok" onclick="exportStock()" id="export-stock-btn">📥 Выгрузить склад в Excel</button>
         <button class="secondary" onclick="downloadQrSheet()" id="export-qr-btn">🖨️ Скачать QR-лист для печати</button>
+        
+        <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
     </div>
 
@@ -512,19 +527,6 @@
         </div>
     </div>
 
-    <div id="screen-import" class="screen hidden">
-        <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
-            <div class="sticky-title">Импорт данных</div>
-            <div style="width: 80px;"></div>
-        </div>
-        <div style="margin-top: 16px;">
-            <div class="card" style="display:block;"><p style="font-size:14px; color:var(--text-muted);">Вставьте таблицу из Excel (разделитель — запятая).</p></div>
-            <textarea id="csv-text" rows="10" placeholder="T1,,,&#10;Камера,Canon r6,60000,&#10;Объектив,Canon rf 24-70 f4,60000,&#10;Вспышка,TT685iic,8000,133000&#10;T2,,,"></textarea>
-            <button onclick="submitText()">Загрузить</button>
-        </div>
-    </div>
-
     <div id="screen-terminal" class="screen hidden">
         <div class="sticky-header">
             <button class="sticky-back" onclick="showSettings()">← Назад</button>
@@ -571,18 +573,25 @@
             <div style="width: 80px;"></div>
         </div>
         <div style="margin-top: 16px;">
-            <div class="input-group"><label>Куда</label><select id="batch-to-location"></select></div>
-            <div class="input-group"><label>Место</label><select id="batch-to-spot"><option value="">Без места</option></select></div>
-            <button onclick="executeBatchMove()">Переместить выбранные</button>
+            <div class="input-group">
+                <label>1. Куда переместить (Комната)</label>
+                <select id="batch-to-location" onchange="updateBatchSpots()"></select>
+            </div>
+            <div class="input-group">
+                <label>2. На какую полку?</label>
+                <select id="batch-to-spot"><option value="">Без места</option></select>
+            </div>
+            <button onclick="executeBatchMove()" id="batch-confirm-btn" style="margin-top:20px;">Подтвердить</button>
         </div>
     </div>
 
     <div class="bottom-nav">
         <div class="nav-item active" id="nav-main" onclick="backToMain()"><span class="icon">📦</span><span>Главная</span></div>
-        <div class="nav-item" id="nav-equipment" onclick="showEquipmentMenu()"><span class="icon">📸</span><span>Оборудование</span></div>
+        <div class="nav-item" id="nav-equipment" onclick="showEquipmentMenu()"><span class="icon">📸</span><span>Оборуд.</span></div>
         <div class="nav-item" id="nav-platforms" onclick="showPlatforms()"><span class="icon">📍</span><span>Площадки</span></div>
+        <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>ТХ</span></div>
         <div class="nav-item" id="nav-rooms" onclick="showRooms()"><span class="icon">🏢</span><span>Склад</span></div>
-        <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настройки</span></div>
+        <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настр.</span></div>
     </div>
 
     <script>
@@ -600,7 +609,9 @@
         let currentEqCategory = "";
         let currentTakeCategory = "";
         let cachedPlatforms = [];
+        let cachedTH = [];
         let invScannedCodes = [];
+        let autoRefreshInterval = null;
 
         window.onerror = function(message, source, lineno, colno, error) {
             const errorText = `JS Error: ${message} at ${source}:${lineno}`;
@@ -638,6 +649,7 @@
             if (input.id === 'search-input') filterItems();
             if (input.id === 'eq-search-input') filterEquipmentItems();
             if (input.id === 'take-search-input') renderTakeItems();
+            if (input.id === 'th-search') filterTH();
         }
         function clearSearch(inputId, wrapperId) {
             const input = document.getElementById(inputId);
@@ -649,6 +661,7 @@
             if (inputId === 'eq-search-input') filterEquipmentItems();
             if (inputId === 'take-search-input') renderTakeItems();
             if (inputId === 'platform-search') filterPlatforms();
+            if (inputId === 'th-search') filterTH();
         }
         
         window.addEventListener('scroll', () => {
@@ -658,7 +671,7 @@
         });
 
         function updateNavActive(id) {
-            ["nav-main", "nav-equipment", "nav-platforms", "nav-rooms", "nav-settings"].forEach(nav => {
+            ["nav-main", "nav-equipment", "nav-platforms", "nav-th", "nav-rooms", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -724,12 +737,9 @@
                 }
                 
                 const cached = localStorage.getItem("cachedPlatforms");
-                if (cached) {
-                    try {
-                        cachedPlatforms = JSON.parse(cached);
-                        renderPlatformsList();
-                    } catch(e) {}
-                }
+                if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
+                const cachedTh = localStorage.getItem("cachedTH");
+                if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `
                     <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
@@ -738,6 +748,11 @@
 
                 await loadLocations(); await loadSpots(); await loadCategories(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
                 showScreen("screen-main");
+
+                // Автообновление
+                if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+                autoRefreshInterval = setInterval(() => { loadItems(); }, 15000);
+
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
         }
 
@@ -893,7 +908,7 @@
                 section.classList.remove("hidden"); 
                 list.innerHTML = myItems.map(i => `
                 <div class="my-item-card">
-                    <div>
+                    <div style="flex:1; cursor:pointer;" onclick="openItem('${i.item_code}')">
                         <div style="font-weight:bold;">${i.name}</div>
                         <div class="meta" style="font-size:12px; color:var(--text-muted);">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div>
                     </div>
@@ -1045,11 +1060,9 @@
 
         function filterTakeCategory(catName, btn) {
             currentTakeCategory = catName;
-            
             document.querySelectorAll('#screen-take .filters button').forEach(b => b.classList.remove('active-filter'));
             if (btn) btn.classList.add('active-filter');
             else document.getElementById("take-cat-all-btn").classList.add("active-filter");
-
             renderTakeItems();
         }
 
@@ -1057,20 +1070,10 @@
             const list = document.getElementById("take-items-list");
             const query = document.getElementById("take-search-input").value.toLowerCase();
             
-            let available = allItems.filter(i => 
-                i.kind === 'equipment' && 
-                i.total > 0 && 
-                !i.needs_repair && 
-                (!i.holders || i.holders.length === 0)
-            );
+            let available = allItems.filter(i => i.kind === 'equipment' && i.total > 0 && !i.needs_repair && (!i.holders || i.holders.length === 0));
             
-            if (currentTakeCategory) {
-                available = available.filter(i => i.category === currentTakeCategory);
-            }
-            
-            if (query) {
-                available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
-            }
+            if (currentTakeCategory) available = available.filter(i => i.category === currentTakeCategory);
+            if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
 
             if (!available.length) {
                 list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>";
@@ -1100,7 +1103,6 @@
                         if (item.needs_repair) { showToast("Товар в ремонте", "error"); return true; }
                         if (item.holders && item.holders.length > 0) { showToast(`На руках у ${item.holders[0].full_name}`, "error"); return true; }
                         if (item.total <= 0) { showToast("Нет в наличии", "error"); return true; }
-                        
                         openItem(code);
                     } else {
                         showToast("Товар не найден", "error");
@@ -1135,10 +1137,7 @@
                 return;
             }
 
-            let filtered = cachedPlatforms.filter(row => {
-                const place = (row["Площадка"] || "").toLowerCase();
-                return place.includes(query);
-            });
+            let filtered = cachedPlatforms.filter(row => (row["Площадка"] || "").toLowerCase().includes(query));
 
             filtered.sort((a, b) => {
                 const missingA = (a["чего не хватает"] || "").toUpperCase();
@@ -1146,9 +1145,7 @@
                 const isOkA = missingA.includes("ХВАТАЕТ");
                 const isOkB = missingB.includes("ХВАТАЕТ");
                 if (isOkA !== isOkB) return isOkA ? 1 : -1;
-                const dateA = parseDateStr(a["дата"]);
-                const dateB = parseDateStr(b["дата"]);
-                return dateB - dateA;
+                return parseDateStr(b["дата"]) - parseDateStr(a["дата"]);
             });
 
             if (!filtered.length) {
@@ -1168,18 +1165,13 @@
                 
                 return `
                 <div class="card platform-card">
-                    <div class="platform-title">
-                        <span>${place}</span>
-                        <span class="platform-date">${date}</span>
-                    </div>
+                    <div class="platform-title"><span>${place}</span><span class="platform-date">${date}</span></div>
                     <div class="platform-info">
                         <div class="platform-info-row"><span>👤 Админ:</span> <b>${admin}</b></div>
                         <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
                         ${stock ? `<div class="platform-info-row"><span>📦 Запас:</span> <b>${stock}</b></div>` : ""}
                     </div>
-                    <div class="platform-status ${statusClass}">
-                        ${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}
-                    </div>
+                    <div class="platform-status ${statusClass}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}</div>
                 </div>
                 `;
             }).join("");
@@ -1187,16 +1179,83 @@
 
         function filterPlatforms() { renderPlatformsList(); }
 
-        async function syncGoogle() {
-            const btn = document.getElementById("sync-btn");
+        // --- ТХ ---
+        function showTH() {
+            updateNavActive("nav-th");
+            showScreen("screen-th");
+        }
+
+        function renderTHList() {
+            const list = document.getElementById("th-list");
+            const query = document.getElementById("th-search").value.toLowerCase();
+            
+            if (!cachedTH.length) {
+                list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Нажмите «Обновить данные», чтобы загрузить.</p>";
+                return;
+            }
+
+            let filtered = cachedTH.filter(row => (row["Название"] || "").toLowerCase().includes(query));
+
+            filtered.sort((a, b) => {
+                const missingA = (a["Что просят"] || "").toUpperCase();
+                const missingB = (b["Что просят"] || "").toUpperCase();
+                const isOkA = missingA.includes("ХВАТАЕТ");
+                const isOkB = missingB.includes("ХВАТАЕТ");
+                if (isOkA !== isOkB) return isOkA ? 1 : -1;
+                return parseDateStr(b["Дата"]) - parseDateStr(a["Дата"]);
+            });
+
+            if (!filtered.length) {
+                list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>";
+                return;
+            }
+
+            list.innerHTML = filtered.map(row => {
+                const name = row["Название"] || "—";
+                const date = row["Дата"] || "";
+                const counter = row["Счетчик"] || "0";
+                const paper = row["запас бумаги"] || "";
+                const vinyl = row["Винил"] || "";
+                const frames = row["Рамки"] || "";
+                const types = row["По видам"] || "";
+                const ask = row["Что просят"] || "";
+                const isOk = ask.toUpperCase().includes("ХВАТАЕТ");
+                const statusClass = isOk ? "status-ok" : "status-bad";
+                
+                return `
+                <div class="card platform-card">
+                    <div class="platform-title"><span>${name}</span><span class="platform-date">${date}</span></div>
+                    <div class="platform-info">
+                        <div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>
+                        <div class="platform-info-row"><span>📄 Бумага:</span> <b>${paper}</b></div>
+                        <div class="platform-info-row"><span>🎵 Винил:</span> <b>${vinyl}</b></div>
+                        <div class="platform-info-row"><span>🖼 Рамки:</span> <b>${frames}</b></div>
+                        ${types !== "Нет (указать каких)" ? `<div class="platform-info-row"><span>📦 Виды:</span> <b>${types}</b></div>` : ""}
+                    </div>
+                    <div class="platform-status ${statusClass}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${ask}`}</div>
+                </div>
+                `;
+            }).join("");
+        }
+
+        function filterTH() { renderTHList(); }
+
+        async function syncGoogle(sheetName) {
+            const btn = sheetName === 'кц' ? document.getElementById("sync-btn-plat") : document.getElementById("sync-btn-th");
             setLoading(btn, true, "Загрузка...");
             
             try {
-                const res = await api("/api/sync_google");
+                const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
-                    cachedPlatforms = res.data;
-                    localStorage.setItem("cachedPlatforms", JSON.stringify(cachedPlatforms));
-                    renderPlatformsList();
+                    if (sheetName === 'кц') {
+                        cachedPlatforms = res.data;
+                        localStorage.setItem("cachedPlatforms", JSON.stringify(cachedPlatforms));
+                        renderPlatformsList();
+                    } else {
+                        cachedTH = res.data;
+                        localStorage.setItem("cachedTH", JSON.stringify(cachedTH));
+                        renderTHList();
+                    }
                     showToast("Данные обновлены");
                 } else {
                     showToast("Данных нет");
@@ -1214,10 +1273,7 @@
             showScreen("screen-rooms"); 
             updateNavActive("nav-rooms"); 
             const list = document.getElementById("rooms-list"); 
-            list.innerHTML = `
-                <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
-                <div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
-            `; 
+            list.innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`; 
             try { 
                 const rooms = await api("/api/locations_view"); 
                 list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">📦 Полки: ${r.spots.length > 0 ? r.spots.join(", ") : "нет"}</div></div><div class="room-arrow-circle">›</div></div>`).join(""); 
@@ -1268,10 +1324,11 @@
                 } 
                 
                 if (data.no_shelf.length > 0) { 
-                    html += `<h2 style="font-size:18px; margin-top: 30px; color: var(--warning); font-weight: 700;">⚠️ Без полки</h2><div class="grid-container" style="padding:0;">`; 
+                    html += `<h2 style="font-size:18px; margin-top: 30px; color: var(--warning); font-weight: 700;">⚠️ Без полки / На руках</h2><div class="grid-container" style="padding:0;">`; 
                     data.no_shelf.forEach(item => { 
                         let badges = "";
                         if (item.category) badges += `<span class="badge category">${item.category}</span>`;
+                        if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
                         if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
 
                         html += `
@@ -1279,7 +1336,7 @@
                             <input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)">
                             <div class="room-item-content" onclick="openItem('${item.code}')">
                                 <div class="room-item-name">${item.name}</div>
-                                <div class="room-item-meta">${item.code} · ${item.quantity} шт</div>
+                                <div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity} шт`}</div>
                                 <div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div>
                             </div>
                         </div>`; 
@@ -1348,9 +1405,20 @@
             document.getElementById("batch-to-spot").innerHTML = `<option value="">Без места</option>` + spots.map(s => `<option value="${s.name}">${s.name}</option>`).join(""); 
             showScreen("screen-batch-move"); 
         }
+
+        function updateBatchSpots() {
+            const locId = parseInt(document.getElementById("batch-to-location").value);
+            const spotSelect = document.getElementById("batch-to-spot");
+            spotSelect.innerHTML = `<option value="">Без места</option>`;
+            if (locId) {
+                const locSpots = allItems.filter(i => i.stocks.some(s => s.location_id === locId)).map(i => i.stocks.filter(s => s.location_id === locId).map(s => s.spot)).flat();
+                const uniqueSpots = [...new Set(locSpots)].filter(s => s);
+                spotSelect.innerHTML += uniqueSpots.map(s => `<option value="${s}">${s}</option>`).join("");
+            }
+        }
         
         async function executeBatchMove() { 
-            const btn = document.querySelector("#screen-batch-move button");
+            const btn = document.getElementById("batch-confirm-btn");
             const toLocation = parseInt(document.getElementById("batch-to-location").value); 
             const toSpot = document.getElementById("batch-to-spot").value; 
             if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; } 
@@ -1390,9 +1458,13 @@
             setLoading(btn, true, "Подсчет...");
             try {
                 const res = await api("/api/inventory_finish", { method: "POST", body: JSON.stringify({ location_id: locId, found: invScannedCodes }) });
-                if (res.missing && res.missing.length > 0) {
-                    showToast(`Не найдено: ${res.missing.length} шт.`, 'error');
-                    alert("Потеряшки:\n" + res.missing.join('\n'));
+                let msg = "";
+                if (res.missing && res.missing.length > 0) msg += `Не найдено: ${res.missing.length} шт.\n`;
+                if (res.extra && res.extra.length > 0) msg += `Лишние (не по базе): ${res.extra.length} шт.\n`;
+                
+                if (msg) {
+                    showToast("Есть расхождения", 'error');
+                    alert(msg + "\nПотеряшки:\n" + (res.missing || []).join('\n') + "\nЛишние:\n" + (res.extra || []).join('\n'));
                 } else {
                     showToast("Все на месте!");
                 }
@@ -1457,8 +1529,21 @@
         async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") { document.getElementById("consumable-fields").classList.remove("hidden"); } else { document.getElementById("consumable-fields").classList.add("hidden"); } }
         async function saveItem() { const btn = document.querySelector("#screen-add button"); const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } const formData = new FormData(); formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("category", document.getElementById("add-category").value); formData.append("location_id", loc); formData.append("spot", document.getElementById("add-spot").value); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } setLoading(btn, true, "Сохранение..."); try { await api("/api/items", { method: "POST", body: formData }); showToast("Добавлено"); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } }
-        function showImportForm() { showScreen("screen-import"); }
-        async function submitText() { const btn = document.querySelector("#screen-import button"); const text = document.getElementById("csv-text").value; if (!text.trim()) return; setLoading(btn, true, "Загрузка..."); try { const res = await api("/api/import_text", { method: "POST", body: JSON.stringify({ text }) }); showToast(`Загружено: ${res.added}, обновлено: ${res.updated}`); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } }
+        
+        async function uploadExcel(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            showToast("Загрузка файла...");
+            try {
+                const res = await api("/api/import_file", { method: "POST", body: formData });
+                showToast(`Загружено: ${res.added}, обновлено: ${res.updated}`);
+                input.value = '';
+            } catch (e) { notify(e.message); }
+        }
+
         function showSpotQrForm() { document.getElementById("spot-qr-result").innerHTML = ""; showScreen("screen-spot-qr"); }
         async function createSpot() { const name = document.getElementById("spot-name").value.trim(); if (!name) return; try { await api("/api/spots", { method: "POST", body: JSON.stringify({ name }) }); showToast("Полка создана"); const url = `/api/qr/${encodeURIComponent(name)}`; document.getElementById("spot-qr-result").innerHTML = `<img src="${url}" style="width:200px;" onclick="window.open('${url}')"><br>${name}`; } catch (e) { notify(e.message); } }
         
@@ -1546,13 +1631,14 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-inventory"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-import", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
             if (id === "screen-equipment") updateNavActive("nav-equipment");
             if (id === "screen-platforms") updateNavActive("nav-platforms");
+            if (id === "screen-th") updateNavActive("nav-th");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
             if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
