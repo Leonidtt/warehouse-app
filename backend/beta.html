@@ -734,9 +734,9 @@
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
-                const cached = localStorage.getItem("cachedPlatforms_v6");
+                const cached = localStorage.getItem("cachedPlatforms_v8");
                 if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
-                const cachedTh = localStorage.getItem("cachedTH_v6");
+                const cachedTh = localStorage.getItem("cachedTH_v8");
                 if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
@@ -1042,7 +1042,8 @@
         function renderTakeItems() {
             const list = document.getElementById("take-items-list");
             const query = document.getElementById("take-search-input").value.toLowerCase();
-            let available = allItems.filter(i => i.kind === 'equipment' && i.total > 0 && !i.needs_repair && (!i.holders || i.holders.length === 0));
+            
+            let available = allItems.filter(i => i.kind === 'equipment' && !i.needs_repair);
             if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
 
             if (!available.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>"; return; }
@@ -1057,17 +1058,23 @@
                 let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
                 let snText = i.serial_number ? `<span style="font-size:12px; color:var(--text-muted);">S/N: ${i.serial_number}</span>` : "";
 
+                let isOnHand = i.holders && i.holders.length > 0;
+                let onHandBadge = isOnHand ? `<span class="badge on-hand">У ${i.holders[0].full_name}</span>` : "";
+                
                 const isChecked = selectedTakeItems.includes(i.code) ? "checked" : "";
+                const isDisabled = isOnHand ? "disabled" : "";
+                const dimmedClass = isOnHand ? "dimmed" : "";
+
                 return `
-                <div class="card room-item-card">
-                    <input type="checkbox" class="room-item-checkbox" ${isChecked} onchange="toggleTakeSelect('${i.code}', this)">
+                <div class="card room-item-card ${dimmedClass}">
+                    <input type="checkbox" class="room-item-checkbox" ${isChecked} ${isDisabled} onchange="toggleTakeSelect('${i.code}', this)">
                     <div class="room-item-content" onclick="openItem('${i.code}')">
                         <div class="room-item-name">${i.name}</div>
-                        <div class="room-item-meta">${i.code} · Доступно: ${i.total} шт ${snText ? `· ${snText}` : ""}</div>
+                        <div class="room-item-meta">${i.code} · Всего: ${i.total} шт ${snText ? `· ${snText}` : ""}</div>
                         ${placesHtml}
                         <div style="margin-top:8px;">
                             <span class="badge eq">Оборуд.</span>
-                            ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${brokenBadge}
+                            ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${brokenBadge} ${onHandBadge}
                         </div>
                     </div>
                 </div>`;
@@ -1076,6 +1083,12 @@
 
         function toggleTakeSelect(code, cb) {
             haptic('light');
+            const item = allItems.find(i => i.code === code);
+            if (item && item.holders && item.holders.length > 0) {
+                cb.checked = false;
+                notify("Эта техника на руках у другого сотрудника");
+                return;
+            }
             if (cb.checked) { if(!selectedTakeItems.includes(code)) selectedTakeItems.push(code); }
             else { selectedTakeItems = selectedTakeItems.filter(c => c !== code); }
             updateTakeBatchUI();
@@ -1220,18 +1233,22 @@
                 const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
                 if (res.data && res.data.length) {
                     if (sheetName === 'кц') { 
-                        localStorage.removeItem("cachedPlatforms_v6");
+                        localStorage.removeItem("cachedPlatforms_v8");
                         cachedPlatforms = res.data; 
-                        localStorage.setItem("cachedPlatforms_v6", JSON.stringify(cachedPlatforms)); 
+                        localStorage.setItem("cachedPlatforms_v8", JSON.stringify(cachedPlatforms)); 
                         renderPlatformsList(); 
                     } 
                     else { 
-                        localStorage.removeItem("cachedTH_v6");
+                        localStorage.removeItem("cachedTH_v8");
                         cachedTH = res.data; 
-                        localStorage.setItem("cachedTH_v6", JSON.stringify(cachedTH)); 
+                        localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
-                    showToast("Данные обновлены");
+                    if (res.sheet_title && res.sheet_title.toLowerCase() !== sheetName.toLowerCase()) {
+                        notify(`Внимание! Сервер прочитал лист: ${res.sheet_title}`);
+                    } else {
+                        showToast("Данные обновлены");
+                    }
                 } else { showToast("Данных нет"); }
             } catch (e) { notify("Ошибка: " + e.message); } 
             finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
@@ -1439,17 +1456,30 @@
             const otherCheckout = currentItem.holders.find(h => h.user_id !== myId); 
             let html = ""; 
             
-            if (currentItem.needs_repair) { html += `<div class="status-badge status-broken">Выдача заблокирована</div>`; } 
-            else if (isEq) { 
-                if (myCheckout) html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
-                else if (otherCheckout) html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
-                else { if (currentItem.stocks.some(s => s.quantity > 0)) html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; } 
+            if (currentItem.needs_repair) { 
+                html += `<div class="status-badge status-broken">Выдача заблокирована</div>`; 
+            } else if (isEq) { 
+                if (myCheckout) {
+                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
+                } else if (otherCheckout) {
+                    if (currentUser.role === 'admin') {
+                        html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
+                    } else {
+                        html += `<div class="status-badge status-taken">На руках у ${otherCheckout.full_name}.<br><span style="font-size:12px; font-weight:normal; color:var(--text-muted);">Вернуть может только администратор.</span></div>`;
+                    }
+                } else { 
+                    if (currentItem.stocks.some(s => s.quantity > 0)) {
+                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
+                    }
+                } 
             } else { 
                 html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
             } 
             
             const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join(""); 
-            if (stockOpts) html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
+            if (stockOpts) {
+                html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
+            }
             box.innerHTML = html; 
         }
         
