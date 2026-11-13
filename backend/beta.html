@@ -194,10 +194,27 @@
         <button onclick="doRegister()" id="reg-btn" style="margin-top: 10px;">Зарегистрироваться</button>
     </div>
 
+    <!-- НОВЫЙ ЭКРАН ПРОФИЛЯ -->
+    <div id="screen-edit-profile" class="screen hidden" style="padding-top: 40px;">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title">Профиль</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <h1 style="text-align: center; margin-bottom: 10px; font-size: 24px; letter-spacing: -1px;">Ваши данные</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 30px; font-size: 15px;">Измените вашу Фамилию и Имя</p>
+        <div class="input-group">
+            <label>Фамилия и Имя</label>
+            <input id="profile-name" placeholder="Например, Петров Иван">
+        </div>
+        <button onclick="saveProfile()" id="save-profile-btn" class="ok" style="margin-top: 10px;">Сохранить</button>
+    </div>
+
     <div id="screen-main" class="screen hidden">
         <div class="sticky-header">
             <div style="width: 80px;"></div>
-            <div class="sticky-title" id="user-info">Учёт</div>
+            <!-- Добавлен onclick и курсор -->
+            <div class="sticky-title" id="user-info" onclick="showEditProfile()" style="cursor: pointer;">Учёт</div>
             <div style="width: 80px;"></div>
         </div>
 
@@ -776,6 +793,30 @@
                 showToast("Добро пожаловать!");
                 init(); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
+        }
+
+        // --- ПРОФИЛЬ ---
+        function showEditProfile() {
+            document.getElementById("profile-name").value = currentUser.full_name || "";
+            showScreen("screen-edit-profile");
+        }
+
+        async function saveProfile() {
+            const btn = document.getElementById("save-profile-btn");
+            const newName = document.getElementById("profile-name").value.trim();
+            if (newName.length < 3) { notify("Введите Фамилию и Имя"); return; }
+            
+            setLoading(btn, true, "Сохранение...");
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: newName }) });
+                showToast("Профиль обновлен");
+                currentUser.full_name = newName;
+                document.getElementById("user-info").innerHTML = `${currentUser.full_name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                backToMain();
+            } catch (e) {
+                notify(e.message);
+                setLoading(btn, false);
+            }
         }
 
         async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
@@ -1782,7 +1823,7 @@
         });
         
         function showScreen(id) { 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-history", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
+            ["screen-register", "screen-edit-profile", "screen-main", "screen-take", "screen-item", "screen-add", "screen-history", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item"].forEach(s => { 
                 const el = document.getElementById(s); 
                 if (el) el.classList.toggle("hidden", s !== id); 
             }); 
