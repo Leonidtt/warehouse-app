@@ -247,7 +247,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         headers = all_values[0]
         data_rows = all_values[1:]
         records = []
-        is_th_sheet = "тх" in sheet_name.lower()
+        is_th_sheet = "тх" in target_sheet.title.lower()
         
         for row in data_rows:
             if not row or len(row) == 0: continue
