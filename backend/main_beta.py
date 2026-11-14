@@ -33,6 +33,7 @@ SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 DB_PATH = "/data/warehouse_beta.db"
 
 app = FastAPI()
+print("=== 🚀 ЗАПУЩЕН НОВЫЙ КОД MAIN_BETA.PY ===")
 
 # ==========================================
 # БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
