@@ -28,7 +28,7 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+BOT_TOKEN = "ВАШ_БЕТА_ТОКЕН_ЗДЕСЬ"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 DB_PATH = "/data/warehouse_beta.db"
 
@@ -232,13 +232,13 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         sheets = spreadsheet.worksheets()
         target_sheet = None
         
-        # 1. Ищем точное совпадение
+        # 1. Точное совпадение
         for s in sheets:
             if s.title.strip().lower() == sheet_name.strip().lower():
                 target_sheet = s
                 break
                 
-        # 2. Если точного нет, ищем по ключевому слову (тх или кц)
+        # 2. Поиск по ключевому слову
         if not target_sheet:
             keyword = "тх" if "тх" in sheet_name.lower() else "кц"
             for s in sheets:
@@ -246,7 +246,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                     target_sheet = s
                     break
                     
-        # 3. Если всё равно нет, и это теплоходы, берем 4-й лист (индекс 3)
+        # 3. 4-й лист для теплоходов
         if not target_sheet and "тх" in sheet_name.lower() and len(sheets) >= 4:
             target_sheet = sheets[3]
             
@@ -283,7 +283,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
             
         return {"status": "ok", "sheet_title": target_sheet.title, "data": records}
     except Exception as e:
-        return {"status": "error", "message": f"Ошибка на сервере при чтении таблицы: {str(e)}"}
+        return {"status": "error", "message": f"Ошибка на сервере: {str(e)}"}
 
 @app.get("/api/my_bookings")
 def my_bookings(x_init_data: Optional[str] = Header(None)):
