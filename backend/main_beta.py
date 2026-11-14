@@ -65,7 +65,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/health")
-def healthcheck(): return {"status": "ok"}
+def healthcheck():
+    return {"status": "ok", "version": "beta-v10-debug"}
 
 def get_conn():
     if not os.path.exists("/data"):
@@ -218,8 +219,12 @@ async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(No
 @app.get("/api/sync_google")
 def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data)
+    print(f"[sync_google] ЗАПРОШЕН лист: '{sheet_name}'")
+
     creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_env: return {"status": "error", "message": "Не настроены GOOGLE_CREDENTIALS_JSON на сервере."}
+    if not creds_env:
+        print("[sync_google] ОШИБКА: GOOGLE_CREDENTIALS_JSON не задан в переменных окружения")
+        return {"status": "error", "message": "Не настроены GOOGLE_CREDENTIALS_JSON на сервере."}
     try:
         decoded_bytes = base64.b64decode(creds_env)
         creds_json = decoded_bytes.decode('utf-8')
@@ -228,43 +233,49 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
-        
+
         # Жесткий поиск ТОЛЬКО по точному названию (без 4-го индекса)
         try:
             target_sheet = spreadsheet.worksheet(sheet_name)
-        except Exception:
+            print(f"[sync_google] НАЙДЕН лист: '{target_sheet.title}'")
+        except Exception as e:
             titles = [s.title for s in spreadsheet.worksheets()]
+            print(f"[sync_google] НЕ НАЙДЕН лист '{sheet_name}'. Доступные: {titles}")
             return {"status": "error", "message": f"Лист '{sheet_name}' не найден. Доступные листы: {titles}. Проверьте регистр и пробелы!"}
-        
+
         all_values = target_sheet.get_all_values()
+        print(f"[sync_google] Прочитано строк (включая шапку): {len(all_values)}")
         if not all_values: return {"status": "ok", "sheet_title": target_sheet.title, "data": []}
-        
+
         headers = all_values[0]
+        print(f"[sync_google] Заголовки: {headers}")
         data_rows = all_values[1:]
         records = []
         is_th_sheet = "тх" in sheet_name.lower()
-        
+
         for row in data_rows:
             if not row or len(row) == 0: continue
             first_cell = row[0].strip() if row[0] else ""
             if not first_cell: continue
             if len(row) > 1 and row[1] is not None and "1899" in str(row[1]): continue
-            
+
             record = {}
             if is_th_sheet or not headers[0].strip():
                 record["Название"] = first_cell
                 start_idx = 1
             else:
                 start_idx = 0
-                
+
             for i in range(start_idx, len(headers)):
                 h = headers[i].strip() if i < len(headers) else ""
                 if h and i < len(row):
                     record[h] = row[i].strip() if row[i] else ""
             records.append(record)
-            
+
+        print(f"[sync_google] ОТДАЮ {len(records)} записей. Ключи 1-й: {list(records[0].keys()) if records else '[]'}")
         return {"status": "ok", "sheet_title": target_sheet.title, "data": records}
     except Exception as e:
+        print(f"[sync_google] ИСКЛЮЧЕНИЕ: {e}\n{traceback.format_exc()}")
         return {"status": "error", "message": f"Ошибка на сервере при чтении таблицы: {str(e)}"}
 
 @app.get("/api/my_bookings")
@@ -388,26 +399,26 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     except: pass
     conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
-    
+
     items = conn.execute("SELECT s.item_code, s.quantity FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (location_id,)).fetchall()
     checkouts = conn.execute("SELECT c.item_code, u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
-    
+
     item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
-    
+
     result_items = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
         data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
-        
+
     for c in checkouts:
         detail = item_details.get(c["item_code"], {})
         data = {"code": c["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": c["full_name"]}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
-        
+
     return {"location_name": location["name"], "items": result_items}
 
 @app.post("/api/locations")
@@ -430,19 +441,19 @@ def get_stats(x_init_data: Optional[str] = Header(None)):
     default_cats = ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]
     db_cats = [r["category"] for r in conn.execute("SELECT DISTINCT category FROM items WHERE category != '' AND is_archived = 0").fetchall()]
     all_cats = list(dict.fromkeys(default_cats + db_cats))
-    
+
     result = []
     for name in all_cats:
         total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ? AND i.is_archived = 0", (name,)).fetchone()["q"]
         in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL AND i.is_archived = 0", (name,)).fetchone()["q"]
         result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
-        
+
     no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
     no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL AND i.is_archived = 0").fetchone()["q"]
-    
+
     if no_cat_total + no_cat_work > 0:
         result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
-        
+
     conn.close()
     return result
 
@@ -531,15 +542,15 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         if item["needs_repair"]: errors.append(f"{item['name']}: в ремонте"); continue
         if item["kind"] != "equipment": errors.append(f"{item['name']}: расходник"); continue
         if conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone(): errors.append(f"{item['name']}: уже выдан"); continue
-        
+
         stock = conn.execute("SELECT location_id FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (code,)).fetchone()
         if not stock: errors.append(f"{item['name']}: нет в наличии"); continue
-        
+
         conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (code, user["tg_id"], stock["location_id"], req.taken_for))
         conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, stock["location_id"]))
         conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (code,))
         success.append(item["name"])
-    
+
     conn.commit(); conn.close()
     if success:
         asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
@@ -566,11 +577,11 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn()
     co = conn.execute("SELECT id, location_id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
     if not co: conn.close(); raise HTTPException(400, "Не выдано")
-    
+
     conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["tg_id"], co["id"]))
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone(): 
+    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone():
         conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, co["location_id"]))
-    else: 
+    else:
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
     conn.commit()
     item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
@@ -583,15 +594,15 @@ def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if req.quantity <= 0: raise HTTPException(400, "Количество должно быть больше 0")
     if req.from_location == req.to_location: raise HTTPException(400, "Выберите другую комнату")
-    
+
     conn = get_conn(); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
-    
+
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone(): 
+    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone():
         conn.execute("UPDATE stock SET quantity = quantity + ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.to_location))
-    else: 
+    else:
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (req.code, req.to_location, req.quantity))
     conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, user_id) VALUES (?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
@@ -606,9 +617,9 @@ def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None))
         if row and row["quantity"] > 0:
             conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, req.from_location))
             conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (code, req.from_location))
-            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone(): 
+            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone():
                 conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, req.to_location))
-            else: 
+            else:
                 conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, req.to_location))
             conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, user_id) VALUES (?,1,?,?,?)", (code, req.from_location, req.to_location, user["tg_id"]))
     conn.commit(); conn.close(); return {"status": "ok"}
