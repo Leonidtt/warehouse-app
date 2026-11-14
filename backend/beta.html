@@ -355,12 +355,18 @@
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
         
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Импорт/Экспорт</h2>
-        <div class="input-group"><input type="file" id="import-file" accept=".csv, .xlsx, .xls" onchange="uploadExcel(this)"></div>
+        
+        <!-- Скрытый инпут для загрузки файла (без accept, чтобы iOS не выдавал белый экран) -->
+        <input type="file" id="import-file" style="display: none;" onchange="uploadExcel(this)">
+        <button class="secondary" onclick="document.getElementById('import-file').click()">📂 Выбрать файл для импорта</button>
+        
         <button class="ok" onclick="exportStock()" id="export-stock-btn">📥 Выгрузить склад в Excel</button>
         <button class="secondary" onclick="downloadQrSheet()" id="export-qr-btn">🖨️ Скачать QR-лист для печати</button>
         
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
+        
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v9</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -735,9 +741,9 @@
                     document.getElementById("nav-settings").classList.add("hidden");
                 }
                 
-                const cached = localStorage.getItem("cachedPlatforms_v8");
+                const cached = localStorage.getItem("cachedPlatforms_v9");
                 if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
-                const cachedTh = localStorage.getItem("cachedTH_v8");
+                const cachedTh = localStorage.getItem("cachedTH_v9");
                 if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
                 
                 document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
@@ -1110,7 +1116,6 @@
         async function executeBatchTake() {
             if (!selectedTakeItems.length) return;
             try {
-                // Пытаемся использовать массовый эндпоинт
                 const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
                 if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
                 if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
@@ -1119,18 +1124,12 @@
                 loadItems();
                 backToMain();
             } catch (e) {
-                // Если сервер вернул 405 Method Not Allowed (значит бэкенд старый), делаем по одному
                 if (e.message.includes("Method Not Allowed") || e.message.includes("Not Found")) {
                     showToast("Обновляем по одному...", "success");
-                    let successCount = 0;
-                    let errors = [];
+                    let successCount = 0; let errors = [];
                     for (let code of selectedTakeItems) {
-                        try {
-                            await api("/api/checkout", { method: "POST", body: JSON.stringify({ code: code, taken_for: "" }) });
-                            successCount++;
-                        } catch (err) {
-                            errors.push(code + ": " + err.message);
-                        }
+                        try { await api("/api/checkout", { method: "POST", body: JSON.stringify({ code: code, taken_for: "" }) }); successCount++; } 
+                        catch (err) { errors.push(code + ": " + err.message); }
                     }
                     if (successCount > 0) showToast(`Взято: ${successCount} шт.`);
                     if (errors.length > 0) alert("Ошибки:\n" + errors.join("\n"));
@@ -1138,9 +1137,7 @@
                     updateTakeBatchUI();
                     loadItems();
                     backToMain();
-                } else {
-                    notify(e.message);
-                }
+                } else { notify(e.message); }
             }
         }
 
@@ -1229,6 +1226,9 @@
             if (!filtered.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>"; return; }
 
             list.innerHTML = filtered.map(row => {
+                // ЗАЩИТА ОТ ДАННЫХ КЦ
+                if (!row["Название"] && !row["Дата"] && row["Площадка"]) return "";
+
                 const name = row["Название"] || Object.values(row)[0] || "—";
                 const date = row["Дата"] || row["дата"] || "";
                 
@@ -1263,16 +1263,33 @@
                 }
 
                 if (res.data && res.data.length) {
+                    // ЖЕСТКАЯ ПРОВЕРКА СТРУКТУРЫ ДАННЫХ
+                    const firstItem = res.data[0];
+                    
+                    if (sheetName === 'тх мск') {
+                        if (firstItem.hasOwnProperty("Площадка")) {
+                            alert("ОШИБКА! Сервер снова отдал данные 'кц' вместо 'тх мск'.\nПожалуйста, убедитесь, что Railway запускает main_beta.py, а не main.py.");
+                            return;
+                        }
+                    } 
+                    
+                    if (sheetName === 'кц') {
+                        if (firstItem.hasOwnProperty("Название") && !firstItem.hasOwnProperty("Площадка")) {
+                            alert("ОШИБКА! Сервер отдал данные 'тх мск' вместо 'кц'.");
+                            return;
+                        }
+                    }
+
                     if (sheetName === 'кц') { 
-                        localStorage.removeItem("cachedPlatforms_v8");
+                        localStorage.removeItem("cachedPlatforms_v9");
                         cachedPlatforms = res.data; 
-                        localStorage.setItem("cachedPlatforms_v8", JSON.stringify(cachedPlatforms)); 
+                        localStorage.setItem("cachedPlatforms_v9", JSON.stringify(cachedPlatforms)); 
                         renderPlatformsList(); 
                     } 
                     else { 
-                        localStorage.removeItem("cachedTH_v8");
+                        localStorage.removeItem("cachedTH_v9");
                         cachedTH = res.data; 
-                        localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
+                        localStorage.setItem("cachedTH_v9", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
                     showToast("Данные обновлены");
@@ -1601,9 +1618,14 @@
         
         async function uploadExcel(input) {
             if (!input.files || !input.files[0]) return;
-            const formData = new FormData(); formData.append("file", input.files[0]);
+            const file = input.files[0];
+            const formData = new FormData(); formData.append("file", file);
             showToast("Загрузка файла...");
-            try { const res = await api("/api/import_file", { method: "POST", body: formData }); showToast(`Загружено: ${res.added}, обновлено: ${res.updated}`); input.value = ''; } catch (e) { notify(e.message); }
+            try { 
+                const res = await api("/api/import_file", { method: "POST", body: formData }); 
+                showToast(`Загружено: ${res.added}, обновлено: ${res.updated}`); 
+                input.value = ''; 
+            } catch (e) { notify(e.message); }
         }
         
         async function showHistory() { 
@@ -1615,15 +1637,17 @@
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
         }
         
-        function downloadFile(url, filename) {
+        async function downloadFile(url, filename) {
             const fullUrl = window.location.origin + url + (url.includes('?') ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData || "");
-            if (tg.downloadFile) {
-                tg.downloadFile({ url: fullUrl, filename: filename }, (accepted) => {
-                    if (!accepted) notify("Скачивание отменено");
-                });
-            } else {
-                tg.openLink(fullUrl);
-            }
+            try {
+                if (tg.downloadFile) {
+                    tg.downloadFile({ url: fullUrl, filename: filename }, (accepted) => {
+                        if (!accepted) notify("Скачивание отменено");
+                    });
+                } else {
+                    window.open(fullUrl, '_blank');
+                }
+            } catch (e) { notify("Ошибка скачивания: " + e.message); }
         }
 
         async function downloadHistory() { downloadFile("/api/export_history", "history.csv"); }
