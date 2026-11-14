@@ -349,7 +349,6 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--danger); font-weight: 700; letter-spacing: -0.5px;">Разработка</h2>
         <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
-        <button class="danger" onclick="promptClearDatabase()">🗑 Очистить базу товаров</button>
         <button class="danger" onclick="localStorage.clear(); location.reload();">🔄 Сбросить кэш браузера</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
         <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
@@ -1263,8 +1262,17 @@
                     return;
                 }
                 
+                if (!res.sheet_title) {
+                    alert("Сервер работает на СТАРОЙ версии. Задеплойте новый main_beta.py на Railway!");
+                    return;
+                }
+
+                if (res.sheet_title.toLowerCase().trim() !== sheetName.toLowerCase().trim()) {
+                    alert(`ОШИБКА!\nВы запросили лист: "${sheetName}"\nНо сервер прочитал: "${res.sheet_title}"`);
+                    return;
+                }
+                
                 if (res.data && res.data.length) {
-                 alert(`Сервер прочитал лист: "${res.sheet_title || 'неизвестно'}"\nСтрок получено: ${res.data.length}`);
                     if (sheetName === 'кц') { 
                         localStorage.removeItem("cachedPlatforms_v8");
                         cachedPlatforms = res.data; 
@@ -1277,16 +1285,10 @@
                         localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
                         renderTHList(); 
                     }
-                    
-                    if (res.sheet_title && res.sheet_title.toLowerCase() !== sheetName.toLowerCase()) {
-                        notify(`Внимание! Сервер прочитал лист: ${res.sheet_title}`);
-                    } else {
-                        showToast("Данные обновлены");
-                    }
+                    showToast("Данные обновлены");
                 } else { showToast("Данных нет (лист пуст)"); }
             } catch (e) { 
                 alert("ОШИБКА СЕТИ:\n" + e.message);
-                notify("Ошибка: " + e.message); 
             } 
             finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
         }
