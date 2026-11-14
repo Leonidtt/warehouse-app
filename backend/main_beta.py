@@ -238,7 +238,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                 break
         
         if not sheet:
-            return {"status": "error", "message": f"Лист '{sheet_name}' не найден в Google Таблице.\n\nДоступные листы (проверь название):\n- " + "\n- ".join(available_titles)}
+            return {"status": "error", "message": f"Лист '{sheet_name}' не найден в Google Таблице.\n\nДоступные листы:\n- " + "\n- ".join(available_titles)}
         
         all_values = sheet.get_all_values()
         if not all_values: return {"status": "ok", "sheet_title": sheet.title, "data": []}
