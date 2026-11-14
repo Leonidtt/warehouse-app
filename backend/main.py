@@ -1,720 +1,1676 @@
-import sqlite3
-import json
-import hashlib
-import hmac
-from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-from pydantic import BaseModel
-from typing import Optional, List
-import qrcode
-import io
-import csv
-import httpx
-from PIL import Image, ImageDraw, ImageFont
-import base64
-from datetime import datetime, timedelta
-import os
-import shutil
-
-import gspread
-from google.oauth2.service_account import Credentials
-import urllib3
-urllib3.disable_warnings()
-
-# --- ТОКЕНЫ ---
-BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
-BOT_TOKEN_BETA = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
-
-SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
-SHEET_NAME = "кц" 
-
-app = FastAPI()
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    print(f"ОШИБКА: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера."})
-
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-DB_PATH = "/data/warehouse.db"
-DB_PATH_BETA = "/data/warehouse_beta.db"
-
-def get_conn(x_init_data: Optional[str] = None):
-    if not os.path.exists("/data"):
-        try: os.makedirs("/data")
-        except: pass
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Склад</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #f5f5f7; --card-bg: #ffffff; --text: #1d1d1f; --text-muted: #86868b;
+            --primary: #007aff; --primary-gradient: linear-gradient(135deg, #2AABEE, #007aff);
+            --danger: #ff3b30; --success: #34c759; --warning: #ff9500; --purple: #af52de;
+            --border: rgba(0, 0, 0, 0.05); --radius: 20px; --shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --header-bg: rgba(255, 255, 255, 0.85); --skeleton-bg: #e5e5ea; --nav-bg: rgba(255, 255, 255, 0.9);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #000000; --card-bg: #1c1c1e; --text: #f5f5f7; --text-muted: #8e8e93;
+                --border: rgba(255, 255, 255, 0.1); --header-bg: rgba(28, 28, 30, 0.85);
+                --skeleton-bg: #2c2c2e; --nav-bg: rgba(28, 28, 30, 0.9);
+            }
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: var(--font); margin: 0; padding: 0; background: var(--bg); color: var(--text); padding-bottom: 90px; transition: background 0.3s, color 0.3s; -webkit-font-smoothing: antialiased; }
         
-    db_path = DB_PATH
-    if x_init_data and BOT_TOKEN_BETA:
-        try:
-            pairs = dict(parse_qsl(x_init_data, keep_blank_values=True))
-            received_hash = pairs.pop("hash", None)
-            data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
-            secret_key = hmac.new(b"WebAppData", BOT_TOKEN_BETA.encode(), hashlib.sha256).digest()
-            calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-            if calculated == received_hash:
-                db_path = DB_PATH_BETA
-        except: pass
+        input, select, textarea { width: 100%; padding: 16px; border: 1px solid transparent; border-radius: 14px; font-size: 16px; background: var(--skeleton-bg); color: var(--text); outline: none; transition: all 0.3s ease; min-width: 0; }
+        input:focus, select:focus, textarea:focus { background: var(--card-bg); border-color: var(--primary); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.15); }
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .sticky-header { position: sticky; top: 0; background: var(--header-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 200; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); min-height: 60px; border-radius: 0 0 20px 20px; margin-bottom: 16px; }
+        .sticky-back { background: var(--card-bg); border: 1px solid var(--border); padding: 8px 16px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; transition: transform 0.1s; }
+        .sticky-back:active { transform: scale(0.95); }
+        .sticky-title { font-weight: 700; font-size: 17px; flex: 1; text-align: center; margin: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sticky-scan { background: none; border: none; padding: 8px; font-size: 20px; cursor: pointer; width: auto; margin: 0; box-shadow: none; }
+
+        .grid-container { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 0 16px; }
+        .card { background: var(--card-bg); padding: 16px; border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid var(--border); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .card:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .card.dimmed { opacity: 0.5; }
+        .item-card { cursor: pointer; justify-content: space-between; }
+        .item-card .name { font-size: 16px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; word-break: break-word; letter-spacing: -0.3px; }
+        .item-card .meta { font-size: 13px; color: var(--text-muted); font-weight: 500; word-break: break-word; }
         
-    if db_path == DB_PATH_BETA and not os.path.exists(DB_PATH_BETA):
-        if os.path.exists(DB_PATH):
-            shutil.copy2(DB_PATH, DB_PATH_BETA)
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    return conn
-
-def init_db():
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS spots (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0, kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '', category TEXT DEFAULT '')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, spot TEXT DEFAULT '', PRIMARY KEY (item_code, location_id))""")
-    c.execute("""CREATE TABLE IF NOT EXISTS checkouts (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, location_id INTEGER NOT NULL, taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, returned_at TIMESTAMP, returned_by INTEGER, taken_for TEXT DEFAULT '')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS movements (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, from_location INTEGER, to_location INTEGER, to_spot TEXT DEFAULT '', user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS writeoffs (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, quantity INTEGER NOT NULL, location_id INTEGER, user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS lost_items (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS daily_reports (date TEXT PRIMARY KEY, report_text TEXT)""")
-
-    migrations = [
-        "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
-        "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
-        "ALTER TABLE items ADD COLUMN kit_body TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN kit_lens TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN kit_flash TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN budget_tag TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN serial_number TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
-        "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
-        "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
-        "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
-        "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
-        "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
-    ]
-    for q in migrations:
-        try: c.execute(q)
-        except sqlite3.OperationalError: pass
-
-    c.execute("SELECT COUNT(*) FROM locations")
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO locations (name, type) VALUES ('Мастерская', 'workshop')")
-        c.execute("INSERT INTO locations (name, type) VALUES ('Склад', 'storage')")
-        c.execute("INSERT INTO locations (name, type) VALUES ('Офис', 'office')")
-
-    c.execute("SELECT COUNT(*) FROM categories")
-    if c.fetchone()[0] == 0:
-        for name in ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]:
-            try: c.execute("INSERT INTO categories (name) VALUES (?)", (name,))
-            except sqlite3.IntegrityError: pass
-
-    # Устанавливаем is_registered = 1 для старых пользователей, чтобы они не видели окно регистрации
-    c.execute("UPDATE users SET is_registered = 1 WHERE full_name != '' AND is_registered = 0")
-
-    conn.commit(); conn.close()
-
-init_db()
-
-def verify_init_data(init_data: str, token: str) -> dict:
-    try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
-    except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
-    received_hash = pairs.pop("hash", None)
-    if not received_hash: raise HTTPException(status_code=401, detail="Нет подписи")
-    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
-    secret_key = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
-    calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    if calculated != received_hash: raise HTTPException(status_code=401, detail="Неверная подпись")
-    user_json = pairs.get("user")
-    if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
-    return json.loads(user_json)
-
-def get_user(x_init_data: Optional[str]):
-    if not x_init_data: raise HTTPException(status_code=401, detail="Нет авторизации")
-    user = None
-    try:
-        user = verify_init_data(x_init_data, BOT_TOKEN)
-    except:
-        if BOT_TOKEN_BETA:
-            try: user = verify_init_data(x_init_data, BOT_TOKEN_BETA)
-            except: pass
-    if not user: raise HTTPException(status_code=401, detail="Неверная подпись")
-    
-    conn = get_conn(x_init_data)
-    row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
-    if not row:
-        full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
-        conn.execute("INSERT INTO users (tg_id, first_name, username, full_name, role, is_registered) VALUES (?, ?, ?, ?, 'employee', 0)", (user["id"], user.get("first_name", ""), user.get("username", ""), full_name))
-        conn.commit()
-        row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (user["id"],)).fetchone()
-    conn.close()
-    
-    user_dict = dict(row)
-    user_dict["is_registered"] = row["is_registered"] if "is_registered" in row.keys() else 1
-    return user_dict
-
-def check_admin(x_init_data: Optional[str]):
-    user = get_user(x_init_data)
-    if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
-    return user
-
-class ItemCreate(BaseModel):
-    code: str; name: str; kind: str = "equipment"; location_id: int; quantity: int = 0
-    spot: str = ""; min_stock: int = 0; price: float = 0; kit_body: str = ""; kit_lens: str = ""
-    kit_flash: str = ""; budget_tag: str = ""; serial_number: str = ""; buyout_status: str = ""
-    category: str = ""
-
-class MoveRequest(BaseModel):
-    code: str; from_location: int; to_location: int; quantity: int; to_spot: str = ""
-
-class BatchMoveRequest(BaseModel):
-    codes: List[str]; from_location: int; to_location: int; to_spot: str = ""
-
-class WriteoffRequest(BaseModel):
-    code: str; location_id: int; quantity: int
-
-class SpotCreate(BaseModel):
-    name: str
-
-class CategoryCreate(BaseModel):
-    name: str
-
-class CategoryUpdate(BaseModel):
-    id: int; name: str
-
-class BookingRequest(BaseModel):
-    code: str; date_from: str; date_to: str
-
-class CommentRequest(BaseModel):
-    code: str; text: str
-
-class CheckoutRequest(BaseModel):
-    code: str; taken_for: str = ""
-
-class RegisterRequest(BaseModel):
-    full_name: str
-
-class LocationCreate(BaseModel):
-    name: str
-
-class LocationUpdate(BaseModel):
-    id: int; name: str
-
-class ItemUpdate(BaseModel):
-    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""
-
-class SpotUpdate(BaseModel):
-    old_name: str; new_name: str
-
-class ImportTextRequest(BaseModel):
-    text: str
-
-class UserUpdate(BaseModel):
-    full_name: str
-    role: str
-
-class TerminalRequest(BaseModel):
-    sql: str
-
-@app.get("/api/me")
-def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
-
-@app.get("/api/sync_google")
-def sync_google(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data) # Теперь пускает любого авторизованного, а не только админа
-    
-    creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not creds_env: raise HTTPException(500, "Не настроены GOOGLE_CREDENTIALS_JSON в Railway")
-    try:
-        decoded_bytes = base64.b64decode(creds_env)
-        creds_json = decoded_bytes.decode('utf-8')
-        creds_dict = json.loads(creds_json)
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-        all_values = sheet.get_all_values()
-        if not all_values: return {"status": "ok", "data": []}
-        headers = all_values[0]
-        data_rows = all_values[1:]
-        records = []
-        for row in data_rows:
-            record = {}
-            for i, header in enumerate(headers):
-                if header.strip() and i < len(row):
-                    record[header.strip()] = row[i].strip()
-            if record.get("Площадка") or record.get("дата"): records.append(record)
-        return {"status": "ok", "data": records}
-    except Exception as e:
-        raise HTTPException(500, f"Ошибка синхронизации: {str(e)}")
-
-@app.get("/api/my_bookings")
-def my_bookings(x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT b.*, i.name FROM bookings b JOIN items i ON i.code = b.item_code WHERE b.user_id = ? AND b.date_to >= date('now') ORDER BY b.date_from", (user["tg_id"],)).fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.get("/api/my_items")
-def my_items(x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT c.item_code, i.name, c.taken_for FROM checkouts c JOIN items i ON i.code = c.item_code WHERE c.user_id = ? AND c.returned_at IS NULL ORDER BY c.taken_at DESC", (user["tg_id"],)).fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.get("/api/daily_report")
-def get_daily_report(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data); today = datetime.now().strftime("%Y-%m-%d")
-    row = conn.execute("SELECT report_text FROM daily_reports WHERE date = ?", (today,)).fetchone()
-    if not row:
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        stats = conn.execute("SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at) = ?) as taken, (SELECT COUNT(*) FROM checkouts WHERE date(returned_at) = ?) as returned, (SELECT COUNT(*) FROM writeoffs WHERE date(created_at) = ?) as written_off", (yesterday, yesterday, yesterday)).fetchone()
-        low_stock = conn.execute("SELECT name FROM items WHERE kind='consumable' AND min_stock > 0 AND (SELECT SUM(quantity) FROM stock WHERE item_code = items.code) <= min_stock").fetchall()
-        low_list = ", ".join([i["name"] for i in low_stock]) if low_stock else "Нет"
-        report = f"📊 Сводка за {yesterday}:\n\n📤 Выдано: {stats['taken']} шт.\n📥 Возвращено: {stats['returned']} шт.\n📉 Списано: {stats['written_off']} шт.\n\n⚠️ Заканчивается: {low_list}"
-        conn.execute("INSERT INTO daily_reports (date, report_text) VALUES (?, ?)", (today, report)); conn.commit()
-    else: report = row["report_text"]
-    conn.close(); return {"report": report}
-
-@app.get("/api/on_hand")
-def on_hand(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT c.item_code, i.name, u.full_name, c.taken_at, c.taken_for FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.returned_at IS NULL").fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.get("/api/history")
-def get_history(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data); rows = []
-    co = conn.execute("SELECT c.id, c.item_code, i.name, c.user_id, u.full_name, c.taken_at AS date, c.returned_at, c.taken_for FROM checkouts c JOIN items i ON i.code = c.item_code LEFT JOIN users u ON u.tg_id = c.user_id ORDER BY c.taken_at DESC LIMIT 500").fetchall()
-    for r in co:
-        rows.append({"date": r["date"], "type": "checkout", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["full_name"] or "—"})
-        if r["returned_at"]: rows.append({"date": r["returned_at"], "type": "return", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["full_name"] or "—"})
-    mv = conn.execute("SELECT m.item_code, i.name, m.quantity, m.created_at AS date, u.full_name FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id ORDER BY m.created_at DESC LIMIT 500").fetchall()
-    for r in mv: rows.append({"date": r["date"], "type": "move", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
-    wo = conn.execute("SELECT w.item_code, i.name, w.quantity, w.created_at AS date, u.full_name FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id ORDER BY w.created_at DESC LIMIT 500").fetchall()
-    for r in wo: rows.append({"date": r["date"], "type": "writeoff", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
-    conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
-
-@app.get("/api/export_history")
-def export_history(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); rows = get_history(x_init_data); buf = io.StringIO(); writer = csv.writer(buf)
-    writer.writerow(["Дата", "Тип", "Код", "Название", "Кол-во", "Пользователь"])
-    for r in rows: writer.writerow([r["date"], r["type"], r["item_code"], r["name"], r["quantity"], r["user_name"]])
-    buf.seek(0)
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=history.csv"})
-
-@app.get("/api/export_stock")
-def export_stock(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT i.code, i.name, i.category, l.name as location, s.spot, s.quantity FROM stock s JOIN items i ON i.code = s.item_code JOIN locations l ON l.id = s.location_id WHERE s.quantity > 0 ORDER BY i.category, i.name, l.name").fetchall()
-    conn.close(); buf = io.StringIO(); writer = csv.writer(buf, delimiter=';')
-    writer.writerow(["Категория", "Код", "Название", "Локация", "Полка", "Количество"])
-    for r in rows: writer.writerow([r["category"], r["code"], r["name"], r["location"], r["spot"], r["quantity"]])
-    buf.seek(0)
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=stock.csv"})
-
-@app.post("/api/register")
-def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.get("/api/users")
-def list_users(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); rows = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall(); conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/users/{tg_id}/update")
-def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name, req.role, tg_id)); conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.delete("/api/users/{tg_id}")
-def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); conn.execute("DELETE FROM users WHERE tg_id = ?", (tg_id,)); conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.get("/api/locations")
-def list_locations(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close(); return [dict(r) for r in rows]
-
-@app.get("/api/locations_view")
-def locations_view(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
-    for loc in locations:
-        spots = conn.execute("SELECT DISTINCT spot FROM stock WHERE location_id = ? AND quantity > 0 AND spot != ''", (loc["id"],)).fetchall()
-        result.append({"id": loc["id"], "name": loc["name"], "spots": [s["spot"] for s in spots]})
-    conn.close(); return result
-
-@app.get("/api/room_detail/{location_id}")
-def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
-    is_admin = False
-    try: is_admin = get_user(x_init_data)["role"] == "admin"
-    except: pass
-    conn = get_conn(x_init_data); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
-    if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
-    items = conn.execute("SELECT item_code, quantity, spot FROM stock WHERE location_id = ? AND quantity > 0", (location_id,)).fetchall()
-    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
-    conn.close(); shelves = {}; no_shelf = []
-    for item in items:
-        detail = item_details.get(item["item_code"], {})
-        data = {"code": item["item_code"], "name": detail.get("name", "—"), "quantity": item["quantity"], "category": detail.get("category", ""), "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", "")}
-        if is_admin: data["price"] = detail.get("price", 0)
-        spot = item["spot"].strip() if item["spot"] else ""
-        if spot: shelves.setdefault(spot, []).append(data)
-        else: no_shelf.append(data)
-    return {"location_name": location["name"], "shelves": shelves, "no_shelf": no_shelf}
-
-@app.post("/api/locations")
-def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("INSERT INTO locations (name) VALUES (?)", (req.name.strip(),)); conn.commit()
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая комната уже есть")
-    conn.close(); return {"status": "ok"}
-
-@app.post("/api/locations/update")
-def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("UPDATE locations SET name = ? WHERE id = ?", (req.name.strip(), req.id)); conn.commit()
-    except Exception as e: conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok"}
-
-@app.get("/api/categories")
-def list_categories(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data); rows = conn.execute("SELECT id, name FROM categories ORDER BY id").fetchall(); conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/categories")
-def create_category(req: CategoryCreate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("INSERT INTO categories (name) VALUES (?)", (req.name.strip(),)); conn.commit()
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая категория уже есть")
-    conn.close(); return {"status": "ok"}
-
-@app.post("/api/categories/update")
-def update_category(req: CategoryUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try:
-        old = conn.execute("SELECT name FROM categories WHERE id = ?", (req.id,)).fetchone()
-        if not old: conn.close(); raise HTTPException(404, "Категория не найдена")
-        old_name = old["name"]; new_name = req.name.strip()
-        conn.execute("UPDATE categories SET name = ? WHERE id = ?", (new_name, req.id))
-        conn.execute("UPDATE items SET category = ? WHERE category = ?", (new_name, old_name))
-        conn.commit()
-    except Exception as e: conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok"}
-
-@app.delete("/api/categories/{cat_id}")
-def delete_category(cat_id: int, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    cat = conn.execute("SELECT name FROM categories WHERE id = ?", (cat_id,)).fetchone()
-    if not cat: conn.close(); raise HTTPException(404, "Категория не найдена")
-    conn.execute("UPDATE items SET category = '' WHERE category = ?", (cat["name"],))
-    conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.get("/api/stats")
-def get_stats(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data); cats = conn.execute("SELECT name FROM categories ORDER BY id").fetchall(); result = []
-    for c in cats:
-        name = c["name"]
-        total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ?", (name,)).fetchone()["q"]
-        in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL", (name,)).fetchone()["q"]
-        result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
-    no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = '' OR i.category IS NULL").fetchone()["q"]
-    no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL").fetchone()["q"]
-    if no_cat_total + no_cat_work > 0: result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
-    conn.close(); return result
-
-@app.get("/api/spots")
-def list_spots(x_init_data: Optional[str] = Header(None)):
-    conn = get_conn(x_init_data); rows = conn.execute("SELECT id, name FROM spots ORDER BY name").fetchall(); conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/spots")
-def create_spot(spot: SpotCreate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("INSERT INTO spots (name) VALUES (?)", (spot.name.strip(),)); conn.commit()
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая полка уже есть")
-    conn.close(); return {"status": "ok"}
-
-@app.post("/api/spots/update")
-def update_spot(req: SpotUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("UPDATE spots SET name = ? WHERE name = ?", (req.new_name.strip(), req.old_name)); conn.execute("UPDATE stock SET spot = ? WHERE spot = ?", (req.new_name.strip(), req.old_name)); conn.commit()
-    except Exception as e: conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok"}
-
-@app.get("/api/next_code")
-def get_next_code(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
-    max_num = max([int(r["code"].split("-")[1]) for r in rows if r["code"].split("-")[1].isdigit()] + [0])
-    conn.close(); return {"code": f"ITEM-{max_num + 1}"}
-
-@app.get("/api/items")
-def list_items(x_init_data: Optional[str] = Header(None)):
-    is_admin = False
-    try: is_admin = get_user(x_init_data)["role"] == "admin"
-    except: pass
-    conn = get_conn(x_init_data); items = conn.execute("SELECT * FROM items ORDER BY name").fetchall(); result = []
-    for it in items:
-        stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
-        holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
-        total = sum(s["quantity"] for s in stocks)
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "photo": it["photo"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
-        if is_admin: item_data["price"] = it["price"]
-        result.append(item_data)
-    conn.close(); return result
-
-@app.get("/api/items/{code}")
-def get_item(code: str, x_init_data: Optional[str] = Header(None)):
-    is_admin = False
-    try: is_admin = get_user(x_init_data)["role"] == "admin"
-    except: pass
-    conn = get_conn(x_init_data); item = conn.execute("SELECT * FROM items WHERE code = ?", (code,)).fetchone()
-    if not item: conn.close(); raise HTTPException(404, "Товар не найден")
-    stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity, s.spot FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
-    holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
-    conn.close()
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "photo": item["photo"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
-    if is_admin: result["price"] = item["price"]
-    return result
-
-@app.post("/api/items/{code}/update")
-def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=?, category=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, req.category, code))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/items/{code}/repair")
-def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data); item = conn.execute("SELECT needs_repair, name FROM items WHERE code = ?", (code,)).fetchone()
-    if not item: conn.close(); raise HTTPException(404, "Товар не найден")
-    new_status = 0 if item["needs_repair"] else 1
-    conn.execute("UPDATE items SET needs_repair = ? WHERE code = ?", (new_status, code)); conn.commit(); conn.close()
-    return {"status": "ok", "message": f"Товар {item['name']} {'отправлен в ремонт' if new_status else 'возвращен в строй'}"}
-
-@app.post("/api/items/{code}/lost")
-def mark_lost(code: str, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data)
-    item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
-    if not item: conn.close(); raise HTTPException(404, "Товар не найден")
-    conn.execute("INSERT INTO lost_items (item_code, user_id) VALUES (?, ?)", (code, user["tg_id"]))
-    conn.commit(); conn.close(); return {"status": "ok", "message": f"Отмечено: {item['name']} не найден"}
-
-@app.delete("/api/items/{code}")
-def delete_item(code: str, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    for table in ["items", "stock", "bookings", "comments", "lost_items"]:
-        col = "code" if table == "items" else "item_code"
-        conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (code,))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/items")
-async def create_item(code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(...), quantity: int = Form(0), spot: str = Form(""), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); photo_base64 = ""
-    if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
-    if spot:
-        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (spot,)).fetchone()
-        if not exists: spot = ""
-    try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category))
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
-    conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (code, location_id, quantity, spot))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/checkout")
-def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data); item = conn.execute("SELECT kind, needs_repair FROM items WHERE code = ?", (req.code,)).fetchone()
-    if not item: conn.close(); raise HTTPException(404, "Товар не найден")
-    if item["needs_repair"]: conn.close(); raise HTTPException(400, "Товар в ремонте")
-    if item["kind"] != "equipment": conn.close(); raise HTTPException(400, "Это расходник")
-    if conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (req.code,)).fetchone(): conn.close(); raise HTTPException(400, "Уже выдано")
-    stock = conn.execute("SELECT location_id FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (req.code,)).fetchone()
-    if not stock: conn.close(); raise HTTPException(400, "Нет в наличии")
-    conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (req.code, user["tg_id"], stock["location_id"], req.taken_for))
-    conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
-    conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/return")
-def return_item(code: str, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data); co = conn.execute("SELECT id, location_id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone()
-    if not co: conn.close(); raise HTTPException(400, "Не выдано")
-    conn.execute("UPDATE checkouts SET returned_at = CURRENT_TIMESTAMP, returned_by = ? WHERE id = ?", (user["tg_id"], co["id"]))
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, co["location_id"])).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1 WHERE item_code = ? AND location_id = ?", (code, co["location_id"]))
-    else: conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/move")
-def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data)
-    if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
-    conn = get_conn(x_init_data); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.from_location)).fetchone()
-    if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
-    to_spot = req.to_spot
-    if to_spot:
-        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (to_spot,)).fetchone()
-        if not exists: to_spot = ""
-    conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.from_location))
-    conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.from_location))
-    if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + ?, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (req.quantity, to_spot, req.code, req.to_location))
-    else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,?,?)", (req.code, req.to_location, req.quantity, to_spot))
-    conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,?,?,?,?,?)", (req.code, req.quantity, req.from_location, req.to_location, to_spot, user["tg_id"]))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/move_batch")
-def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data)
-    if req.from_location == req.to_location: raise HTTPException(400, "Локации должны отличаться")
-    conn = get_conn(x_init_data)
-    to_spot = req.to_spot
-    if to_spot:
-        exists = conn.execute("SELECT id FROM spots WHERE name = ?", (to_spot,)).fetchone()
-        if not exists: to_spot = ""
-    for code in req.codes:
-        row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.from_location)).fetchone()
-        if row and row["quantity"] > 0:
-            conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, req.from_location))
-            conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (code, req.from_location))
-            if conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.to_location)).fetchone(): conn.execute("UPDATE stock SET quantity = quantity + 1, spot = COALESCE(NULLIF(?, ''), spot) WHERE item_code = ? AND location_id = ?", (to_spot, code, req.to_location))
-            else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (code, req.to_location, to_spot))
-            conn.execute("INSERT INTO movements (item_code, quantity, from_location, to_location, to_spot, user_id) VALUES (?,1,?,?,?,?)", (code, req.from_location, req.to_location, to_spot, user["tg_id"]))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/writeoff")
-def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.location_id)).fetchone()
-    if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
-    conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.location_id))
-    conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
-    conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?,?,?,?)", (req.code, req.quantity, req.location_id, user["tg_id"]))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.get("/api/bookings/{code}")
-def get_bookings(code: str, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT b.id, b.item_code, b.user_id, u.full_name, b.date_from, b.date_to FROM bookings b LEFT JOIN users u ON u.tg_id = b.user_id WHERE b.item_code = ? AND b.date_to >= date('now') ORDER BY b.date_from", (code,)).fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/bookings")
-def create_booking(req: BookingRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data)
-    conn.execute("INSERT INTO bookings (item_code, user_id, date_from, date_to) VALUES (?,?,?,?)", (req.code, user["tg_id"], req.date_from, req.date_to))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.get("/api/comments/{code}")
-def get_comments(code: str, x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data)
-    rows = conn.execute("SELECT c.id, c.item_code, c.user_id, u.full_name, c.text, c.created_at FROM comments c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? ORDER BY c.created_at DESC", (code,)).fetchall()
-    conn.close(); return [dict(r) for r in rows]
-
-@app.post("/api/comments")
-def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None)):
-    user = get_user(x_init_data); conn = get_conn(x_init_data)
-    conn.execute("INSERT INTO comments (item_code, user_id, text) VALUES (?,?,?)", (req.code, user["tg_id"], req.text))
-    conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.post("/api/import_text")
-def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); added = 0; updated = 0
-    try:
-        lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
-        current_kit_code = None
-        current_kit_data = {"name": "", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
-        def save_kit(kit_code, kit_data):
-            nonlocal added, updated
-            if not kit_code: return
-            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (kit_data["loc"],)).fetchone()
-            loc_id = loc["id"] if loc else 1
-            existing = conn.execute("SELECT code FROM items WHERE code = ?", (kit_code,)).fetchone()
-            if existing:
-                conn.execute("UPDATE items SET name=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, buyout_status=? WHERE code=?", (kit_data["name"], kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"], kit_code))
-                stock_exists = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (kit_code,)).fetchone()
-                if stock_exists: conn.execute("UPDATE stock SET location_id = ?, spot = ? WHERE item_code = ?", (loc_id, kit_code, kit_code))
-                else: conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
-                updated += 1
-            else:
-                try:
-                    conn.execute("INSERT INTO items (code, name, kind, price, kit_body, kit_lens, kit_flash, buyout_status) VALUES (?,?,?,?,?,?,?,?)", (kit_code, kit_data["name"], "equipment", kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"]))
-                    conn.execute("INSERT INTO stock (item_code, location_id, quantity, spot) VALUES (?,?,1,?)", (kit_code, loc_id, kit_code))
-                    added += 1
-                except sqlite3.IntegrityError: pass
-        for line in lines:
-            parts = [p.strip() for p in line.split(',')]
-            if len(parts) < 1: continue
-            if parts[0].lower() == "допы": continue
-            is_kit_header = False
-            if parts[0] and not (len(parts) > 1 and parts[1]) and not (len(parts) > 2 and parts[2]): is_kit_header = True
-            if parts[0].lower() not in ["камера", "объектив", "вспышка"] and parts[0]: is_kit_header = True
-            if is_kit_header:
-                if current_kit_code: save_kit(current_kit_code, current_kit_data)
-                current_kit_code = parts[0].replace(" ", "")
-                current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
-                continue
-            if not current_kit_code: continue
-            if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
-            elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
-            elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
-            if len(parts) > 3 and parts[3]:
-                val = parts[3]
-                try: current_kit_data["price"] = float(val)
-                except ValueError: current_kit_data["buyer"] = val
-        if current_kit_code: save_kit(current_kit_code, current_kit_data)
-        conn.commit()
-    except Exception as e:
-        conn.close(); raise HTTPException(status_code=400, detail=str(e))
-    conn.close(); return {"status": "ok", "added": added, "updated": updated}
-
-@app.post("/api/clear_database")
-def clear_database(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try:
-        for table in ["items", "stock", "checkouts", "movements", "writeoffs", "bookings", "comments", "lost_items", "daily_reports"]:
-            conn.execute(f"DELETE FROM {table}")
-        conn.commit()
-    except Exception as e: conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok"}
-
-class TerminalRequest(BaseModel):
-    sql: str
-
-@app.post("/api/execute_sql")
-def execute_sql(req: TerminalRequest, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); sql = req.sql.strip()
-    if not sql: raise HTTPException(400, "Пустой запрос")
-    sql_upper = sql.upper()
-    if "DROP TABLE" in sql_upper or "DROP DATABASE" in sql_upper: raise HTTPException(400, "Нельзя удалять таблицы")
-    conn = get_conn(x_init_data)
-    try:
-        cursor = conn.cursor(); cursor.execute(sql)
-        if sql_upper.startswith("SELECT"):
-            rows = cursor.fetchall(); result = [dict(r) for r in rows]
-            conn.close(); return {"status": "ok", "type": "select", "data": result}
-        else:
-            conn.commit(); count = cursor.rowcount; conn.close()
-            return {"status": "ok", "type": "update", "message": f"Выполнено успешно. Затронуто строк: {count}"}
-    except Exception as e: conn.close(); raise HTTPException(400, detail=str(e))
-
-@app.get("/api/qr/{code}")
-def generate_qr(code: str):
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-    qr.add_data(code); qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    width, height = qr_img.size
-    result_img = Image.new("RGB", (width, height + 60), "white"); result_img.paste(qr_img, (0, 0))
-    draw = ImageDraw.Draw(result_img)
-    try: font = ImageFont.truetype("DejaVuSans.ttf", 36)
-    except IOError: font = ImageFont.load_default()
-    try: text_w = draw.textlength(code, font=font)
-    except AttributeError: text_w = draw.textsize(code, font=font)[0]
-    draw.text(((width - text_w) / 2, height + 10), code, fill="black", font=font)
-    buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
-
-@app.get("/")
-def serve_main(): return FileResponse("index.html")
-
-@app.get("/beta")
-def serve_beta(): return FileResponse("beta.html")
-
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+        .held-indicator { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--warning); border-radius: 20px 0 0 20px; }
+        .held-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--primary-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; position: absolute; top: 16px; right: 16px; box-shadow: 0 2px 8px rgba(0, 122, 255, 0.4); }
+        .held-text { font-size: 12px; color: var(--warning); font-weight: 600; margin-top: 4px; }
+
+        .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 20px 16px; }
+        .room-title { font-weight: 700; font-size: 18px; color: var(--text); margin-bottom: 4px; letter-spacing: -0.5px; }
+        .room-spots { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; font-weight: 500; }
+        .room-arrow-circle { width: 36px; height: 36px; border-radius: 50%; background: rgba(0, 122, 255, 0.1); color: var(--primary); display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold; }
+
+        .room-item-card { display: flex; flex-direction: column; padding: 14px; margin-bottom: 0; position: relative; cursor: pointer; justify-content: space-between; }
+        .room-item-checkbox { position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; accent-color: var(--primary); z-index: 10; cursor: pointer; }
+        .room-item-content { flex: 1; display: flex; flex-direction: column; padding-right: 32px; }
+        .room-item-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .room-item-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
+        
+        .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 6px; margin-right: 6px; letter-spacing: 0.3px; }
+        .badge.eq { background: rgba(0, 122, 255, 0.12); color: var(--primary); }
+        .badge.cons { background: rgba(255, 149, 0, 0.12); color: var(--warning); }
+        .badge.price { background: rgba(52, 199, 89, 0.12); color: var(--success); }
+        .badge.budget-kc { background: rgba(255, 59, 48, 0.12); color: var(--danger); }
+        .badge.budget-tx { background: rgba(52, 199, 89, 0.12); color: var(--success); }
+        .badge.buyout { background: var(--purple); color: white; }
+        .badge.repair { background: var(--danger); color: white; }
+        .badge.low { background: var(--warning); color: white; }
+        .badge.on-hand { background: var(--warning); color: white; }
+        .badge.category { background: rgba(175, 82, 222, 0.12); color: var(--purple); }
+
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 75px; background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 10px; font-weight: 500; cursor: pointer; transition: color 0.2s; padding: 8px 2px; flex: 1; position: relative; }
+        .nav-item.active { color: var(--primary); }
+        .nav-item .icon { font-size: 22px; margin-bottom: 2px; transition: transform 0.2s; }
+        .nav-item.active .icon { transform: translateY(-2px); }
+        .nav-item.active::after { content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
+
+        #scroll-top-btn { position: fixed; bottom: 150px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: var(--card-bg); color: var(--primary); display: flex; justify-content: center; align-items: center; font-size: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); cursor: pointer; z-index: 900; transition: opacity 0.3s, transform 0.3s; opacity: 0; transform: scale(0.8); pointer-events: none; border: 1px solid var(--border); }
+        #scroll-top-btn.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+        .search-wrapper { position: relative; margin-bottom: 16px; }
+        .search-wrapper input { padding-right: 44px; padding-left: 44px; border-radius: 14px; background: var(--card-bg); box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid var(--border); }
+        .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; }
+        .search-clear { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; cursor: pointer; display: none; background: var(--skeleton-bg); width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; }
+        .search-wrapper.has-text .search-clear { display: block; }
+
+        button { width: 100%; padding: 16px; margin-bottom: 12px; border: none; border-radius: 14px; font-size: 16px; font-weight: 600; background: var(--primary-gradient); color: white; cursor: pointer; transition: transform 0.1s, opacity 0.2s; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.25); letter-spacing: -0.3px; }
+        button:active { transform: scale(0.97); opacity: 0.9; box-shadow: 0 2px 6px rgba(0, 122, 255, 0.2); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        button.secondary { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        button.secondary:active { background: var(--skeleton-bg); }
+        button.danger { background: var(--danger); box-shadow: 0 4px 12px rgba(255, 59, 48, 0.25); color: white; }
+        button.ok { background: var(--success); box-shadow: 0 4px 12px rgba(52, 199, 89, 0.25); color: white; }
+        button.active-filter { background: rgba(0, 122, 255, 0.1); color: var(--primary); border: 1px solid var(--primary); font-weight: 700; }
+
+        .take-btn { background: linear-gradient(135deg, #007aff, #00c6ff); font-size: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4); margin-top: 16px; margin-bottom: 24px; border-radius: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .qr-btn-main { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px; font-size: 17px; border-radius: 16px; display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 24px; margin-top: 16px; }
+
+        .screen { padding: 0 16px 20px; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .hidden { display: none !important; }
+
+        .filters { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+        .filters::-webkit-scrollbar { display: none; }
+        .filters select { padding: 10px 14px; font-size: 14px; font-weight: 500; border-radius: 12px; flex: 1; min-width: 110px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        .filters select.active-filter { border-color: var(--primary); background: rgba(0, 122, 255, 0.05); color: var(--primary); font-weight: 600; }
+
+        .status-badge { display: block; padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 16px; text-align: center; letter-spacing: -0.2px; }
+        .status-free { background: rgba(52, 199, 89, 0.12); color: var(--success); }
+        .status-taken { background: rgba(255, 149, 0, 0.12); color: var(--warning); }
+        .status-broken { background: rgba(255, 59, 48, 0.12); color: var(--danger); }
+
+        .stats-card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin: 16px 0; border: 1px solid var(--border); box-shadow: var(--shadow); }
+        .stats-title { font-size: 12px; font-weight: 700; margin-bottom: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); transition: background 0.1s; }
+        .stat-row:active { background: rgba(0,122,255,0.05); border-radius: 8px; padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; }
+        .stat-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .stat-name { font-size: 15px; font-weight: 600; color: var(--primary); }
+        .stat-nums { font-size: 13px; color: var(--text-muted); text-align: right; font-weight: 500; }
+        .stat-total { font-size: 18px; font-weight: 700; color: var(--text); margin-right: 8px; }
+
+        .kit-box { background: rgba(255, 149, 0, 0.08); padding: 16px; border-radius: 16px; margin-bottom: 16px; font-size: 14px; border: 1px solid rgba(255, 149, 0, 0.2); }
+        .report-box { background: var(--card-bg); padding: 16px; border-radius: 16px; border-left: 4px solid var(--warning); margin-bottom: 20px; white-space: pre-wrap; font-family: monospace; font-size: 13px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        
+        .my-item-card { background: var(--card-bg); padding: 16px; border-radius: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        .my-item-btn { background: rgba(0, 122, 255, 0.15); color: var(--primary); padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; transition: transform 0.1s; }
+        .my-item-btn:active { transform: scale(0.95); }
+        .comment-box { background: var(--skeleton-bg); padding: 14px; border-radius: 14px; margin-bottom: 10px; font-size: 14px; }
+        .booking-item { background: var(--card-bg); padding: 14px; border-radius: 14px; margin-bottom: 10px; font-size: 14px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+
+        .eq-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; padding: 0 4px; }
+        .eq-btn { padding: 24px; font-size: 18px; font-weight: 600; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.1s; letter-spacing: -0.3px; }
+        .eq-btn:active { transform: scale(0.97); }
+        .eq-btn span { font-size: 32px; }
+
+        .platform-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+        .platform-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: flex-start; letter-spacing: -0.5px; }
+        .platform-date { font-size: 13px; color: var(--text-muted); font-weight: 600; white-space: nowrap; margin-left: 10px; background: var(--skeleton-bg); padding: 4px 8px; border-radius: 8px; }
+        .platform-info { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+        .platform-info-row { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+        .platform-status { margin-top: 8px; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 600; text-align: center; }
+        .status-ok { background: rgba(52, 199, 89, 0.12); color: var(--success); }
+        .status-bad { background: rgba(255, 59, 48, 0.12); color: var(--danger); }
+
+        .date-row { display: flex !important; flex-direction: row !important; gap: 10px !important; width: 100% !important; max-width: 100% !important; }
+        .date-row .input-group { flex: 1 1 0% !important; width: 0 !important; min-width: 0 !important; max-width: 50% !important; margin-bottom: 0 !important; }
+        .date-row input { width: 100% !important; padding: 14px 8px !important; font-size: 15px !important; box-sizing: border-box !important; text-align: center; }
+
+        .skeleton { background: var(--skeleton-bg); border-radius: 12px; margin-bottom: 8px; animation: pulse 1.5s infinite ease-in-out; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+        .skeleton-title { height: 24px; width: 60%; }
+        .skeleton-text { height: 16px; width: 40%; }
+
+        #toast-container { position: fixed; bottom: 95px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+        .toast { background: rgba(28, 28, 30, 0.95); color: white; padding: 14px 24px; border-radius: 30px; font-size: 15px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; pointer-events: auto; backdrop-filter: blur(10px); }
+        .toast.success { background: rgba(52, 199, 89, 0.95); box-shadow: 0 8px 24px rgba(52, 199, 89, 0.3); }
+        .toast.error { background: rgba(255, 59, 48, 0.95); box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        .floating-bar { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
+        .floating-btn-group { display: flex; gap: 8px; }
+        .floating-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div id="toast-container"></div>
+    <div id="scroll-top-btn" onclick="window.scrollTo({top:0, behavior:'smooth'})">↑</div>
+
+    <div id="batch-actions" class="floating-bar">
+        <div class="floating-btn-group">
+            <button class="ok" onclick="showBatchMoveForm()">Переместить</button>
+            <button class="secondary" onclick="deselectAllInRoom()">Снять</button>
+        </div>
+        <div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
+            <div style="font-weight: 700; font-size: 18px; color: var(--primary);" id="selected-count">0</div>
+        </div>
+    </div>
+
+    <div id="take-batch-actions" class="floating-bar" style="border-color: var(--success);">
+        <div class="floating-btn-group">
+            <button class="ok" onclick="executeBatchTake()">Взять</button>
+            <button class="secondary" onclick="deselectAllTakeItems()">Снять</button>
+        </div>
+        <div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
+            <div style="font-weight: 700; font-size: 18px; color: var(--success);" id="take-selected-count">0</div>
+        </div>
+    </div>
+
+    <div id="screen-register" class="screen hidden" style="padding-top: 40px;">
+        <h1 style="text-align: center; margin-bottom: 10px; font-size: 28px; letter-spacing: -1px;">Регистрация</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 30px; font-size: 15px;">Пожалуйста, укажите вашу Фамилию и Имя</p>
+        <div class="input-group">
+            <label>Ваша Фамилия и Имя</label>
+            <input id="reg-name" placeholder="Например, Петров Иван">
+        </div>
+        <button onclick="doRegister()" id="reg-btn" style="margin-top: 10px;">Зарегистрироваться</button>
+    </div>
+
+    <div id="screen-main" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title" id="user-info" onclick="editMyName()" style="cursor:pointer;">Учёт</div>
+            <div style="width: 80px;"></div>
+        </div>
+
+        <button class="qr-btn-main" onclick="scanQr()">
+            <span style="font-size: 24px;">📷</span> Сканировать QR-код
+        </button>
+
+        <button class="take-btn" onclick="showTakeScreen()">📤 Взять технику</button>
+
+        <div id="stats-box" class="stats-card hidden"></div>
+
+        <div id="daily-report-box" class="report-box hidden">
+            <b>📊 Сводка за вчера:</b>
+            <div id="report-text" style="margin-top:5px;"></div>
+        </div>
+
+        <button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
+
+        <div id="my-items-section" class="hidden" style="margin-bottom: 24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h2 style="font-size: 18px; margin:0; font-weight: 700; letter-spacing: -0.5px;">🖐 Мои вещи</h2>
+                <button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="returnAllMyItems()">Вернуть всё</button>
+            </div>
+            <div id="my-items-list"></div>
+        </div>
+
+        <div id="my-bookings-section" class="hidden" style="margin-bottom: 24px;">
+            <h2 style="font-size: 18px; margin-bottom: 12px; font-weight: 700; letter-spacing: -0.5px;">🗓 Мои брони</h2>
+            <div id="my-bookings-list"></div>
+        </div>
+
+        <div class="filters">
+            <select id="filter-location" onchange="filterItems()"><option value="">Все комнаты</option></select>
+            <select id="filter-kind" onchange="filterItems()">
+                <option value="">Все типы</option>
+                <option value="equipment">Оборудование</option>
+                <option value="consumable">Расходники</option>
+            </select>
+        </div>
+
+        <div class="search-wrapper" id="main-search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" placeholder="Поиск по названию, коду..." oninput="handleSearchInput(this, 'main-search-wrapper')">
+            <span class="search-clear" onclick="clearSearch('search-input', 'main-search-wrapper')">✕</span>
+        </div>
+        
+        <div id="items-list" class="grid-container"></div>
+    </div>
+
+    <div id="screen-category-stats" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title" id="cat-stats-title">Категория</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="cat-stats-items" class="grid-container" style="padding:0; margin-top:16px;"></div>
+    </div>
+
+    <div id="screen-category-detailed" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title" id="cat-detailed-title">Детали</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="cat-detailed-list" style="margin-top: 16px; padding: 0 16px;"></div>
+    </div>
+
+    <div id="screen-take" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title">Взять технику</div>
+            <button class="sticky-scan" onclick="scanTakeQr()">📷</button>
+        </div>
+        
+        <div style="margin-top: 16px;">
+            <div class="search-wrapper" id="take-search-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper'); renderTakeItems()">
+                <span class="search-clear" onclick="clearSearch('take-search-input', 'take-search-wrapper'); renderTakeItems()">✕</span>
+            </div>
+
+            <div id="take-items-list" class="grid-container" style="padding: 0;"></div>
+        </div>
+    </div>
+
+    <div id="screen-platforms" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">Площадки</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="search-wrapper" id="plat-search-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="platform-search" placeholder="Поиск по площадке..." oninput="handleSearchInput(this, 'plat-search-wrapper'); filterPlatforms()">
+                <span class="search-clear" onclick="clearSearch('platform-search', 'plat-search-wrapper'); filterPlatforms()">✕</span>
+            </div>
+            <button class="secondary" onclick="syncGoogle('кц')" id="sync-btn-plat">🔄 Обновить данные</button>
+            <div id="platforms-list"></div>
+        </div>
+    </div>
+
+    <div id="screen-th" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">Теплоходы</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="search-wrapper" id="th-search-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="th-search" placeholder="Поиск по теплоходу..." oninput="handleSearchInput(this, 'th-search-wrapper'); filterTH()">
+                <span class="search-clear" onclick="clearSearch('th-search', 'th-search-wrapper'); filterTH()">✕</span>
+            </div>
+            <button class="secondary" onclick="syncGoogle('тх мск')" id="sync-btn-th">🔄 Обновить данные</button>
+            <div id="th-list"></div>
+        </div>
+    </div>
+
+    <div id="screen-settings" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title">Настройки</div>
+            <div style="width: 80px;"></div>
+        </div>
+        
+        <h2 style="font-size: 20px; margin-top: 24px; font-weight: 700; letter-spacing: -0.5px;">Комнаты</h2>
+        <div class="input-group"><input id="new-location-name" placeholder="Название новой комнаты"></div>
+        <button onclick="createLocation()" class="secondary">Добавить комнату</button>
+        <div id="locations-list"></div>
+
+        <h2 style="font-size: 20px; margin-top: 32px; color: var(--danger); font-weight: 700; letter-spacing: -0.5px;">Разработка</h2>
+        <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
+        <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
+        <button class="danger" onclick="localStorage.clear(); location.reload();">🔄 Сбросить кэш браузера</button>
+        <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
+        <button class="secondary" onclick="showAddForm()">➕ Добавить товар</button>
+        
+        <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Экспорт</h2>
+        <button class="ok" onclick="exportStock()" id="export-stock-btn">📥 Выгрузить склад в Excel</button>
+        <button class="secondary" onclick="downloadQrSheet()" id="export-qr-btn">🖨️ Скачать QR-лист для печати</button>
+        
+        <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
+        <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
+        
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v10</div>
+    </div>
+
+    <div id="screen-users" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <div class="sticky-title">Пользователи</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="users-list"></div>
+    </div>
+
+    <div id="screen-rooms" class="screen hidden">
+        <div class="sticky-header">
+            <div style="width: 80px;"></div>
+            <div class="sticky-title">Склад (Комнаты)</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="rooms-list" style="margin-top: 16px;"></div>
+    </div>
+
+    <div id="screen-room-view" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showRooms()">← Назад</button>
+            <div class="sticky-title" id="room-title">Комната</div>
+            <button class="secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px; border-radius:8px;" onclick="selectAllInRoom()">Выбрать все</button>
+        </div>
+        <div id="room-items" class="grid-container" style="padding:0;"></div>
+    </div>
+
+    <div id="screen-item" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title" id="item-title">Товар</div>
+            <div style="width: 80px;"></div>
+        </div>
+        
+        <div style="margin-top: 16px;">
+            <div id="item-status-box"></div>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px;">
+                <button class="ok" onclick="showEditForm()" id="edit-btn" style="margin:0;">✏️ Ред.</button>
+                <button class="secondary" onclick="showItemHistory()" style="margin:0;">🕒 История</button>
+                <button class="secondary" onclick="showQr()" style="margin:0;">🔲 QR</button>
+            </div>
+            
+            <div id="kit-box" class="kit-box hidden">
+                <b>Комплектация:</b>
+                <div id="kit-body-text"></div>
+                <div id="kit-lens-text"></div>
+                <div id="kit-flash-text"></div>
+            </div>
+            
+            <div id="actions"></div>
+            
+            <div id="booking-section">
+                <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
+                <div id="bookings-list"></div>
+                <div class="date-row">
+                    <div class="input-group"><label>С</label><input type="text" id="book-from" placeholder="ДД.ММ.ГГГГ" maxlength="10"></div>
+                    <div class="input-group"><label>По</label><input type="text" id="book-to" placeholder="ДД.ММ.ГГГГ" maxlength="10"></div>
+                </div>
+                <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
+            </div>
+
+            <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Комментарии</h2>
+            <div id="comments-list"></div>
+            <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
+            <button class="secondary" onclick="doComment()">Отправить</button>
+
+            <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
+            <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
+        </div>
+    </div>
+
+    <div id="screen-item-history" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <div class="sticky-title">История товара</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div id="item-history-list" style="margin-top: 16px;"></div>
+    </div>
+
+    <div id="screen-inventory" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <div class="sticky-title">Инвентаризация</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="input-group">
+                <label>Выберите комнату</label>
+                <select id="inv-location"></select>
+            </div>
+            <button class="secondary" onclick="startInventoryScan()">📷 Сканировать товар</button>
+            <div id="inv-scanned-list" style="margin-top:20px;"></div>
+            <button class="ok hidden" id="inv-finish-btn" onclick="finishInventory()">Завершить инвентаризацию</button>
+        </div>
+    </div>
+
+    <div id="screen-edit-item" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <div class="sticky-title">Редактирование</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="input-group"><label>Название</label><input id="edit-name"></div>
+            <div class="input-group"><label>Тип</label><select id="edit-kind" onchange="toggleEditFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
+            <div class="input-group"><label>Серийный номер (S/N)</label><input id="edit-serial-number"></div>
+            <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
+            <div class="input-group">
+                <label>Бюджет (для админа)</label>
+                <select id="edit-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ (Красный)</option><option value="ТХ">ТХ (Зеленый)</option></select>
+            </div>
+            <div class="input-group"><label>На выкупе у</label><input id="edit-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label>Тушка</label><input id="edit-kit-body"></div>
+            <div class="input-group"><label>Объектив</label><input id="edit-kit-lens"></div>
+            <div class="input-group"><label>Вспышка</label><input id="edit-kit-flash"></div>
+            <div id="edit-consumable-fields" class="hidden">
+                <div class="input-group"><label>Мин. остаток</label><input id="edit-min-stock" type="number"></div>
+            </div>
+            <button class="ok" onclick="saveEditItem()">Сохранить изменения</button>
+            <button class="danger" onclick="deleteItemFromEdit()" style="margin-top:20px;">🗑 В архив</button>
+        </div>
+    </div>
+
+    <div id="screen-add" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title">Новый товар</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="input-group"><label>Код</label><input id="add-code" placeholder="Например, ITEM-1"></div>
+            <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
+            <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
+            <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
+            <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
+            <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
+            <div class="input-group">
+                <label>Бюджет</label>
+                <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
+            </div>
+            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
+            <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
+            <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
+            <div id="consumable-fields" class="hidden">
+                <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
+                <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
+            </div>
+            <button class="ok" id="save-item-btn" onclick="saveItem()">Сохранить</button>
+        </div>
+    </div>
+
+    <div id="screen-terminal" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <div class="sticky-title">Терминал</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Внимание! Команды выполняются напрямую в базе данных.</p>
+            <textarea id="terminal-sql" rows="6" placeholder="UPDATE items SET category = 'Фототехника' WHERE ..." style="font-family: monospace; font-size: 14px;"></textarea>
+            <button onclick="executeTerminal()">Выполнить</button>
+            <div id="terminal-result" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <div id="screen-history" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <div class="sticky-title">История действий</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <button class="ok hidden" id="export-history-btn" onclick="downloadHistory()">📥 Скачать в Excel</button>
+            <div id="history-list"></div>
+        </div>
+    </div>
+
+    <div id="screen-batch-move" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="showRooms()">← Назад</button>
+            <div class="sticky-title">Перемещение</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="input-group">
+                <label>1. Куда переместить (Комната)</label>
+                <select id="batch-to-location"></select>
+            </div>
+            <button onclick="executeBatchMove()" id="batch-confirm-btn" style="margin-top:20px;">Подтвердить</button>
+        </div>
+    </div>
+
+    <div id="screen-move-item" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <div class="sticky-title">Перемещение</div>
+            <div style="width: 80px;"></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="name" id="move-item-name">Товар</div>
+                <div class="meta" id="move-item-from">Откуда: —</div>
+            </div>
+            
+            <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">ШАГ 1. КУДА?</h3>
+            <div id="move-rooms-list" class="grid-container" style="padding: 0; gap: 8px; margin-bottom: 16px;"></div>
+            
+            <div id="move-step-2" class="hidden">
+                <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">ШАГ 2. ПОДТВЕРЖДЕНИЕ</h3>
+                <div class="card" style="background: rgba(52, 199, 89, 0.1); border-color: var(--success); margin-bottom: 16px;">
+                    <div style="font-size: 13px; color: var(--success);">Куда</div>
+                    <div style="font-weight: 700; font-size: 16px; color: var(--text);" id="move-confirm-text"></div>
+                </div>
+                <div class="input-group">
+                    <label>Количество</label>
+                    <input type="number" id="move-qty" value="1" min="1">
+                </div>
+                <button class="ok" id="move-confirm-btn" onclick="executeMoveItem()">Переместить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item active" id="nav-main" onclick="backToMain()"><span class="icon">📦</span><span>Главная</span></div>
+        <div class="nav-item" id="nav-platforms" onclick="showPlatforms()"><span class="icon">📍</span><span>Площадки</span></div>
+        <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>Теплоходы</span></div>
+        <div class="nav-item" id="nav-rooms" onclick="showRooms()"><span class="icon">🏢</span><span>Склад</span></div>
+        <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настр.</span></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram?.WebApp || {
+            ready: () => {}, expand: () => {}, showAlert: (msg) => alert(msg),
+            showPopup: (opts, cb) => { if(confirm(opts.message)) cb('open'); },
+            initData: "", initDataUnsafe: {}, openLink: (url) => window.open(url, '_blank'),
+            HapticFeedback: { impactOccurred: () => {}, notificationOccurred: () => {} }
+        };
+        tg.ready(); tg.expand();
+        if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
+        
+        if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch(e) {} }
+
+        let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
+        let cachedPlatforms = [], cachedTH = [], invScannedCodes = [], autoRefreshInterval = null;
+        let moveFromLocId = null, selectedMoveRoomId = null, selectedMoveRoomName = "";
+        let selectedTakeItems = [], currentEqCategory = "";
+
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorText = `JS Error: ${message} at ${source}:${lineno}`;
+            console.error(errorText);
+            fetch('/api/log_error', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Init-Data': tg.initData || "" },
+                body: JSON.stringify({ error: errorText })
+            }).catch(()=>{});
+            return false;
+        };
+
+        function haptic(type = 'light') { try { tg.HapticFeedback.impactOccurred(type); } catch(e) {} }
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+        }
+        function notify(msg) { showToast(msg, 'error'); }
+
+        function setLoading(btn, isLoading, text = "Загрузка...") {
+            if (!btn) return;
+            if (isLoading) { btn.dataset.originalText = btn.innerHTML; btn.disabled = true; btn.innerHTML = text; }
+            else { btn.disabled = false; btn.innerHTML = btn.dataset.originalText || btn.innerHTML; }
+        }
+
+        function handleSearchInput(input, wrapperId) {
+            const wrapper = document.getElementById(wrapperId);
+            if (input.value.length > 0) wrapper.classList.add('has-text');
+            else wrapper.classList.remove('has-text');
+            
+            if (input.id === 'search-input') filterItems();
+            if (input.id === 'take-search-input') renderTakeItems();
+            if (input.id === 'th-search') filterTH();
+        }
+        function clearSearch(inputId, wrapperId) {
+            const input = document.getElementById(inputId);
+            input.value = '';
+            document.getElementById(wrapperId).classList.remove('has-text');
+            input.focus();
+            
+            if (inputId === 'search-input') filterItems();
+            if (inputId === 'take-search-input') renderTakeItems();
+            if (inputId === 'platform-search') filterPlatforms();
+            if (inputId === 'th-search') filterTH();
+        }
+        
+        window.addEventListener('scroll', () => {
+            const btn = document.getElementById('scroll-top-btn');
+            if (window.scrollY > 300) btn.classList.add('show');
+            else btn.classList.remove('show');
+        });
+
+        function updateNavActive(id) {
+            ["nav-main", "nav-platforms", "nav-th", "nav-rooms", "nav-settings"].forEach(nav => {
+                const el = document.getElementById(nav);
+                if (el) el.classList.toggle("active", nav === id);
+            });
+        }
+
+        function openDevConsole() {
+            if (window.eruda) { window.eruda.init(); window.eruda.show(); }
+            else { notify("Консоль не загрузилась."); }
+        }
+
+        function promptClearDatabase() {
+            const code = prompt("⚠️ ВНИМАНИЕ! Это удалит ВСЕ товары и историю. Введите слово 'УДАЛИТЬ' для подтверждения:");
+            if (code === "УДАЛИТЬ") clearDatabase();
+            else if (code !== null) notify("Отменено. Неверное слово.");
+        }
+
+        async function clearDatabase() {
+            try { 
+                await api("/api/clear_database", { method: "POST" }); 
+                showToast("База товаров очищена."); 
+                loadItems(); 
+            } catch (e) { notify("Ошибка: " + e.message); }
+        }
+
+        async function api(path, options = {}, retries = 2) {
+            try {
+                const res = await fetch(path, {
+                    headers: { ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }), "X-Init-Data": tg.initData || "" },
+                    ...options,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || "Ошибка сервера");
+                return data;
+            } catch (err) {
+                if (err.name === 'TypeError' && retries > 0) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    return api(path, options, retries - 1);
+                }
+                throw err;
+            }
+        }
+
+        async function init() {
+            try {
+                currentUser = await api("/api/me");
+                
+                if (currentUser.is_registered === 0) { 
+                    document.getElementById("reg-name").value = currentUser.full_name || "";
+                    showScreen("screen-register"); 
+                    return; 
+                }
+                
+                const userInfoEl = document.getElementById("user-info");
+                if (userInfoEl) userInfoEl.innerHTML = `${currentUser.full_name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+
+                if (currentUser.role === "admin") { 
+                    document.getElementById("nav-settings").classList.remove("hidden");
+                    document.getElementById("export-history-btn").classList.remove("hidden");
+                } else {
+                    document.getElementById("nav-rooms").classList.add("hidden");
+                    document.getElementById("nav-settings").classList.add("hidden");
+                }
+                
+                const cached = localStorage.getItem("cachedPlatforms_v9");
+                if (cached) { try { cachedPlatforms = JSON.parse(cached); renderPlatformsList(); } catch(e) {} }
+                const cachedTh = localStorage.getItem("cachedTH_v9");
+                if (cachedTh) { try { cachedTH = JSON.parse(cachedTh); renderTHList(); } catch(e) {} }
+                
+                document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
+
+                await loadLocations(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
+                showScreen("screen-main");
+
+                if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+                autoRefreshInterval = setInterval(() => { loadItems(); }, 15000);
+
+            } catch (e) { notify("Ошибка инициализации: " + e.message); }
+        }
+
+        async function doRegister() { 
+            const btn = document.getElementById("reg-btn");
+            const name = document.getElementById("reg-name").value.trim(); 
+            if (name.length < 3) { notify("Введите Фамилию и Имя"); return; } 
+            setLoading(btn, true, "Сохранение...");
+            try { 
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) }); 
+                showToast("Добро пожаловать!"); init(); 
+            } catch (e) { notify(e.message); setLoading(btn, false); } 
+        }
+
+        function editMyName() {
+            const overlayId = 'modal-myname-' + Date.now();
+            const overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(5px);';
+            overlay.innerHTML = `
+                <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
+                    <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить моё имя</h3>
+                    <input id="edit-myname-input-${overlayId}" type="text" value="${currentUser.full_name || ''}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <div style="display:flex; gap:10px;">
+                        <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
+                        <button class="ok" style="margin:0; flex:1;" onclick="saveMyName('${overlayId}', this)">Сохранить</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById(`edit-myname-input-${overlayId}`).focus();
+        }
+
+        async function saveMyName(overlayId, btn) {
+            const name = document.getElementById(`edit-myname-input-${overlayId}`).value.trim();
+            if (name.length < 3) { notify("Введите Фамилию и Имя"); return; }
+            setLoading(btn, true, '...');
+            try {
+                await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
+                currentUser.full_name = name;
+                document.getElementById("user-info").innerHTML = `${name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                document.getElementById(overlayId).remove();
+                showToast("Имя сохранено");
+            } catch (e) { notify(e.message); setLoading(btn, false); }
+        }
+
+        async function loadDailyReport() { try { const res = await api("/api/daily_report"); if (res.report) { document.getElementById("daily-report-box").classList.remove("hidden"); document.getElementById("report-text").innerHTML = res.report.replace(/\n/g, '<br>'); } } catch (e) { console.log(e); } }
+        
+        async function loadMyBookings() { 
+            try { 
+                const rows = await api("/api/my_bookings"); 
+                if (!rows.length) return; 
+                document.getElementById("my-bookings-section").classList.remove("hidden"); 
+                const formatBack = (str) => { if(!str) return ""; const parts = str.split('-'); if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`; return str; };
+                document.getElementById("my-bookings-list").innerHTML = rows.map(r => `<div class="booking-item"><b>${r.name}</b><div style="font-size:12px; color:var(--text-muted);">${formatBack(r.date_from)} — ${formatBack(r.date_to)}</div></div>`).join(""); 
+            } catch (e) { console.log(e); } 
+        }
+        
+        async function loadStats() {
+            try {
+                const stats = await api("/api/stats");
+                if (!stats.length) { document.getElementById("stats-box").classList.add("hidden"); return; }
+                const box = document.getElementById("stats-box");
+                box.classList.remove("hidden");
+                box.innerHTML = `<div class="stats-title">Обзор склада (по категориям)</div>` + stats.map(s => `
+                    <div class="stat-row" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div class="stat-name" onclick="openCategoryStats('${s.name}')" style="cursor:pointer; flex:1;">${s.name}</div>
+                        <div class="stat-nums" onclick="openCategoryDetailedTable('${s.name}')" style="cursor:pointer;">
+                            <span class="stat-total">${s.total}</span> склад ${s.on_stock} · работа ${s.in_work}
+                        </div>
+                    </div>
+                `).join("");
+            } catch (e) { console.log("Stats error:", e); }
+        }
+
+        function openCategoryStats(catName) {
+            document.getElementById("cat-stats-title").textContent = catName === 'Без категории' ? 'Без категории' : catName;
+            const filtered = allItems.filter(i => (i.category || 'Без категории') === catName);
+            renderItemsGrid(filtered, "cat-stats-items");
+            showScreen("screen-category-stats");
+        }
+
+        function openCategoryDetailedTable(catName) {
+            document.getElementById("cat-detailed-title").textContent = catName + " (Детали)";
+            const filtered = allItems.filter(i => (i.category || 'Без категории') === catName);
+            const list = document.getElementById("cat-detailed-list");
+
+            if (!filtered.length) {
+                list.innerHTML = "<p style='text-align:center; color:var(--text-muted); margin-top:20px;'>Нет товаров в этой категории.</p>";
+                showScreen("screen-category-detailed");
+                return;
+            }
+
+            let html = `<div style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
+                <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left; min-width: 400px;">
+                <tr style="border-bottom: 2px solid var(--border); background: var(--skeleton-bg);">
+                    <th style="padding: 10px; font-weight: 600;">Товар / Комплект</th>
+                    <th style="padding: 10px; font-weight: 600;">Где</th>
+                    <th style="padding: 10px; font-weight: 600;">У кого</th>
+                </tr>`;
+
+            filtered.forEach(i => {
+                let kitArr = [];
+                if (i.kit_body) kitArr.push(`📷 ${i.kit_body}`);
+                if (i.kit_lens) kitArr.push(`🔭 ${i.kit_lens}`);
+                if (i.kit_flash) kitArr.push(`⚡ ${i.kit_flash}`);
+                const kitHtml = kitArr.length ? `<div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height: 1.4;">${kitArr.join('<br>')}</div>` : '';
+
+                const locations = i.stocks.map(s => s.location_name).join(', ') || '—';
+                const holders = i.holders.map(h => h.full_name).join(', ') || '—';
+
+                let rowBg = i.holders.length > 0 ? 'rgba(255, 149, 0, 0.08)' : 'transparent';
+                let holderColor = i.holders.length > 0 ? 'var(--warning)' : 'var(--text)';
+
+                html += `<tr style="border-bottom: 1px solid var(--border); background: ${rowBg};">
+                    <td style="padding: 10px; vertical-align: top; max-width: 150px;">
+                        <div style="font-weight: 600; color: var(--primary);">${i.name}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">${i.code}</div>
+                        ${kitHtml}
+                    </td>
+                    <td style="padding: 10px; vertical-align: top; font-weight: 500;">${locations}</td>
+                    <td style="padding: 10px; vertical-align: top; color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${holders}</td>
+                </tr>`;
+            });
+
+            html += `</table></div>`;
+            list.innerHTML = html;
+            showScreen("screen-category-detailed");
+        }
+
+        async function loadLocations() { 
+            locations = await api("/api/locations"); 
+            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
+            document.getElementById("filter-location").innerHTML = `<option value="">Все комнаты</option>` + locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+            const list = document.getElementById("locations-list"); 
+            if (list) list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${l.name}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, '${l.name}')">✏️</button></div>`).join(""); 
+            const invSelect = document.getElementById("inv-location");
+            if (invSelect) invSelect.innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+        }
+        
+        async function createLocation() { const name = document.getElementById("new-location-name").value.trim(); if (!name) return; try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); showToast("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); } }
+        async function renameLocation(id, oldName) { const newName = prompt("Новое название комнаты:", oldName); if (!newName || newName === oldName) return; try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); showToast("Обновлено"); loadLocations(); } catch (e) { notify(e.message); } }
+
+        function showSettings() { loadLocations(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        
+        async function loadUsers() { 
+            const list = document.getElementById("users-list"); 
+            list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const users = await api("/api/users"); 
+                list.innerHTML = users.map(u => {
+                    const held = u.held_items && u.held_items.length > 0 ? `<div style="font-size:11px; color:var(--warning); margin-top:4px;">Держит: ${u.held_items.join(', ')}</div>` : "";
+                    const isAdmin = u.role === 'admin';
+                    const roleBtn = isAdmin 
+                        ? `<button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'employee')">Снять админа</button>`
+                        : `<button class="ok" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'admin')">Дать админа</button>`;
+                    return `
+                    <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;">
+                        <div><b>${u.full_name}</b> ${held}</div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            ${roleBtn}
+                            <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserNameModal(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
+                        </div>
+                    </div>`;
+                }).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+        }
+        
+        async function toggleUserRole(tg_id, full_name, newRole) {
+            const actionText = newRole === 'admin' ? "выдать права администратора" : "забрать права администратора";
+            if (!confirm(`Вы уверены, что хотите ${actionText} для ${full_name}?`)) return;
+            try { await api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: full_name, role: newRole }) }); showToast("Роль обновлена"); loadUsers(); } catch (e) { notify(e.message); }
+        }
+
+        function editUserNameModal(tg_id, oldName, role) {
+            const overlayId = 'modal-user-' + Date.now();
+            const overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(5px);';
+            overlay.innerHTML = `
+                <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
+                    <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить имя</h3>
+                    <input id="edit-user-input-${overlayId}" type="text" value="${oldName}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <div style="display:flex; gap:10px;">
+                        <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
+                        <button class="ok" style="margin:0; flex:1;" onclick="saveUserName(${tg_id}, '${role}', '${overlayId}', this)">Сохранить</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById(`edit-user-input-${overlayId}`).focus();
+        }
+
+        async function saveUserName(tg_id, role, overlayId, btn) {
+            const name = document.getElementById(`edit-user-input-${overlayId}`).value.trim();
+            if (!name) return;
+            setLoading(btn, true, '...');
+            try { 
+                await api(`/api/users/${tg_id}/update`, { method: "POST", body: JSON.stringify({ full_name: name, role: role }) }); 
+                showToast("Имя сохранено"); 
+                document.getElementById(overlayId).remove();
+                loadUsers(); 
+            } catch (e) { notify(e.message); setLoading(btn, false); }
+        }
+
+        function showUsers() { loadUsers(); showScreen("screen-users"); }
+        
+        async function loadItems() { 
+            const list = document.getElementById("items-list"); 
+            if(list.innerHTML.includes("Ничего не найдено") || list.innerHTML.includes("Загрузка")) list.innerHTML = "<p>Загрузка...</p>"; 
+            try { allItems = await api("/api/items"); filterItems(); loadMyItems(); } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+        }
+        
+        async function loadMyItems() { 
+            try { 
+                const myItems = await api("/api/my_items"); 
+                const section = document.getElementById("my-items-section"); 
+                const list = document.getElementById("my-items-list"); 
+                if (!myItems.length) { section.classList.add("hidden"); return; } 
+                section.classList.remove("hidden"); 
+                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div style="flex:1; cursor:pointer;" onclick="openItem('${i.item_code}')"><div style="font-weight:bold;">${i.name}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${i.item_code} ${i.taken_for ? `(для ${i.taken_for})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain('${i.item_code}')">Вернуть</div></div>`).join(""); 
+            } catch (e) { console.log(e); } 
+        }
+        
+        async function doReturnFromMain(code) { 
+            haptic('medium');
+            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); loadItems(); } catch (e) { notify(e.message); } 
+        }
+
+        async function returnAllMyItems() {
+            if (!confirm("Вернуть все вещи на склад?")) return;
+            haptic('medium');
+            const myItems = await api("/api/my_items");
+            for (let item of myItems) { try { await api(`/api/return?code=${encodeURIComponent(item.item_code)}`, { method: "POST" }); } catch(e) {} }
+            showToast("Все вещи возвращены"); loadItems();
+        }
+        
+        function renderItemsGrid(itemsArray, containerId) {
+            const list = document.getElementById(containerId); 
+            if (!itemsArray.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
+            
+            const sorted = [...itemsArray].sort((a, b) => {
+                const aHeld = a.holders && a.holders.length > 0, bHeld = b.holders && b.holders.length > 0;
+                if (aHeld && !bHeld) return -1; if (!aHeld && bHeld) return 1; return 0;
+            });
+
+            list.innerHTML = sorted.map(i => { 
+                let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${s.location_name}</div>`).join(""); 
+                let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
+                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
+                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
+                let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
+                let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
+                let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
+                
+                let heldHtml = "", heldText = "", dimmedClass = "";
+                if (i.holders && i.holders.length > 0) {
+                    const initials = i.holders[0].full_name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+                    heldHtml = `<div class="held-indicator"></div><div class="held-avatar" title="${i.holders[0].full_name}">${initials}</div>`;
+                    heldText = `<div class="held-text">У ${i.holders[0].full_name}</div>`;
+                }
+                if (i.kind === 'consumable' && i.total === 0) dimmedClass = "dimmed";
+                
+                return `<div class="card item-card ${dimmedClass}" onclick="openItem('${i.code}')">${heldHtml}<div class="name">${i.name}</div><div class="meta">${i.code} · ${i.total} шт ${i.serial_number ? `· S/N: ${i.serial_number}` : ""}</div>${placesHtml}<div style="margin-top:8px;"><span class="badge ${i.kind === 'equipment' ? 'eq' : 'cons'}">${i.kind === 'equipment' ? 'Оборуд.' : 'Расходник'}</span>${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${lowBadge} ${brokenBadge}</div>${heldText}</div>`; 
+            }).join(""); 
+        }
+
+        function filterItems() { 
+            const query = document.getElementById("search-input").value.toLowerCase(); 
+            const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
+            const filterKind = document.getElementById("filter-kind").value;
+
+            const filtered = allItems.filter(i => {
+                const matchesQuery = i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query) || (i.serial_number && i.serial_number.toLowerCase().includes(query));
+                const matchesLoc = !filterLoc || i.stocks.some(s => s.location_id === filterLoc);
+                const matchesKind = !filterKind || i.kind === filterKind;
+                return matchesQuery && matchesLoc && matchesKind;
+            });
+
+            renderItemsGrid(filtered, "items-list");
+        }
+
+        // --- Взять технику (Массовый выбор) ---
+        function showTakeScreen() {
+            document.getElementById("take-search-input").value = "";
+            document.getElementById("take-search-wrapper").classList.remove("has-text");
+            selectedTakeItems = [];
+            updateTakeBatchUI();
+            renderTakeItems();
+            showScreen("screen-take");
+        }
+
+        function renderTakeItems() {
+            const list = document.getElementById("take-items-list");
+            const query = document.getElementById("take-search-input").value.toLowerCase();
+            
+            let available = allItems.filter(i => i.kind === 'equipment' && !i.needs_repair);
+            if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
+
+            if (!available.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>"; return; }
+
+            list.innerHTML = available.map(i => {
+                let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="font-size:12px; color:var(--text-muted); margin-top:2px;">📍 ${s.location_name}</div>`).join(""); 
+                
+                let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
+                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
+                let budgetBadge = i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
+                let buyoutBadge = i.buyout_status ? `<span class="badge buyout">💸 ${i.buyout_status}</span>` : ""; 
+                let catBadge = i.category ? `<span class="badge category">${i.category}</span>` : "";
+                let snText = i.serial_number ? `<span style="font-size:12px; color:var(--text-muted);">S/N: ${i.serial_number}</span>` : "";
+
+                let isOnHand = i.holders && i.holders.length > 0;
+                let onHandBadge = isOnHand ? `<span class="badge on-hand">У ${i.holders[0].full_name}</span>` : "";
+                
+                const isChecked = selectedTakeItems.includes(i.code) ? "checked" : "";
+                const isDisabled = isOnHand ? "disabled" : "";
+                const dimmedClass = isOnHand ? "dimmed" : "";
+
+                return `
+                <div class="card room-item-card ${dimmedClass}">
+                    <input type="checkbox" class="room-item-checkbox" ${isChecked} ${isDisabled} onchange="toggleTakeSelect('${i.code}', this)">
+                    <div class="room-item-content" onclick="openItem('${i.code}')">
+                        <div class="room-item-name">${i.name}</div>
+                        <div class="room-item-meta">${i.code} · Всего: ${i.total} шт ${snText ? `· ${snText}` : ""}</div>
+                        ${placesHtml}
+                        <div style="margin-top:8px;">
+                            <span class="badge eq">Оборуд.</span>
+                            ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${brokenBadge} ${onHandBadge}
+                        </div>
+                    </div>
+                </div>`;
+            }).join("");
+        }
+
+        function toggleTakeSelect(code, cb) {
+            haptic('light');
+            const item = allItems.find(i => i.code === code);
+            if (item && item.holders && item.holders.length > 0) {
+                cb.checked = false;
+                notify("Эта техника на руках у другого сотрудника");
+                return;
+            }
+            if (cb.checked) { if(!selectedTakeItems.includes(code)) selectedTakeItems.push(code); }
+            else { selectedTakeItems = selectedTakeItems.filter(c => c !== code); }
+            updateTakeBatchUI();
+        }
+
+        function updateTakeBatchUI() {
+            const bar = document.getElementById("take-batch-actions");
+            if (selectedTakeItems.length > 0) { bar.style.display = "flex"; document.getElementById("take-selected-count").textContent = selectedTakeItems.length; } 
+            else { bar.style.display = "none"; }
+        }
+
+        function deselectAllTakeItems() {
+            selectedTakeItems = [];
+            document.querySelectorAll('#take-items-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+            updateTakeBatchUI();
+        }
+
+        async function executeBatchTake() {
+            if (!selectedTakeItems.length) return;
+            try {
+                const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
+                if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
+                if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
+                selectedTakeItems = [];
+                updateTakeBatchUI();
+                loadItems();
+                backToMain();
+            } catch (e) {
+                if (e.message.includes("Method Not Allowed") || e.message.includes("Not Found")) {
+                    showToast("Обновляем по одному...", "success");
+                    let successCount = 0; let errors = [];
+                    for (let code of selectedTakeItems) {
+                        try { await api("/api/checkout", { method: "POST", body: JSON.stringify({ code: code, taken_for: "" }) }); successCount++; } 
+                        catch (err) { errors.push(code + ": " + err.message); }
+                    }
+                    if (successCount > 0) showToast(`Взято: ${successCount} шт.`);
+                    if (errors.length > 0) alert("Ошибки:\n" + errors.join("\n"));
+                    selectedTakeItems = [];
+                    updateTakeBatchUI();
+                    loadItems();
+                    backToMain();
+                } else { notify(e.message); }
+            }
+        }
+
+        function scanQr() { 
+            if (!tg.showScanQrPopup) { notify("Сканер доступен только с телефона"); return; } 
+            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } }); 
+        }
+
+        function scanTakeQr() {
+            if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; }
+            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
+                if (text) {
+                    const code = text.trim();
+                    const item = allItems.find(i => i.code === code);
+                    if (item) {
+                        if (item.kind !== 'equipment') { showToast("Это расходник", "error"); return true; }
+                        if (item.needs_repair) { showToast("Товар в ремонте", "error"); return true; }
+                        if (item.holders && item.holders.length > 0) { showToast(`На руках у ${item.holders[0].full_name}`, "error"); return true; }
+                        if (item.total <= 0) { showToast("Нет в наличии", "error"); return true; }
+                        openItem(code);
+                    } else { showToast("Товар не найден", "error"); }
+                    return true;
+                }
+            });
+        }
+
+        // --- Площадки и Теплоходы ---
+        function showPlatforms() {
+            updateNavActive("nav-platforms");
+            if (!cachedPlatforms.length) { syncGoogle('кц'); } else { renderPlatformsList(); }
+            showScreen("screen-platforms");
+        }
+
+        function parseDateStr(str) {
+            if (!str) return 0;
+            const parts = str.split('.');
+            if (parts.length === 3) { const d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]); if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return new Date(y, m - 1, d).getTime(); }
+            return 0;
+        }
+
+        function renderPlatformsList() {
+            const list = document.getElementById("platforms-list");
+            const query = document.getElementById("platform-search").value.toLowerCase();
+            if (!cachedPlatforms.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Нажмите «Обновить данные», чтобы загрузить.</p>"; return; }
+            let filtered = cachedPlatforms.filter(row => (row["Площадка"] || "").toLowerCase().includes(query));
+            filtered.sort((a, b) => {
+                const missingA = (a["чего не хватает"] || "").toUpperCase(), missingB = (b["чего не хватает"] || "").toUpperCase();
+                const isOkA = missingA.includes("ХВАТАЕТ"), isOkB = missingB.includes("ХВАТАЕТ");
+                if (isOkA !== isOkB) return isOkA ? 1 : -1;
+                return parseDateStr(b["дата"]) - parseDateStr(a["дата"]);
+            });
+            if (!filtered.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>"; return; }
+            list.innerHTML = filtered.map(row => {
+                const place = row["Площадка"] || "—", date = row["дата"] || "", admin = row["админ"] || "Не указан", counter = row["счетчик"] || "0", stock = row["запас"] || "", missing = row["чего не хватает"] || "";
+                let statusHtml = missing ? `<div class="platform-status ${missing.toUpperCase().includes("ХВАТАЕТ") ? 'status-ok' : 'status-bad'}">${missing.toUpperCase().includes("ХВАТАЕТ") ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${missing}`}</div>` : `<div class="platform-status" style="background:var(--skeleton-bg); color:var(--text-muted);">⚪ Нет данных</div>`;
+                return `<div class="card platform-card"><div class="platform-title"><span>${place}</span><span class="platform-date">${date}</span></div><div class="platform-info"><div class="platform-info-row"><span>👤 Админ:</span> <b>${admin}</b></div><div class="platform-info-row"><span>📊 Счетчик:</span> <b>${counter}</b></div>${stock ? `<div class="platform-info-row"><span>📦 Запас:</span> <b>${stock}</b></div>` : ""}</div>${statusHtml}</div>`;
+            }).join("");
+        }
+
+        function filterPlatforms() { renderPlatformsList(); }
+
+        function showTH() {
+            updateNavActive("nav-th");
+            if (!cachedTH.length) { syncGoogle('тх мск'); } else { renderTHList(); }
+            showScreen("screen-th");
+        }
+
+        function renderTHList() {
+            const list = document.getElementById("th-list");
+            const query = document.getElementById("th-search").value.toLowerCase();
+            if (!cachedTH.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Нажмите «Обновить данные», чтобы загрузить.</p>"; return; }
+
+            let filtered = cachedTH.filter(row => {
+                const name = row["Название"] || Object.values(row)[0] || "";
+                return String(name).toLowerCase().includes(query);
+            });
+
+            filtered.sort((a, b) => {
+                const askA = Object.values(a).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || a["Что просят"] || "";
+                const askB = Object.values(b).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || b["Что просят"] || "";
+                const isOkA = String(askA).toUpperCase().includes("ХВАТАЕТ"), isOkB = String(askB).toUpperCase().includes("ХВАТАЕТ");
+                if (isOkA !== isOkB) return isOkA ? 1 : -1;
+                return parseDateStr(b["Дата"] || b["дата"] || "") - parseDateStr(a["Дата"] || a["дата"] || "");
+            });
+
+            if (!filtered.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Ничего не найдено</p>"; return; }
+
+            list.innerHTML = filtered.map(row => {
+                // ЗАЩИТА ОТ ДАННЫХ КЦ
+                if (!row["Название"] && !row["Дата"] && row["Площадка"]) return "";
+
+                const name = row["Название"] || Object.values(row)[0] || "—";
+                const date = row["Дата"] || row["дата"] || "";
+                
+                const keys = Object.keys(row);
+                const askKey = keys.find(k => k.toLowerCase().includes('просят') || k.toLowerCase().includes('нужно') || k.toLowerCase().includes('статус'));
+                const ask = askKey ? row[askKey] : Object.values(row).find(v => String(v).toUpperCase().includes("ХВАТАЕТ")) || "";
+                
+                let infoHtml = "";
+                for (const [k, v] of Object.entries(row)) {
+                    if (["Название", "Дата", "дата"].includes(k) || k === askKey || !v) continue;
+                    infoHtml += `<div class="platform-info-row"><span>${k}:</span> <b>${v}</b></div>`;
+                }
+                
+                const isOk = String(ask).toUpperCase().includes("ХВАТАЕТ");
+                let statusHtml = ask ? `<div class="platform-status ${isOk ? 'status-ok' : 'status-bad'}">${isOk ? "✅ ВСЕГО ХВАТАЕТ" : `⚠️ ${ask}`}</div>` : `<div class="platform-status" style="background:var(--skeleton-bg); color:var(--text-muted);">⚪ Статус не указан</div>`;
+                
+                return `<div class="card platform-card"><div class="platform-title"><span>${name}</span><span class="platform-date">${date}</span></div><div class="platform-info">${infoHtml}</div>${statusHtml}</div>`;
+            }).join("");
+        }
+
+        function filterTH() { renderTHList(); }
+
+        async function syncGoogle(sheetName) {
+            const btn = sheetName === 'кц' ? document.getElementById("sync-btn-plat") : document.getElementById("sync-btn-th");
+            setLoading(btn, true, "Загрузка...");
+            try {
+                const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}&t=${Date.now()}`, { cache: "no-store" });
+                
+                if (res.status === "error") {
+                    alert("ОШИБКА СЕРВЕРА:\n" + res.message);
+                    return;
+                }
+
+                if (res.data && res.data.length) {
+                    // ЖЕСТКАЯ ПРОВЕРКА СТРУКТУРЫ ДАННЫХ
+                    const firstItem = res.data[0];
+                    
+                    if (sheetName === 'тх мск') {
+                        if (firstItem.hasOwnProperty("Площадка")) {
+                            alert("ОШИБКА! Сервер снова отдал данные 'кц' вместо 'тх мск'.\nПожалуйста, убедитесь, что Railway запускает main.py.");
+                            return;
+                        }
+                    } 
+                    
+                    if (sheetName === 'кц') {
+                        if (firstItem.hasOwnProperty("Название") && !firstItem.hasOwnProperty("Площадка")) {
+                            alert("ОШИБКА! Сервер отдал данные 'тх мск' вместо 'кц'.");
+                            return;
+                        }
+                    }
+
+                    if (sheetName === 'кц') { 
+                        localStorage.removeItem("cachedPlatforms_v9");
+                        cachedPlatforms = res.data; 
+                        localStorage.setItem("cachedPlatforms_v9", JSON.stringify(cachedPlatforms)); 
+                        renderPlatformsList(); 
+                    } 
+                    else { 
+                        localStorage.removeItem("cachedTH_v9");
+                        cachedTH = res.data; 
+                        localStorage.setItem("cachedTH_v9", JSON.stringify(cachedTH)); 
+                        renderTHList(); 
+                    }
+                    showToast("Данные обновлены");
+                } else { showToast("Данных нет (лист пуст)"); }
+            } catch (e) { 
+                alert("ОШИБКА СЕТИ:\n" + e.message);
+            } 
+            finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
+        }
+
+        // --- Комнаты ---
+        async function showRooms() { 
+            showScreen("screen-rooms"); updateNavActive("nav-rooms"); document.getElementById("batch-actions").style.display = "none";
+            const list = document.getElementById("rooms-list"); list.innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`; 
+            try { 
+                const rooms = await api("/api/locations_view"); 
+                list.innerHTML = rooms.map(r => `<div class="card room-card" onclick="openRoom(${r.id}, '${r.name}')"><div class="room-info"><div class="room-title">${r.name}</div><div class="room-spots">📦 Товаров: ${r.count} шт.</div></div><div class="room-arrow-circle">›</div></div>`).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+        }
+        
+        async function openRoom(id, name) { 
+            showScreen("screen-room-view"); currentRoomId = id; document.getElementById("room-title").textContent = name; 
+            selectedItems = []; updateBatchUI(); 
+            const list = document.getElementById("room-items"); list.innerHTML = `<p>Загрузка...</p>`; 
+            try { 
+                const data = await api(`/api/room_detail/${id}`); 
+                
+                let items = [];
+                if (data.items) items = data.items;
+                else if (data.shelves) {
+                    items = Object.values(data.shelves).flat();
+                    items = items.concat(data.no_shelf || []);
+                }
+                
+                let html = ""; 
+                if (items && items.length > 0) {
+                    items.forEach(item => {
+                        let badges = "";
+                        if (item.category) badges += `<span class="badge category">${item.category}</span>`;
+                        if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
+                        if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${item.budget_tag}</span>`;
+                        if (item.buyout_status) badges += `<span class="badge buyout">💸 ${item.buyout_status}</span>`;
+                        if (item.serial_number) badges += `<span class="badge eq">S/N: ${item.serial_number}</span>`;
+                        if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
+                        if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${item.holder}</span>`;
+
+                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${item.code}" onchange="toggleSelectItem('${item.code}', this)"><div class="room-item-content" onclick="openItem('${item.code}')"><div class="room-item-name">${item.name}</div><div class="room-item-meta">${item.code} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div></div>`; 
+                    });
+                } else {
+                    html = "<p>В этой комнате пусто.</p>";
+                }
+                
+                list.innerHTML = html; 
+                setTimeout(updateBatchUI, 0);
+            } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+        }
+
+        function updateBatchUI() {
+            const bar = document.getElementById("batch-actions");
+            if (selectedItems.length > 0) { bar.style.display = "flex"; document.getElementById("selected-count").textContent = selectedItems.length; } else { bar.style.display = "none"; }
+        }
+
+        function selectAllInRoom() { haptic('light'); selectedItems = []; document.querySelectorAll('#room-items input[type="checkbox"]').forEach(cb => { cb.checked = true; const code = cb.getAttribute("data-code"); if (code && !selectedItems.includes(code)) selectedItems.push(code); }); updateBatchUI(); }
+        function deselectAllInRoom() { haptic('light'); selectedItems = []; document.querySelectorAll('#room-items input[type="checkbox"]').forEach(cb => { cb.checked = false; }); updateBatchUI(); }
+        function toggleSelectItem(code, checkbox) { haptic('light'); if (checkbox.checked) { if (!selectedItems.includes(code)) selectedItems.push(code); } else { selectedItems = selectedItems.filter(c => c !== code); } updateBatchUI(); }
+        
+        function showBatchMoveForm() { document.getElementById("batch-to-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); showScreen("screen-batch-move"); }
+        
+        async function executeBatchMove() { 
+            const btn = document.getElementById("batch-confirm-btn");
+            const toLocation = parseInt(document.getElementById("batch-to-location").value); 
+            if (toLocation === currentRoomId) { notify("Выберите другую комнату"); return; }
+            setLoading(btn, true, "Перемещение...");
+            try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation }) }); showToast("Перемещено!"); document.getElementById("batch-actions").style.display = "none"; showRooms(); } catch (e) { notify(e.message); setLoading(btn, false); } 
+        }
+
+        // --- ИНВЕНТАРИЗАЦИЯ ---
+        function showInventory() { invScannedCodes = []; document.getElementById("inv-scanned-list").innerHTML = ""; document.getElementById("inv-finish-btn").classList.add("hidden"); showScreen("screen-inventory"); }
+
+        function startInventoryScan() {
+            if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; }
+            tg.showScanQrPopup({ text: "Сканируйте QR товаров" }, (text) => {
+                if (text) {
+                    const code = text.trim();
+                    if (!invScannedCodes.includes(code)) { invScannedCodes.push(code); haptic('medium'); document.getElementById("inv-scanned-list").innerHTML += `<div class="card" style="padding:12px; margin-bottom:8px; border-left:4px solid var(--success); font-weight:600;">✅ ${code}</div>`; document.getElementById("inv-finish-btn").classList.remove("hidden"); } 
+                    else { showToast("Уже отсканирован"); }
+                    return true;
+                }
+            });
+        }
+
+        async function finishInventory() {
+            const locId = parseInt(document.getElementById("inv-location").value);
+            const btn = document.getElementById("inv-finish-btn"); setLoading(btn, true, "Подсчет...");
+            try {
+                const res = await api("/api/inventory_finish", { method: "POST", body: JSON.stringify({ location_id: locId, found: invScannedCodes }) });
+                let msg = "";
+                if (res.missing && res.missing.length > 0) msg += `Не найдено: ${res.missing.length} шт.\n`;
+                if (res.extra && res.extra.length > 0) msg += `Лишние (не по базе): ${res.extra.length} шт.\n`;
+                if (msg) { showToast("Есть расхождения", 'error'); alert(msg + "\nПотеряшки:\n" + (res.missing || []).join('\n') + "\nЛишние:\n" + (res.extra || []).join('\n')); } 
+                else { showToast("Все на месте!"); }
+                showSettings();
+            } catch (e) { notify(e.message); setLoading(btn, false); }
+        }
+
+        // --- ОСТАЛЬНОЕ ---
+        async function openItem(code) { 
+            try { 
+                currentItem = await api(`/api/items/${encodeURIComponent(code)}`); 
+                document.getElementById("item-title").textContent = currentItem.name; 
+                
+                document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
+                document.getElementById("edit-btn").style.display = currentUser.role === 'admin' ? 'block' : 'none'; 
+                
+                let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; 
+                let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; 
+                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${currentItem.budget_tag}</div>` : ""; 
+                let snText = currentItem.serial_number ? `<div class="meta">S/N: ${currentItem.serial_number}</div>` : ""; 
+                let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; 
+                let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : "";
+                
+                if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { 
+                    document.getElementById("kit-box").classList.remove("hidden"); 
+                    document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; 
+                    document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; 
+                    document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; 
+                } else { document.getElementById("kit-box").classList.add("hidden"); } 
+                
+                let statusHtml = ""; 
+                const repairBtn = document.getElementById("repair-btn");
+                if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } 
+                else { 
+                    repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; 
+                    if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${currentItem.holders[0].full_name} ${currentItem.holders[0].taken_for ? `(для ${currentItem.holders[0].taken_for})` : ""}</div>`; } 
+                    else { 
+                        let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); 
+                        let places = currentItem.stocks.map(s => s.location_name).filter((v,i,a)=>a.indexOf(v)===i).join(", "); 
+                        statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
+                    } 
+                } 
+                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${currentItem.code}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
+                
+                const bookingSection = document.getElementById("booking-section"); 
+                if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
+                
+                renderActions(); 
+                loadComments(currentItem.code); 
+                showScreen("screen-item"); 
+            } catch (e) { notify(e.message); } 
+        }
+        
+        function showEditForm() { 
+            document.getElementById("edit-name").value = currentItem.name; 
+            document.getElementById("edit-kind").value = currentItem.kind; 
+            document.getElementById("edit-price").value = currentItem.price || 0; 
+            document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
+            document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
+            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; 
+            document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
+            document.getElementById("edit-kit-lens").value = currentItem.kit_lens || ""; 
+            document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; 
+            document.getElementById("edit-min-stock").value = currentItem.min_stock || 0; 
+            if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } 
+            showScreen("screen-edit-item"); 
+        }
+        
+        function toggleEditFields() { if (document.getElementById("edit-kind").value === "consumable") { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } }
+        
+        async function saveEditItem() { 
+            const btn = document.querySelector("#screen-edit-item .ok"); 
+            const name = document.getElementById("edit-name").value.trim(); 
+            const kind = document.getElementById("edit-kind").value; 
+            const price = parseFloat(document.getElementById("edit-price").value) || 0; 
+            const budget_tag = document.getElementById("edit-budget-tag").value; 
+            const serial_number = document.getElementById("edit-serial-number").value.trim(); 
+            const buyout_status = document.getElementById("edit-buyout-status").value.trim(); 
+            const kit_body = document.getElementById("edit-kit-body").value.trim(); 
+            const kit_lens = document.getElementById("edit-kit-lens").value.trim(); 
+            const kit_flash = document.getElementById("edit-kit-flash").value.trim(); 
+            const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; 
+            
+            setLoading(btn, true, "Сохранение..."); 
+            try { 
+                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) }); 
+                showToast("Сохранено"); openItem(currentItem.code); 
+            } catch (e) { notify(e.message); setLoading(btn, false); } 
+        }
+        
+        async function deleteItemFromEdit() { 
+            if (!confirm(`Отправить в архив "${currentItem.name}"?`)) return; 
+            try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); showToast("В архиве"); backToMain(); } catch (e) { notify(e.message); } 
+        }
+        
+        async function showItemHistory() { 
+            showScreen("screen-item-history"); 
+            const list = document.getElementById("item-history-list"); list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const logs = await api(`/api/history`); 
+                const filtered = logs.filter(l => l.item_code === currentItem.code); 
+                if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } 
+                list.innerHTML = filtered.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type === 'checkout' ? 'Взял' : l.type === 'return' ? 'Вернул' : l.type === 'move' ? 'Переместил' : 'Списал'} — ${l.user_name} (${l.quantity} шт)</div></div>`).join(""); 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
+
+        function renderActions() { 
+            const box = document.getElementById("actions"); 
+            const isEq = currentItem.kind === "equipment"; 
+            const myId = currentUser.tg_id; 
+            const myCheckout = currentItem.holders.find(h => h.user_id === myId); 
+            const otherCheckout = currentItem.holders.find(h => h.user_id !== myId); 
+            let html = ""; 
+            
+            if (currentItem.needs_repair) { 
+                html += `<div class="status-badge status-broken">Выдача заблокирована</div>`; 
+            } else if (isEq) { 
+                if (myCheckout) {
+                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
+                } else if (otherCheckout) {
+                    if (currentUser.role === 'admin') {
+                        html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
+                    } else {
+                        html += `<div class="status-badge status-taken">На руках у ${otherCheckout.full_name}.<br><span style="font-size:12px; font-weight:normal; color:var(--text-muted);">Вернуть может только администратор.</span></div>`;
+                    }
+                } else { 
+                    if (currentItem.stocks.some(s => s.quantity > 0)) {
+                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
+                    }
+                } 
+            } else { 
+                html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
+            } 
+            
+            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join(""); 
+            if (stockOpts) {
+                html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
+            }
+            box.innerHTML = html; 
+        }
+        
+        async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
+        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        
+        function showMoveItemScreen() {
+            document.getElementById("move-item-name").textContent = currentItem.name;
+            const stock = currentItem.stocks.find(s => s.quantity > 0);
+            moveFromLocId = stock ? stock.location_id : null;
+            document.getElementById("move-item-from").textContent = "Откуда: " + (stock ? stock.location_name : "Неизвестно");
+            
+            document.getElementById("move-step-2").classList.add("hidden");
+            
+            const list = document.getElementById("move-rooms-list");
+            list.innerHTML = locations.filter(l => l.id !== moveFromLocId).map(l => `<div class="card room-card" onclick="selectMoveRoom(${l.id}, '${l.name}')"><div class="room-info"><div class="room-title">${l.name}</div></div><div class="room-arrow-circle">›</div></div>`).join("");
+            
+            showScreen("screen-move-item");
+        }
+        
+        function selectMoveRoom(id, name) {
+            selectedMoveRoomId = id; selectedMoveRoomName = name;
+            document.getElementById("move-confirm-text").textContent = name;
+            document.getElementById("move-step-2").classList.remove("hidden");
+            document.getElementById("move-confirm-btn").scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        async function executeMoveItem() {
+            const qty = parseInt(document.getElementById("move-qty").value) || 1;
+            if (!selectedMoveRoomId) return;
+            const btn = document.getElementById("move-confirm-btn"); setLoading(btn, true, "Перемещение...");
+            try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: moveFromLocId, to_location: selectedMoveRoomId, quantity: qty }) }); showToast("Перемещено!"); openItem(currentItem.code); } catch (e) { notify(e.message); setLoading(btn, false); }
+        }
+        
+        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        
+        function showQr() { 
+            const url = `/api/qr/${currentItem.code}`; 
+            document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div>`; 
+            document.getElementById("actions").innerHTML = ""; 
+            document.getElementById("booking-section").classList.add("hidden"); 
+        }
+        
+        async function loadBookings(code) { 
+            const list = document.getElementById("bookings-list"); 
+            try { 
+                const rows = await api(`/api/bookings/${code}`); 
+                const formatBack = (str) => { if(!str) return ""; const parts = str.split('-'); if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`; return str; };
+                list.innerHTML = rows.length ? rows.map(r => `<div class="booking-item"><b>${r.full_name}</b>: ${formatBack(r.date_from)} — ${formatBack(r.date_to)}</div>`).join("") : ""; 
+            } catch (e) { list.innerHTML = ""; } 
+        }
+        
+        async function doBook() { 
+            const fromRaw = document.getElementById("book-from").value; const toRaw = document.getElementById("book-to").value; 
+            if (!fromRaw || !toRaw) return; 
+            const formatDate = (str) => { const parts = str.split('.'); if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; return str; };
+            try { await api("/api/bookings", { method: "POST", body: JSON.stringify({ code: currentItem.code, date_from: formatDate(fromRaw), date_to: formatDate(toRaw) }) }); showToast("Забронировано"); loadBookings(currentItem.code); } catch (e) { notify(e.message); } 
+        }
+        
+        async function loadComments(code) { 
+            const list = document.getElementById("comments-list"); 
+            try { const rows = await api(`/api/comments/${code}`); list.innerHTML = rows.map(r => `<div class="comment-box"><b>${r.full_name}</b>: ${r.text}</div>`).join(""); } catch (e) { list.innerHTML = ""; } 
+        }
+        
+        async function doComment() { 
+            const text = document.getElementById("comment-text").value.trim(); 
+            if (!text) return; 
+            try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } 
+        }
+        
+        async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
+        function toggleFields() { if (document.getElementById("add-kind").value === "consumable") document.getElementById("consumable-fields").classList.remove("hidden"); else document.getElementById("consumable-fields").classList.add("hidden"); }
+        
+        async function saveItem() { 
+            const btn = document.getElementById("save-item-btn"); 
+            const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); 
+            if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } 
+            
+            const formData = new FormData(); 
+            formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("location_id", loc); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
+            
+            if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } 
+            
+            setLoading(btn, true, "Сохранение..."); 
+            try { await api("/api/items", { method: "POST", body: formData }); showToast("Добавлено"); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } 
+        }
+        
+        async function showHistory() { 
+            updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; 
+            try { 
+                const logs = await api("/api/history"); 
+                const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; 
+                list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; 
+            } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
+        }
+        
+        async function downloadFile(url, filename) {
+            const fullUrl = window.location.origin + url + (url.includes('?') ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData || "");
+            try {
+                const res = await fetch(fullUrl);
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                const blob = await res.blob();
+                const link = document.createElement("a");
+                link.href = window.URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } catch (e) { notify("Ошибка скачивания: " + e.message); }
+        }
+
+        async function downloadHistory() { downloadFile("/api/export_history", "history.csv"); }
+        async function exportStock() { downloadFile("/api/export_stock", "warehouse_stock.csv"); }
+        async function downloadQrSheet() { downloadFile("/api/export_qr_sheet", "qrs.png"); }
+
+        function showTerminal() { document.getElementById("terminal-sql").value = ""; document.getElementById("terminal-result").innerHTML = ""; showScreen("screen-terminal"); }
+
+        async function executeTerminal() {
+            const sql = document.getElementById("terminal-sql").value.trim(); if (!sql) return;
+            const resBox = document.getElementById("terminal-result"); resBox.innerHTML = "<p>Выполняется...</p>";
+            try {
+                const res = await api("/api/execute_sql", { method: "POST", body: JSON.stringify({ sql: sql }) });
+                if (res.type === "select") {
+                    if (!res.data.length) resBox.innerHTML = "<p>Запрос выполнен. Данных нет.</p>";
+                    else {
+                        let html = `<div style="overflow-x: auto; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 10px;"><table style="width: 100%; border-collapse: collapse;">`;
+                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th style="text-align: left; border-bottom: 1px solid var(--border); padding: 4px;">${k}</th>`).join("") + `</tr>`;
+                        res.data.forEach(row => { html += `<tr>` + Object.values(row).map(v => `<td style="border-bottom: 1px solid var(--border); padding: 4px;">${v}</td>`).join("") + `</tr>`; });
+                        html += `</table></div>`; resBox.innerHTML = html;
+                    }
+                } else { resBox.innerHTML = `<div class="status-badge status-free">${res.message}</div>`; loadStats(); }
+            } catch (e) { resBox.innerHTML = `<div class="status-badge status-broken">Ошибка: ${e.message}</div>`; }
+        }
+        
+        document.addEventListener('input', function (e) {
+            if (e.target.id === 'book-from' || e.target.id === 'book-to') {
+                let v = e.target.value.replace(/\D/g, '').slice(0, 8); let res = '';
+                if (v.length > 0) res = v.slice(0, 2);
+                if (v.length > 2) res += '.' + v.slice(2, 4);
+                if (v.length > 4) res += '.' + v.slice(4, 8);
+                e.target.value = res;
+            }
+        });
+        
+        function showScreen(id) { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed"].forEach(s => { 
+                const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
+            }); 
+            if (id === "screen-main") updateNavActive("nav-main");
+            if (id === "screen-equipment") updateNavActive("nav-equipment");
+            if (id === "screen-platforms") updateNavActive("nav-platforms");
+            if (id === "screen-th") updateNavActive("nav-th");
+            if (id === "screen-rooms") updateNavActive("nav-rooms");
+            if (id === "screen-history") updateNavActive("nav-history");
+            if (id === "screen-settings") updateNavActive("nav-settings");
+            window.scrollTo(0, 0);
+        }
+        
+        function backToMain() { showScreen("screen-main"); loadItems(); }
+
+        (async () => { await init(); })();
+    </script>
+</body>
+</html>
