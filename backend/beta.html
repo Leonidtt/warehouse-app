@@ -1261,42 +1261,22 @@
                     alert("ОШИБКА СЕРВЕРА:\n" + res.message);
                     return;
                 }
-                
-                if (!res.data || res.data.length === 0) {
-                    showToast("Данных нет (лист пуст)");
-                    return;
-                }
 
-                // ПРОВЕРКА ПО СТРУКТУРЕ ДАННЫХ (независимо от версии сервера)
-                const firstItem = res.data[0];
-                
-                if (sheetName === 'тх мск') {
-                    // Если в данных есть "Площадка", значит сервер отдал КЦ
-                    if (firstItem.hasOwnProperty("Площадка")) {
-                        alert("ОШИБКА! Сервер снова отдал данные 'кц' вместо 'тх мск'.\nПожалуйста, убедитесь, что Railway запускает main_beta.py, а не main.py.");
-                        return;
+                if (res.data && res.data.length) {
+                    if (sheetName === 'кц') { 
+                        localStorage.removeItem("cachedPlatforms_v8");
+                        cachedPlatforms = res.data; 
+                        localStorage.setItem("cachedPlatforms_v8", JSON.stringify(cachedPlatforms)); 
+                        renderPlatformsList(); 
+                    } 
+                    else { 
+                        localStorage.removeItem("cachedTH_v8");
+                        cachedTH = res.data; 
+                        localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
+                        renderTHList(); 
                     }
-                } else if (sheetName === 'кц') {
-                    // Если в данных есть "Название", значит сервер отдал ТХ
-                    if (firstItem.hasOwnProperty("Название")) {
-                        alert("ОШИБКА! Сервер отдал данные 'тх мск' вместо 'кц'.");
-                        return;
-                    }
-                }
-                
-                if (sheetName === 'кц') { 
-                    localStorage.removeItem("cachedPlatforms_v8");
-                    cachedPlatforms = res.data; 
-                    localStorage.setItem("cachedPlatforms_v8", JSON.stringify(cachedPlatforms)); 
-                    renderPlatformsList(); 
-                } 
-                else { 
-                    localStorage.removeItem("cachedTH_v8");
-                    cachedTH = res.data; 
-                    localStorage.setItem("cachedTH_v8", JSON.stringify(cachedTH)); 
-                    renderTHList(); 
-                }
-                showToast("Данные обновлены");
+                    showToast("Данные обновлены");
+                } else { showToast("Данных нет (лист пуст)"); }
             } catch (e) { 
                 alert("ОШИБКА СЕТИ:\n" + e.message);
             } 
