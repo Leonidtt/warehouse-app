@@ -229,19 +229,33 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        sheet = None
-        available_titles = []
-        for s in spreadsheet.worksheets():
-            available_titles.append(s.title)
+        sheets = spreadsheet.worksheets()
+        target_sheet = None
+        
+        # 1. Ищем точное совпадение
+        for s in sheets:
             if s.title.strip().lower() == sheet_name.strip().lower():
-                sheet = s
+                target_sheet = s
                 break
+                
+        # 2. Если точного нет, ищем по ключевому слову (тх или кц)
+        if not target_sheet:
+            keyword = "тх" if "тх" in sheet_name.lower() else "кц"
+            for s in sheets:
+                if keyword in s.title.strip().lower():
+                    target_sheet = s
+                    break
+                    
+        # 3. Если всё равно нет, и это теплоходы, берем 4-й лист (индекс 3)
+        if not target_sheet and "тх" in sheet_name.lower() and len(sheets) >= 4:
+            target_sheet = sheets[3]
+            
+        if not target_sheet:
+            titles = [s.title for s in sheets]
+            return {"status": "error", "message": f"Лист не найден. Доступные листы: {titles}"}
         
-        if not sheet:
-            return {"status": "error", "message": f"Лист '{sheet_name}' не найден в Google Таблице.\n\nДоступные листы:\n- " + "\n- ".join(available_titles)}
-        
-        all_values = sheet.get_all_values()
-        if not all_values: return {"status": "ok", "sheet_title": sheet.title, "data": []}
+        all_values = target_sheet.get_all_values()
+        if not all_values: return {"status": "ok", "sheet_title": target_sheet.title, "data": []}
         
         headers = all_values[0]
         data_rows = all_values[1:]
@@ -267,7 +281,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                     record[h] = row[i].strip() if row[i] else ""
             records.append(record)
             
-        return {"status": "ok", "sheet_title": sheet.title, "data": records}
+        return {"status": "ok", "sheet_title": target_sheet.title, "data": records}
     except Exception as e:
         return {"status": "error", "message": f"Ошибка на сервере при чтении таблицы: {str(e)}"}
 
