@@ -1255,21 +1255,18 @@
             const btn = sheetName === 'кц' ? document.getElementById("sync-btn-plat") : document.getElementById("sync-btn-th");
             setLoading(btn, true, "Загрузка...");
             try {
-                const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}`);
+                const res = await api(`/api/sync_google?sheet_name=${encodeURIComponent(sheetName)}&t=${Date.now()}`, { cache: "no-store" });
                 
-                // Сначала проверяем статус-ошибку от сервера
                 if (res.status === "error") {
                     alert("ОШИБКА СЕРВЕРА:\n" + res.message);
                     return;
                 }
                 
-                // Если сервер ответил успешно, но поле sheet_title отсутствует
                 if (!res.sheet_title) {
                     alert("Сервер не прислал название листа.\nОтвет: " + JSON.stringify(res));
                     return;
                 }
 
-                // Жесткая проверка на соответствие листа
                 if (sheetName === 'тх мск' && !res.sheet_title.toLowerCase().includes('тх')) {
                     alert(`ОШИБКА!\nВы запросили лист "тх мск"\nНо сервер прочитал: "${res.sheet_title}"`);
                     return;
