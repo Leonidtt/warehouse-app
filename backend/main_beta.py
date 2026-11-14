@@ -229,17 +229,12 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        # ТОЛЬКО ТОЧНОЕ СОВПАДЕНИЕ, БЕЗ ДОГАДОК
-        target_sheet = None
-        available_titles = []
-        for s in spreadsheet.worksheets():
-            available_titles.append(s.title)
-            if s.title.strip().lower() == sheet_name.strip().lower():
-                target_sheet = s
-                break
-                
-        if not target_sheet:
-            return {"status": "error", "message": f"В Google-таблице НЕТ листа с точным названием '{sheet_name}'.\n\nДоступные листы:\n- " + "\n- ".join(available_titles) + "\n\nПожалуйста, переименуйте нужную вкладку в Google-таблице так, чтобы она называлась ровно '{sheet_name}' (без лишних пробелов)."}
+        # Жесткий поиск ТОЛЬКО по точному названию (без 4-го индекса)
+        try:
+            target_sheet = spreadsheet.worksheet(sheet_name)
+        except Exception:
+            titles = [s.title for s in spreadsheet.worksheets()]
+            return {"status": "error", "message": f"Лист '{sheet_name}' не найден. Доступные листы: {titles}. Проверьте регистр и пробелы!"}
         
         all_values = target_sheet.get_all_values()
         if not all_values: return {"status": "ok", "sheet_title": target_sheet.title, "data": []}
@@ -247,7 +242,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         headers = all_values[0]
         data_rows = all_values[1:]
         records = []
-        is_th_sheet = "тх" in target_sheet.title.lower()
+        is_th_sheet = "тх" in sheet_name.lower()
         
         for row in data_rows:
             if not row or len(row) == 0: continue
