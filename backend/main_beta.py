@@ -238,7 +238,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                 target_sheet = s
                 break
                 
-        # 2. Если точного нет, ищем по ключевому слову
+        # 2. Ищем по ключевому слову
         if not target_sheet:
             keyword = "тх" if "тх" in sheet_name.lower() else "кц"
             for s in sheets:
@@ -246,7 +246,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
                     target_sheet = s
                     break
                     
-        # 3. Если всё равно нет, и это теплоходы, берем 4-й лист (индекс 3)
+        # 3. Жесткий фолбэк на 4-й лист для теплоходов
         if not target_sheet and "тх" in sheet_name.lower() and len(sheets) >= 4:
             target_sheet = sheets[3]
             
