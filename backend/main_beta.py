@@ -28,7 +28,7 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+BOT_TOKEN = "ВАШ_БЕТА_ТОКЕН_ЗДЕСЬ"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 DB_PATH = "/data/warehouse_beta.db"
 
@@ -229,30 +229,17 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
-        sheets = spreadsheet.worksheets()
+        # ТОЛЬКО ТОЧНОЕ СОВПАДЕНИЕ, БЕЗ ДОГАДОК
         target_sheet = None
-        
-        # 1. Ищем точное совпадение
-        for s in sheets:
+        available_titles = []
+        for s in spreadsheet.worksheets():
+            available_titles.append(s.title)
             if s.title.strip().lower() == sheet_name.strip().lower():
                 target_sheet = s
                 break
                 
-        # 2. Ищем по ключевому слову
         if not target_sheet:
-            keyword = "тх" if "тх" in sheet_name.lower() else "кц"
-            for s in sheets:
-                if keyword in s.title.strip().lower():
-                    target_sheet = s
-                    break
-                    
-        # 3. Жесткий фолбэк на 4-й лист для теплоходов
-        if not target_sheet and "тх" in sheet_name.lower() and len(sheets) >= 4:
-            target_sheet = sheets[3]
-            
-        if not target_sheet:
-            titles = [s.title for s in sheets]
-            return {"status": "error", "message": f"Лист не найден. Доступные листы: {titles}"}
+            return {"status": "error", "message": f"В Google-таблице НЕТ листа с точным названием '{sheet_name}'.\n\nДоступные листы:\n- " + "\n- ".join(available_titles) + "\n\nПожалуйста, переименуйте нужную вкладку в Google-таблице так, чтобы она называлась ровно '{sheet_name}' (без лишних пробелов)."}
         
         all_values = target_sheet.get_all_values()
         if not all_values: return {"status": "ok", "sheet_title": target_sheet.title, "data": []}
