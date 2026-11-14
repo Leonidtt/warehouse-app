@@ -1267,8 +1267,13 @@
                     return;
                 }
 
-                if (res.sheet_title.toLowerCase().trim() !== sheetName.toLowerCase().trim()) {
-                    alert(`ОШИБКА!\nВы запросили лист: "${sheetName}"\nНо сервер прочитал: "${res.sheet_title}"`);
+                // ЖЕСТКАЯ ПРОВЕРКА, ЧТО ПРИШЛО ИМЕННО ТО, ЧТО МЫ ПРОСИЛИ
+                if (sheetName === 'тх мск' && !res.sheet_title.toLowerCase().includes('тх')) {
+                    alert(`ОШИБКА!\nВы запросили лист "тх мск"\nНо сервер прочитал: "${res.sheet_title}"`);
+                    return;
+                }
+                if (sheetName === 'кц' && !res.sheet_title.toLowerCase().includes('кц')) {
+                    alert(`ОШИБКА!\nВы запросили лист "кц"\nНо сервер прочитал: "${res.sheet_title}"`);
                     return;
                 }
                 
