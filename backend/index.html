@@ -362,7 +362,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v11</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v12</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -1028,7 +1028,7 @@
                     const bForOther = b.taken_for && b.taken_for.trim() !== "";
                     if (aForOther && !bForOther) return 1;
                     if (!aForOther && bForOther) return -1;
-                    return 0;
+                    return a.name.localeCompare(b.name); // Внутри группы по алфавиту
                 });
 
                 const section = document.getElementById("my-items-section"); 
@@ -1056,13 +1056,19 @@
             const list = document.getElementById(containerId); 
             if (!itemsArray.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
             
+            // НОВАЯ ЛОГИКА СОРТИРОВКИ (1 - Свободен, 2 - Взяли себе, 3 - Взяли для другого)
             const sorted = [...itemsArray].sort((a, b) => {
-                const aHeldForOther = a.holders && a.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
-                const bHeldForOther = b.holders && b.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
+                const getPriority = (item) => {
+                    if (!item.holders || item.holders.length === 0) return 1; // Свободен
+                    if (item.holders.some(h => h.taken_for && h.taken_for.trim() !== "")) return 3; // Взяли для другого
+                    return 2; // Взяли для себя
+                };
                 
-                if (aHeldForOther && !bHeldForOther) return 1;
-                if (!aHeldForOther && bHeldForOther) return -1;
-                return 0;
+                const priorityA = getPriority(a);
+                const priorityB = getPriority(b);
+                
+                if (priorityA !== priorityB) return priorityA - priorityB;
+                return a.name.localeCompare(b.name);
             });
 
             list.innerHTML = sorted.map(i => { 
