@@ -29,11 +29,9 @@ import urllib3
 urllib3.disable_warnings()
 
 # =======================================================
-# ВАЖНО: ВСТАВЬ СЮДА ТОКЕН БЕТА-БОТА! (В КАВЫЧКАХ)
+# ВАЖНО: ТОКЕН И БАЗА ДЛЯ БЕТЫ
 # =======================================================
-# Пример: BOT_TOKEN = "1234567890:AAH_твой_токен"
-BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
-
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 DB_PATH = "/data/warehouse_beta.db"
 
@@ -66,7 +64,7 @@ def init_db():
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0, kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '', category TEXT DEFAULT '', is_archived INTEGER DEFAULT 0)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0, kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '', category TEXT DEFAULT '', is_archived INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (item_code, location_id))""")
@@ -92,7 +90,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
         "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
-        "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
+        "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
     ]
     for q in migrations:
         try: c.execute(q)
@@ -115,24 +114,12 @@ init_db()
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
-    
     received_hash = pairs.pop("hash", None)
     if not received_hash: raise HTTPException(status_code=401, detail="Нет подписи")
-    
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    
-    # ВЫВОДИМ ОШИБКУ ПРЯМО В ТЕЛЕГРАМ, ЕСЛИ ПОДПИСИ НЕ СОВПАЛИ
-    if calculated != received_hash: 
-        # Показываем первые 6 и последние 4 символа токена, чтобы ты понял, какой токен используется
-        token_show = f"{BOT_TOKEN[:6]}...{BOT_TOKEN[-4:]}" if len(BOT_TOKEN) > 10 else BOT_TOKEN
-        err_msg = f"Неверная подпись! Токен на сервере: [{token_show}]. Проверь его в коде."
-        print(f"❌ ОШИБКА: {err_msg}")
-        print(f"TG Hash: {received_hash}")
-        print(f"SRV Hash: {calculated}")
-        raise HTTPException(status_code=401, detail=err_msg)
-        
+    if calculated != received_hash: raise HTTPException(status_code=401, detail="Неверная подпись")
     user_json = pairs.get("user")
     if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
     return json.loads(user_json)
@@ -462,7 +449,9 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": it["created_at"], "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        
         if is_admin: item_data["price"] = it["price"]
         result.append(item_data)
     conn.close(); return result
@@ -477,7 +466,9 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": item["created_at"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    
     if is_admin: result["price"] = item["price"]
     return result
 
@@ -697,7 +688,7 @@ def generate_qr(code: str):
     return StreamingResponse(buf, media_type="image/png")
 
 # ==========================================
-# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА (ЛЮБЫЕ ССЫЛКИ)
+# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА
 # ==========================================
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
