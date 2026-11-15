@@ -31,11 +31,10 @@ urllib3.disable_warnings()
 # =======================================================
 # ВАЖНО: ВСТАВЬ СЮДА ТОКЕН БЕТА-БОТА! (В КАВЫЧКАХ)
 # =======================================================
+# Пример: BOT_TOKEN = "1234567890:AAH_твой_токен"
 BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-
-# База для беты
 DB_PATH = "/data/warehouse_beta.db"
 
 app = FastAPI()
@@ -124,15 +123,15 @@ def verify_init_data(init_data: str) -> dict:
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     
-    # ВЫВОДИМ В ЛОГИ ДЛЯ ОТЛАДКИ
-    print("--- ПОПЫТКА АВТОРИЗАЦИИ ---")
-    print(f"1. Токен на сервере (первые 10 символов): {BOT_TOKEN[:10]}")
-    print(f"2. Хеш от Telegram: {received_hash}")
-    print(f"3. Хеш от Сервера:  {calculated}")
-    print("---------------------------")
-    
+    # ВЫВОДИМ ОШИБКУ ПРЯМО В ТЕЛЕГРАМ, ЕСЛИ ПОДПИСИ НЕ СОВПАЛИ
     if calculated != received_hash: 
-        raise HTTPException(status_code=401, detail="Неверная подпись")
+        # Показываем первые 6 и последние 4 символа токена, чтобы ты понял, какой токен используется
+        token_show = f"{BOT_TOKEN[:6]}...{BOT_TOKEN[-4:]}" if len(BOT_TOKEN) > 10 else BOT_TOKEN
+        err_msg = f"Неверная подпись! Токен на сервере: [{token_show}]. Проверь его в коде."
+        print(f"❌ ОШИБКА: {err_msg}")
+        print(f"TG Hash: {received_hash}")
+        print(f"SRV Hash: {calculated}")
+        raise HTTPException(status_code=401, detail=err_msg)
         
     user_json = pairs.get("user")
     if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
