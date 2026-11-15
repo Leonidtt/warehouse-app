@@ -27,10 +27,8 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-# --- ТОКЕНЫ ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI") 
 BOT_TOKEN_BETA = os.environ.get("9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg", "")
-
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 
 app = FastAPI()
@@ -184,10 +182,6 @@ def check_admin(x_init_data: Optional[str]):
     user = get_user(x_init_data)
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
-
-class ReplenishRequest(BaseModel):
-    location_id: int
-    quantity: int = 1
 
 class MoveRequest(BaseModel):
     code: str; from_location: int; to_location: int; quantity: int
@@ -373,18 +367,6 @@ def export_qr_sheet(x_init_data: Optional[str] = Header(None), init_data: Option
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "attachment; filename=qrs.png"})
 
-@app.post("/api/items/{code}/replenish")
-def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    conn = get_conn(x_init_data)
-    stock = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.location_id)).fetchone()
-    if stock:
-        conn.execute("UPDATE stock SET quantity = quantity + ? WHERE item_code = ? AND location_id = ?", (req.quantity, code, req.location_id))
-    else:
-        conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, req.location_id, req.quantity))
-    conn.commit(); conn.close()
-    return {"status": "ok"}
-
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
@@ -469,15 +451,18 @@ def get_stats(x_init_data: Optional[str] = Header(None)):
     
     result = []
     for name in all_cats:
+        # Считаем общее количество карточек товаров в категории
+        total_items = conn.execute("SELECT COUNT(*) AS q FROM items WHERE category = ? AND is_archived = 0", (name,)).fetchone()["q"]
         total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ? AND i.is_archived = 0", (name,)).fetchone()["q"]
         in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL AND i.is_archived = 0", (name,)).fetchone()["q"]
-        result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
+        result.append({"name": name, "total": total_items, "on_stock": total_qty, "in_work": in_work})
         
-    no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
+    no_cat_items = conn.execute("SELECT COUNT(*) AS q FROM items WHERE (category = '' OR category IS NULL) AND is_archived = 0").fetchone()["q"]
+    no_cat_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
     no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL AND i.is_archived = 0").fetchone()["q"]
     
-    if no_cat_total + no_cat_work > 0:
-        result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
+    if no_cat_items > 0:
+        result.append({"name": "Без категории", "total": no_cat_items, "on_stock": no_cat_qty, "in_work": no_cat_work})
         
     conn.close()
     return result
@@ -561,10 +546,6 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
     check_admin(x_init_data); conn = get_conn(x_init_data); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     
-    loc_exists = conn.execute("SELECT id FROM locations WHERE id = ?", (location_id,)).fetchone()
-    if not loc_exists:
-        location_id = 1 # Default to first location if invalid
-        
     if kind == "equipment" and quantity == 0: quantity = 1
     
     try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category))
@@ -585,11 +566,15 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         if conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (code,)).fetchone(): errors.append(f"{item['name']}: уже выдан"); continue
         
         stock = conn.execute("SELECT location_id FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (code,)).fetchone()
-        if not stock: errors.append(f"{item['name']}: нет в наличии"); continue
-        
-        conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (code, user["tg_id"], stock["location_id"], req.taken_for))
-        conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, stock["location_id"]))
-        conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (code,))
+        if stock:
+            loc_id = stock["location_id"]
+            conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (code, loc_id))
+            conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (code,))
+        else:
+            loc = conn.execute("SELECT id FROM locations LIMIT 1").fetchone()
+            loc_id = loc["id"] if loc else 1
+            
+        conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (code, user["tg_id"], loc_id, req.taken_for))
         success.append(item["name"])
     
     conn.commit(); conn.close()
@@ -602,11 +587,17 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
     if item["needs_repair"]: conn.close(); raise HTTPException(400, "Товар в ремонте")
     if item["kind"] != "equipment": conn.close(); raise HTTPException(400, "Это расходник")
     if conn.execute("SELECT id FROM checkouts WHERE item_code = ? AND returned_at IS NULL", (req.code,)).fetchone(): conn.close(); raise HTTPException(400, "Уже выдано")
+    
     stock = conn.execute("SELECT location_id FROM stock WHERE item_code = ? AND quantity > 0 ORDER BY location_id LIMIT 1", (req.code,)).fetchone()
-    if not stock: conn.close(); raise HTTPException(400, "Нет в наличии")
-    conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (req.code, user["tg_id"], stock["location_id"], req.taken_for))
-    conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
-    conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
+    if stock:
+        loc_id = stock["location_id"]
+        conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, loc_id))
+        conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
+    else:
+        loc = conn.execute("SELECT id FROM locations LIMIT 1").fetchone()
+        loc_id = loc["id"] if loc else 1
+        
+    conn.execute("INSERT INTO checkouts (item_code, user_id, location_id, taken_for) VALUES (?,?,?,?)", (req.code, user["tg_id"], loc_id, req.taken_for))
     conn.commit(); conn.close()
     return {"status": "ok"}
 
