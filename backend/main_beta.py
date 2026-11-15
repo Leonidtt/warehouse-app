@@ -28,9 +28,15 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
+# =======================================================
+# ВАЖНО: ТОКЕН И БАЗА ДЛЯ БЕТЫ
+# =======================================================
+# Вставь сюда токен БЕТА-бота или задай BOT_TOKEN в Railway
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-DB_PATH = "/data/warehouse.db"
+
+# База для беты
+DB_PATH = "/data/warehouse_beta.db"
 
 app = FastAPI()
 
@@ -53,6 +59,9 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
+# ==========================================
+# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
+# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -101,6 +110,9 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
+# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -169,6 +181,9 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
+# ==========================================
+# БЛОК 5: ЭНДПОИНТЫ (API)
+# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -179,7 +194,6 @@ async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(No
         if x_init_data:
             try: user_name = get_user(x_init_data).get("full_name", "?")
             except: pass
-        # Уведомление админам
         conn = get_conn()
         admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
         conn.close()
@@ -671,14 +685,17 @@ def generate_qr(code: str):
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
+# ==========================================
+# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА (ЛЮБЫЕ ССЫЛКИ)
+# ==========================================
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         return JSONResponse(status_code=404, content={"detail": "API route not found"})
     if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
         return FileResponse(full_path)
-    if os.path.exists("index.html"):
-        return FileResponse("index.html")
-    elif os.path.exists("beta.html"):
+    if os.path.exists("beta.html"):
         return FileResponse("beta.html")
+    elif os.path.exists("index.html"):
+        return FileResponse("index.html")
     return JSONResponse(status_code=404, content={"detail": "HTML file not found"})
