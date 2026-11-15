@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Склад</title>
+    <title>Склад (Бета)</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -347,7 +347,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v10</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v10</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -492,7 +492,7 @@
                 <label>Бюджет</label>
                 <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
             </div>
-            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например, Мартемьянов"></div>
+            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
             <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
             <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
             <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
@@ -898,7 +898,6 @@
                         ? `<button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'employee')">Снять админа</button>`
                         : `<button class="ok" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'admin')">Дать админа</button>`;
                     
-                    // Удаление только для админов
                     const deleteBtn = currentUser.role === 'admin' && u.role !== 'admin'
                         ? `<button class="danger" style="width:auto; padding:8px; font-size:12px; margin:0; margin-left: 4px;" onclick="deleteUser(${u.tg_id})">🗑</button>` : "";
 
@@ -993,7 +992,6 @@
             const list = document.getElementById(containerId); 
             if (!itemsArray.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
             
-            // Сортировка: свободные и для себя сверху, взятые для других в конце
             const sorted = [...itemsArray].sort((a, b) => {
                 const aHeldForOther = a.holders && a.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
                 const bHeldForOther = b.holders && b.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
@@ -1039,7 +1037,6 @@
             renderItemsGrid(filtered, "items-list");
         }
 
-        // --- Взять технику (Массовый выбор) ---
         function showTakeScreen() {
             document.getElementById("take-search-input").value = "";
             document.getElementById("take-search-wrapper").classList.remove("has-text");
@@ -1152,7 +1149,6 @@
             });
         }
 
-        // --- Площадки и Теплоходы ---
         function showPlatforms() {
             updateNavActive("nav-platforms");
             if (!cachedPlatforms.length) { syncGoogle('кц'); } else { renderPlatformsList(); }
@@ -1269,7 +1265,6 @@
             finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
         }
 
-        // --- Комнаты ---
         async function showRooms() { 
             if (currentUser.role !== 'admin') return;
             showScreen("screen-rooms"); updateNavActive("nav-rooms"); document.getElementById("batch-actions").style.display = "none";
@@ -1337,7 +1332,6 @@
             try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation }) }); showToast("Перемещено!"); document.getElementById("batch-actions").style.display = "none"; showRooms(); } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
 
-        // --- ИНВЕНТАРИЗАЦИЯ ---
         function showInventory() { invScannedCodes = []; document.getElementById("inv-scanned-list").innerHTML = ""; document.getElementById("inv-finish-btn").classList.add("hidden"); showScreen("screen-inventory"); }
 
         function startInventoryScan() {
@@ -1366,7 +1360,6 @@
             } catch (e) { notify(e.message); setLoading(btn, false); }
         }
 
-        // --- ОСТАЛЬНОЕ ---
         async function openItem(code) { 
             try { 
                 currentItem = await api(`/api/items/${encodeURIComponent(code)}`); 
