@@ -1,9 +1,12 @@
+# ==========================================
+# БЛОК 1: ИМПОРТЫ И НАСТРОЙКИ
+# ==========================================
 import sqlite3
 import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, Request, Query, Form, File, UploadFile
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -18,22 +21,22 @@ import base64
 from datetime import datetime, timedelta
 import os
 import traceback
+import pandas as pd
 import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-# =======================================================
-# ЖЕСТКО ВПИШИ СЮДА ТОКЕН ОСНОВНОГО БОТА
-# =======================================================
 BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
-
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-DB_PATH = "/data/warehouse.db"
+DB_PATH = "/data/warehouse_beta.db"
 
 app = FastAPI()
 
+# ==========================================
+# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
+# ==========================================
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
         conn = get_conn()
@@ -73,6 +76,9 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
+# ==========================================
+# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
+# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -121,6 +127,9 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
+# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -175,7 +184,7 @@ class LocationCreate(BaseModel):
 class LocationUpdate(BaseModel):
     id: int; name: str
 class ItemUpdate(BaseModel):
-    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""
+    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str
 class ImportTextRequest(BaseModel):
     text: str
 class UserUpdate(BaseModel):
@@ -189,6 +198,9 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
+# ==========================================
+# БЛОК 5: ЭНДПОИНТЫ (API)
+# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -217,6 +229,7 @@ def sync_google(sheet_name: str = "кц", x_init_data: Optional[str] = Header(No
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         
+        # Жесткий поиск ТОЛЬКО по точному названию (без 4-го индекса)
         try:
             target_sheet = spreadsheet.worksheet(sheet_name)
         except Exception:
@@ -293,42 +306,6 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     for r in wo: rows.append({"date": r["date"], "type": "writeoff", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
     conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
 
-@app.get("/api/tech_stats")
-def get_tech_stats(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    conn = get_conn()
-    items = conn.execute("""
-        SELECT i.code, i.name, i.serial_number, i.needs_repair,
-               c.taken_at, c.returned_at, c.taken_for,
-               u1.full_name as taker_name,
-               u2.full_name as returner_name
-        FROM items i
-        LEFT JOIN checkouts c ON c.item_code = i.code AND c.taken_at = 
-            (SELECT MAX(taken_at) FROM checkouts WHERE item_code = i.code)
-        LEFT JOIN users u1 ON u1.tg_id = c.user_id
-        LEFT JOIN users u2 ON u2.tg_id = c.returned_by
-        WHERE i.kind = 'equipment' AND i.is_archived = 0
-        ORDER BY CASE WHEN c.taken_at IS NULL THEN 1 ELSE 0 END, c.taken_at DESC
-    """).fetchall()
-    
-    result = []
-    for it in items:
-        holder = conn.execute("SELECT u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchone()
-        result.append({
-            "code": it["code"],
-            "name": it["name"],
-            "serial_number": it["serial_number"] or "",
-            "needs_repair": it["needs_repair"],
-            "last_taken_at": it["taken_at"],
-            "last_returned_at": it["returned_at"],
-            "last_taker": it["taker_name"],
-            "last_returner": it["returner_name"],
-            "taken_for": it["taken_for"] or "",
-            "current_holder": holder["full_name"] if holder else None
-        })
-    conn.close()
-    return result
-
 @app.get("/api/export_history")
 def export_history(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
     auth = x_init_data or init_data
@@ -381,11 +358,11 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    users = conn.execute("SELECT tg_id, full_name, username, role FROM users ORDER BY role DESC").fetchall()
+    users = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall()
     result = []
     for u in users:
         held = conn.execute("SELECT item_code FROM checkouts WHERE user_id = ? AND returned_at IS NULL", (u["tg_id"],)).fetchall()
-        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "username": u["username"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
+        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
     conn.close(); return result
 
 @app.post("/api/users/{tg_id}/update")
@@ -411,8 +388,10 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     except: pass
     conn = get_conn(); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
+    
     items = conn.execute("SELECT s.item_code, s.quantity FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (location_id,)).fetchall()
     checkouts = conn.execute("SELECT c.item_code, u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
+    
     item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
     
@@ -505,7 +484,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
 @app.post("/api/items/{code}/update")
 def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=?, category=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, req.category, code))
+    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, code))
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
@@ -667,6 +646,67 @@ def create_comment(req: CommentRequest, x_init_data: Optional[str] = Header(None
     conn.execute("INSERT INTO comments (item_code, user_id, text) VALUES (?,?,?)", (req.code, user["tg_id"], req.text))
     conn.commit(); conn.close(); return {"status": "ok"}
 
+@app.post("/api/import_text")
+def import_text(req: ImportTextRequest, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn(); added = 0; updated = 0
+    try:
+        lines = [line.strip() for line in req.text.strip().split('\n') if line.strip()]
+        current_kit_code = None
+        current_kit_data = {"name": "", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+        def save_kit(kit_code, kit_data):
+            nonlocal added, updated
+            if not kit_code: return
+            loc = conn.execute("SELECT id FROM locations WHERE name = ?", (kit_data["loc"],)).fetchone()
+            loc_id = loc["id"] if loc else 1
+            existing = conn.execute("SELECT code FROM items WHERE code = ?", (kit_code,)).fetchone()
+            if existing:
+                conn.execute("UPDATE items SET name=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, buyout_status=? WHERE code=?", (kit_data["name"], kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"], kit_code))
+                stock_exists = conn.execute("SELECT quantity FROM stock WHERE item_code = ?", (kit_code,)).fetchone()
+                if stock_exists: conn.execute("UPDATE stock SET location_id = ? WHERE item_code = ?", (loc_id, kit_code))
+                else: conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (kit_code, loc_id))
+                updated += 1
+            else:
+                try:
+                    conn.execute("INSERT INTO items (code, name, kind, price, kit_body, kit_lens, kit_flash, buyout_status) VALUES (?,?,?,?,?,?,?,?)", (kit_code, kit_data["name"], "equipment", kit_data["price"], kit_data["body"], kit_data["lens"], kit_data["flash"], kit_data["buyer"]))
+                    conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (kit_code, loc_id))
+                    added += 1
+                except sqlite3.IntegrityError: pass
+        for line in lines:
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 1: continue
+            if parts[0].lower() == "допы": continue
+            is_kit_header = False
+            if parts[0] and not (len(parts) > 1 and parts[1]) and not (len(parts) > 2 and parts[2]): is_kit_header = True
+            if parts[0].lower() not in ["камера", "объектив", "вспышка"] and parts[0]: is_kit_header = True
+            if is_kit_header:
+                if current_kit_code: save_kit(current_kit_code, current_kit_data)
+                current_kit_code = parts[0].replace(" ", "")
+                current_kit_data = {"name": f"Комплект {current_kit_code}", "loc": "Офис7", "price": 0, "buyer": "", "body": "", "lens": "", "flash": ""}
+                continue
+            if not current_kit_code: continue
+            if parts[0].lower() == "камера": current_kit_data["body"] = parts[1] if len(parts) > 1 else ""
+            elif parts[0].lower() == "объектив": current_kit_data["lens"] = parts[1] if len(parts) > 1 else ""
+            elif parts[0].lower() == "вспышка": current_kit_data["flash"] = parts[1] if len(parts) > 1 else ""
+            if len(parts) > 3 and parts[3]:
+                val = parts[3]
+                try: current_kit_data["price"] = float(val)
+                except ValueError: current_kit_data["buyer"] = val
+        if current_kit_code: save_kit(current_kit_code, current_kit_data)
+        conn.commit()
+    except Exception as e: conn.rollback(); conn.close(); raise HTTPException(status_code=400, detail=str(e))
+    conn.close(); return {"status": "ok", "added": added, "updated": updated}
+
+@app.post("/api/import_file")
+async def import_file(file: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); contents = await file.read()
+    try:
+        if file.filename.endswith('.csv'): df = pd.read_csv(io.BytesIO(contents))
+        else: df = pd.read_excel(io.BytesIO(contents))
+        csv_buffer = io.StringIO(); df.to_csv(csv_buffer, index=False, header=False)
+        req = ImportTextRequest(text=csv_buffer.getvalue())
+        return import_text(req, x_init_data)
+    except Exception as e: raise HTTPException(400, f"Ошибка чтения файла: {str(e)}")
+
 @app.post("/api/clear_database")
 def clear_database(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
@@ -725,6 +765,6 @@ def generate_qr(code: str):
     return StreamingResponse(buf, media_type="image/png")
 
 @app.get("/")
-def serve_main(): return FileResponse("index.html")
+def serve_beta(): return FileResponse("beta.html")
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
