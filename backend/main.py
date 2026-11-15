@@ -6,7 +6,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, Request, Query, Form, File, UploadFile
+from fastapi import FastAPI, HTTPException, Header, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -21,35 +21,29 @@ import base64
 from datetime import datetime, timedelta
 import os
 import traceback
+import pandas as pd
 import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-# --- ТОКЕНЫ ---
-# ВАЖНО: Здесь должен быть токен БЕТА-БОТА!
-BOT_TOKEN = os.environ.get("9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
-SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
+# =======================================================
+# ВАЖНО: ВСТАВЬ СЮДА ТОКЕН ОСНОВНОГО БОТА (от BotFather)!
+# =======================================================
+# Если ты используешь переменные Railway, оставь как есть (os.environ.get).
+# Но если не уверен, просто удали os.environ... и вставь строку в кавычках:
+# BOT_TOKEN = "1234567890:AAH_твой_токен_основного_бота"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
 
-# База данных на основном диске (Volume)
-DB_PATH = "/data/warehouse.db"
+SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
+DB_PATH = "/data/warehouse.db" # Основная база
 
 app = FastAPI()
 
 # ==========================================
-# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
 # ==========================================
-async def notify_admin_action(action_text: str):
-    try:
-        conn = get_conn()
-        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
-        conn.close()
-        async with httpx.AsyncClient() as client:
-            for admin in admins:
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": action_text})
-    except: pass
-
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
         conn = get_conn()
@@ -58,6 +52,16 @@ async def notify_admin_about_error(error_text: str, user_info: str = "Неизв
         async with httpx.AsyncClient() as client:
             for admin in admins:
                 await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_info}\n📝 {error_text}"})
+    except: pass
+
+async def notify_admin_action(action_text: str):
+    try:
+        conn = get_conn()
+        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
+        conn.close()
+        async with httpx.AsyncClient() as client:
+            for admin in admins:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": action_text})
     except: pass
 
 @app.exception_handler(Exception)
@@ -131,7 +135,7 @@ def init_db():
 init_db()
 
 # ==========================================
-# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ
+# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
 # ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
@@ -187,7 +191,7 @@ class LocationCreate(BaseModel):
 class LocationUpdate(BaseModel):
     id: int; name: str
 class ItemUpdate(BaseModel):
-    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str
+    name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""
 class ImportTextRequest(BaseModel):
     text: str
 class UserUpdate(BaseModel):
@@ -394,17 +398,20 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     checkouts = conn.execute("SELECT c.item_code, u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
     item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
+    
     result_items = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
         data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
+        
     for c in checkouts:
         detail = item_details.get(c["item_code"], {})
         data = {"code": c["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": c["full_name"]}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
+        
     return {"location_name": location["name"], "items": result_items}
 
 @app.post("/api/locations")
@@ -427,16 +434,21 @@ def get_stats(x_init_data: Optional[str] = Header(None)):
     default_cats = ["Фотокомплекты", "Вспышки", "Ноутбуки", "Принтеры"]
     db_cats = [r["category"] for r in conn.execute("SELECT DISTINCT category FROM items WHERE category != '' AND is_archived = 0").fetchall()]
     all_cats = list(dict.fromkeys(default_cats + db_cats))
+    
     result = []
     for name in all_cats:
         total_qty = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE i.category = ? AND i.is_archived = 0", (name,)).fetchone()["q"]
         in_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE i.category = ? AND c.returned_at IS NULL AND i.is_archived = 0", (name,)).fetchone()["q"]
         result.append({"name": name, "total": total_qty + in_work, "on_stock": total_qty, "in_work": in_work})
+        
     no_cat_total = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS q FROM stock s JOIN items i ON i.code = s.item_code WHERE (i.category = '' OR i.category IS NULL) AND i.is_archived = 0").fetchone()["q"]
     no_cat_work = conn.execute("SELECT COUNT(*) AS q FROM checkouts c JOIN items i ON i.code = c.item_code WHERE (i.category = '' OR i.category IS NULL) AND c.returned_at IS NULL AND i.is_archived = 0").fetchone()["q"]
+    
     if no_cat_total + no_cat_work > 0:
         result.append({"name": "Без категории", "total": no_cat_total + no_cat_work, "on_stock": no_cat_total, "in_work": no_cat_work})
-    conn.close(); return result
+        
+    conn.close()
+    return result
 
 @app.get("/api/next_code")
 def get_next_code(x_init_data: Optional[str] = Header(None)):
@@ -476,7 +488,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
 @app.post("/api/items/{code}/update")
 def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, code))
+    conn.execute("UPDATE items SET name=?, kind=?, min_stock=?, price=?, kit_body=?, kit_lens=?, kit_flash=?, budget_tag=?, serial_number=?, buyout_status=?, category=? WHERE code=?", (req.name, req.kind, req.min_stock, req.price, req.kit_body, req.kit_lens, req.kit_flash, req.budget_tag, req.serial_number, req.buyout_status, req.category, code))
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
@@ -696,6 +708,6 @@ def generate_qr(code: str):
     return StreamingResponse(buf, media_type="image/png")
 
 @app.get("/")
-def serve_beta(): return FileResponse("beta.html")
+def serve_main(): return FileResponse("index.html")
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
