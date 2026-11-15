@@ -29,7 +29,7 @@ urllib3.disable_warnings()
 
 # --- ТОКЕНЫ ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
-BOT_TOKEN_BETA = os.environ.get("BOT_TOKEN_BETA", "")
+BOT_TOKEN_BETA = os.environ.get("9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg", "")
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 
@@ -483,7 +483,6 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
         
-        # Безопасная проверка на наличие колонки created_at
         c_at = it["created_at"] if "created_at" in it.keys() else ""
         
         item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
@@ -523,7 +522,7 @@ async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
     new_status = 0 if item["needs_repair"] else 1
     conn.execute("UPDATE items SET needs_repair = ? WHERE code = ?", (new_status, code)); conn.commit(); conn.close()
     if new_status == 1:
-        asyncio.create_task(notify_admin_action(f"🔧 Товар {item['name']} ({code}) отправлен в ремонт."))
+        asyncio.create_task(notify_admin_action(f"🔧 Внимание! Товар {item['name']} ({code}) отправлен в ремонт."))
     return {"status": "ok", "message": f"Товар {item['name']} {'отправлен в ремонт' if new_status else 'возвращен в строй'}"}
 
 @app.post("/api/items/{code}/lost")
@@ -574,8 +573,6 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         success.append(item["name"])
     
     conn.commit(); conn.close()
-    if success:
-        asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
     return {"status": "ok", "success_count": len(success), "errors": errors}
 
 @app.post("/api/checkout")
@@ -591,7 +588,6 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
     conn.commit(); conn.close()
-    asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял {item['name']} ({req.code})."))
     return {"status": "ok"}
 
 @app.post("/api/return")
@@ -606,9 +602,7 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     else: 
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
     conn.commit()
-    item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
     conn.close()
-    asyncio.create_task(notify_admin_action(f"📥 {user['full_name']} вернул {item['name']} ({code})."))
     return {"status": "ok"}
 
 @app.post("/api/move")
@@ -650,9 +644,17 @@ def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None))
 def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data); row = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (req.code, req.location_id)).fetchone()
     if not row or row["quantity"] < req.quantity: conn.close(); raise HTTPException(400, "Недостаточно товара")
+    
+    new_qty = row["quantity"] - req.quantity
     conn.execute("UPDATE stock SET quantity = quantity - ? WHERE item_code = ? AND location_id = ?", (req.quantity, req.code, req.location_id))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?,?,?,?)", (req.code, req.quantity, req.location_id, user["tg_id"]))
+    
+    # Проверка на мин. остаток
+    item_info = conn.execute("SELECT name, min_stock, kind FROM items WHERE code = ?", (req.code,)).fetchone()
+    if item_info and item_info["kind"] == "consumable" and item_info["min_stock"] > 0 and new_qty <= item_info["min_stock"]:
+        asyncio.create_task(notify_admin_action(f"⚠️ Внимание! Расходник '{item_info['name']}' заканчивается. Осталось: {new_qty} шт. (Мин. остаток: {item_info['min_stock']})"))
+        
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.get("/api/bookings/{code}")
