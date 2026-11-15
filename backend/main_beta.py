@@ -1,12 +1,9 @@
-# ==========================================
-# БЛОК 1: ИМПОРТЫ И НАСТРОЙКИ
-# ==========================================
 import sqlite3
 import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, Request, Query, Form
+from fastapi import FastAPI, HTTPException, Header, Request, Query, Form, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -21,7 +18,6 @@ import base64
 from datetime import datetime, timedelta
 import os
 import traceback
-import pandas as pd
 import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
@@ -29,13 +25,34 @@ import urllib3
 urllib3.disable_warnings()
 
 # =======================================================
-# ВАЖНО: ТОКЕН И БАЗА ДЛЯ БЕТЫ
+# ЖЕСТКО ВПИШИ СЮДА ТОКЕН ОСНОВНОГО БОТА
 # =======================================================
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
+BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-DB_PATH = "/data/warehouse_beta.db"
+DB_PATH = "/data/warehouse.db"
 
 app = FastAPI()
+
+async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
+    try:
+        conn = get_conn()
+        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
+        conn.close()
+        async with httpx.AsyncClient() as client:
+            for admin in admins:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_info}\n📝 {error_text}"})
+    except: pass
+
+async def notify_admin_action(action_text: str):
+    try:
+        conn = get_conn()
+        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
+        conn.close()
+        async with httpx.AsyncClient() as client:
+            for admin in admins:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": action_text})
+    except: pass
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -56,15 +73,12 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
-# ==========================================
-# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
-# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
-    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0, kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '', category TEXT DEFAULT '', is_archived INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'equipment', min_stock INTEGER DEFAULT 0, photo TEXT DEFAULT '', needs_repair INTEGER DEFAULT 0, price REAL DEFAULT 0, kit_body TEXT DEFAULT '', kit_lens TEXT DEFAULT '', kit_flash TEXT DEFAULT '', budget_tag TEXT DEFAULT '', serial_number TEXT DEFAULT '', buyout_status TEXT DEFAULT '', category TEXT DEFAULT '', is_archived INTEGER DEFAULT 0)""")
     c.execute("""CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, date_from TEXT NOT NULL, date_to TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS stock (item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (item_code, location_id))""")
@@ -90,8 +104,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
         "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
-        "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
     ]
     for q in migrations:
         try: c.execute(q)
@@ -108,9 +121,6 @@ def init_db():
 
 init_db()
 
-# ==========================================
-# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
-# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -179,9 +189,6 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
-# ==========================================
-# БЛОК 5: ЭНДПОИНТЫ (API)
-# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -192,12 +199,7 @@ async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(No
         if x_init_data:
             try: user_name = get_user(x_init_data).get("full_name", "?")
             except: pass
-        conn = get_conn()
-        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
-        conn.close()
-        async with httpx.AsyncClient() as client:
-            for admin in admins:
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_name}\n📝 {req.error[:500]}"})
+        await notify_admin_about_error(req.error[:500], user_name)
     except: pass
     return {"status": "ok"}
 
@@ -291,6 +293,42 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     for r in wo: rows.append({"date": r["date"], "type": "writeoff", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
     conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
 
+@app.get("/api/tech_stats")
+def get_tech_stats(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn()
+    items = conn.execute("""
+        SELECT i.code, i.name, i.serial_number, i.needs_repair,
+               c.taken_at, c.returned_at, c.taken_for,
+               u1.full_name as taker_name,
+               u2.full_name as returner_name
+        FROM items i
+        LEFT JOIN checkouts c ON c.item_code = i.code AND c.taken_at = 
+            (SELECT MAX(taken_at) FROM checkouts WHERE item_code = i.code)
+        LEFT JOIN users u1 ON u1.tg_id = c.user_id
+        LEFT JOIN users u2 ON u2.tg_id = c.returned_by
+        WHERE i.kind = 'equipment' AND i.is_archived = 0
+        ORDER BY CASE WHEN c.taken_at IS NULL THEN 1 ELSE 0 END, c.taken_at DESC
+    """).fetchall()
+    
+    result = []
+    for it in items:
+        holder = conn.execute("SELECT u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchone()
+        result.append({
+            "code": it["code"],
+            "name": it["name"],
+            "serial_number": it["serial_number"] or "",
+            "needs_repair": it["needs_repair"],
+            "last_taken_at": it["taken_at"],
+            "last_returned_at": it["returned_at"],
+            "last_taker": it["taker_name"],
+            "last_returner": it["returner_name"],
+            "taken_for": it["taken_for"] or "",
+            "current_holder": holder["full_name"] if holder else None
+        })
+    conn.close()
+    return result
+
 @app.get("/api/export_history")
 def export_history(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
     auth = x_init_data or init_data
@@ -343,20 +381,16 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    users = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall()
+    users = conn.execute("SELECT tg_id, full_name, username, role FROM users ORDER BY role DESC").fetchall()
     result = []
     for u in users:
         held = conn.execute("SELECT item_code FROM checkouts WHERE user_id = ? AND returned_at IS NULL", (u["tg_id"],)).fetchall()
-        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
+        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "username": u["username"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
     conn.close(); return result
 
 @app.post("/api/users/{tg_id}/update")
 def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn(); conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name, req.role, tg_id)); conn.commit(); conn.close(); return {"status": "ok"}
-
-@app.delete("/api/users/{tg_id}")
-def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(); conn.execute("DELETE FROM users WHERE tg_id = ?", (tg_id,)); conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.get("/api/locations")
 def list_locations(x_init_data: Optional[str] = Header(None)):
@@ -449,9 +483,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
-        
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": it["created_at"], "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
-        
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         if is_admin: item_data["price"] = it["price"]
         result.append(item_data)
     conn.close(); return result
@@ -466,9 +498,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": item["created_at"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
-    
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
     if is_admin: result["price"] = item["price"]
     return result
 
@@ -484,6 +514,8 @@ async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     new_status = 0 if item["needs_repair"] else 1
     conn.execute("UPDATE items SET needs_repair = ? WHERE code = ?", (new_status, code)); conn.commit(); conn.close()
+    if new_status == 1:
+        asyncio.create_task(notify_admin_action(f"🔧 Товар {item['name']} ({code}) отправлен в ремонт."))
     return {"status": "ok", "message": f"Товар {item['name']} {'отправлен в ремонт' if new_status else 'возвращен в строй'}"}
 
 @app.post("/api/items/{code}/lost")
@@ -530,6 +562,8 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         success.append(item["name"])
     
     conn.commit(); conn.close()
+    if success:
+        asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
     return {"status": "ok", "success_count": len(success), "errors": errors}
 
 @app.post("/api/checkout")
@@ -545,6 +579,7 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
     conn.commit(); conn.close()
+    asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял {item['name']} ({req.code})."))
     return {"status": "ok"}
 
 @app.post("/api/return")
@@ -559,7 +594,9 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     else: 
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
     conn.commit()
+    item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
     conn.close()
+    asyncio.create_task(notify_admin_action(f"📥 {user['full_name']} вернул {item['name']} ({code})."))
     return {"status": "ok"}
 
 @app.post("/api/move")
@@ -687,17 +724,7 @@ def generate_qr(code: str):
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
-# ==========================================
-# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА
-# ==========================================
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    if full_path.startswith("api/"):
-        return JSONResponse(status_code=404, content={"detail": "API route not found"})
-    if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
-        return FileResponse(full_path)
-    if os.path.exists("beta.html"):
-        return FileResponse("beta.html")
-    elif os.path.exists("index.html"):
-        return FileResponse("index.html")
-    return JSONResponse(status_code=404, content={"detail": "HTML file not found"})
+@app.get("/")
+def serve_main(): return FileResponse("index.html")
+
+app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
