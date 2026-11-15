@@ -34,7 +34,7 @@ urllib3.disable_warnings()
 # Если ты используешь переменные Railway, оставь как есть (os.environ.get).
 # Но если не уверен, просто удали os.environ... и вставь строку в кавычках:
 # BOT_TOKEN = "1234567890:AAH_твой_токен_основного_бота"
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
+BOT_TOKEN = "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI"
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 DB_PATH = "/data/warehouse.db" # Основная база
