@@ -29,9 +29,10 @@ import urllib3
 urllib3.disable_warnings()
 
 # =======================================================
-# ВАЖНО: ТОКЕН И БАЗА ДЛЯ БЕТЫ
+# ВАЖНО: ВСТАВЬ СЮДА ТОКЕН БЕТА-БОТА! (В КАВЫЧКАХ)
 # =======================================================
-# Вставь сюда токен БЕТА-бота или задай BOT_TOKEN в Railway
+BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 
 # База для беты
@@ -115,12 +116,24 @@ init_db()
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
+    
     received_hash = pairs.pop("hash", None)
     if not received_hash: raise HTTPException(status_code=401, detail="Нет подписи")
+    
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    if calculated != received_hash: raise HTTPException(status_code=401, detail="Неверная подпись")
+    
+    # ВЫВОДИМ В ЛОГИ ДЛЯ ОТЛАДКИ
+    print("--- ПОПЫТКА АВТОРИЗАЦИИ ---")
+    print(f"1. Токен на сервере (первые 10 символов): {BOT_TOKEN[:10]}")
+    print(f"2. Хеш от Telegram: {received_hash}")
+    print(f"3. Хеш от Сервера:  {calculated}")
+    print("---------------------------")
+    
+    if calculated != received_hash: 
+        raise HTTPException(status_code=401, detail="Неверная подпись")
+        
     user_json = pairs.get("user")
     if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
     return json.loads(user_json)
