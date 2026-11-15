@@ -6,7 +6,7 @@ import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, Request, Query
+from fastapi import FastAPI, HTTPException, Header, Request, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -28,40 +28,11 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
-# =======================================================
-# ВАЖНО: ТОКЕН И БАЗА
-# =======================================================
-# 1. Если используешь Основной бот, оставь BOT_TOKEN основного бота.
-# 2. Если Бета, замени на токен Беты (или задай через Railway Variables).
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
-
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-DB_PATH = "/data/warehouse.db" # Если это бета, можешь поменять на /data/warehouse_beta.db
+DB_PATH = "/data/warehouse.db"
 
 app = FastAPI()
-
-# ==========================================
-# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
-# ==========================================
-async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
-    try:
-        conn = get_conn()
-        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
-        conn.close()
-        async with httpx.AsyncClient() as client:
-            for admin in admins:
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_info}\n📝 {error_text}"})
-    except: pass
-
-async def notify_admin_action(action_text: str):
-    try:
-        conn = get_conn()
-        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
-        conn.close()
-        async with httpx.AsyncClient() as client:
-            for admin in admins:
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": action_text})
-    except: pass
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -82,9 +53,6 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
-# ==========================================
-# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
-# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -133,9 +101,6 @@ def init_db():
 
 init_db()
 
-# ==========================================
-# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
-# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -204,9 +169,6 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
-# ==========================================
-# БЛОК 5: ЭНДПОИНТЫ (API)
-# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -217,7 +179,13 @@ async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(No
         if x_init_data:
             try: user_name = get_user(x_init_data).get("full_name", "?")
             except: pass
-        await notify_admin_about_error(req.error[:500], user_name)
+        # Уведомление админам
+        conn = get_conn()
+        admins = conn.execute("SELECT tg_id FROM users WHERE role = 'admin'").fetchall()
+        conn.close()
+        async with httpx.AsyncClient() as client:
+            for admin in admins:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin["tg_id"], "text": f"⚠️ ОШИБКА\n👤 {user_name}\n📝 {req.error[:500]}"})
     except: pass
     return {"status": "ok"}
 
@@ -374,6 +342,10 @@ def list_users(x_init_data: Optional[str] = Header(None)):
 def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn(); conn.execute("UPDATE users SET full_name = ?, role = ? WHERE tg_id = ?", (req.full_name, req.role, tg_id)); conn.commit(); conn.close(); return {"status": "ok"}
 
+@app.delete("/api/users/{tg_id}")
+def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn(); conn.execute("DELETE FROM users WHERE tg_id = ?", (tg_id,)); conn.commit(); conn.close(); return {"status": "ok"}
+
 @app.get("/api/locations")
 def list_locations(x_init_data: Optional[str] = Header(None)):
     conn = get_conn(); rows = conn.execute("SELECT id, name, type FROM locations ORDER BY id").fetchall(); conn.close(); return [dict(r) for r in rows]
@@ -496,8 +468,6 @@ async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     new_status = 0 if item["needs_repair"] else 1
     conn.execute("UPDATE items SET needs_repair = ? WHERE code = ?", (new_status, code)); conn.commit(); conn.close()
-    if new_status == 1:
-        asyncio.create_task(notify_admin_action(f"🔧 Товар {item['name']} ({code}) отправлен в ремонт."))
     return {"status": "ok", "message": f"Товар {item['name']} {'отправлен в ремонт' if new_status else 'возвращен в строй'}"}
 
 @app.post("/api/items/{code}/lost")
@@ -544,8 +514,6 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         success.append(item["name"])
     
     conn.commit(); conn.close()
-    if success:
-        asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял ({len(success)} шт): {', '.join(success)}."))
     return {"status": "ok", "success_count": len(success), "errors": errors}
 
 @app.post("/api/checkout")
@@ -561,7 +529,6 @@ async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(Non
     conn.execute("UPDATE stock SET quantity = quantity - 1 WHERE item_code = ? AND location_id = ?", (req.code, stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code = ? AND quantity = 0", (req.code,))
     conn.commit(); conn.close()
-    asyncio.create_task(notify_admin_action(f"📤 {user['full_name']} взял {item['name']} ({req.code})."))
     return {"status": "ok"}
 
 @app.post("/api/return")
@@ -576,9 +543,7 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     else: 
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,1)", (code, co["location_id"]))
     conn.commit()
-    item = conn.execute("SELECT name FROM items WHERE code = ?", (code,)).fetchone()
     conn.close()
-    asyncio.create_task(notify_admin_action(f"📥 {user['full_name']} вернул {item['name']} ({code})."))
     return {"status": "ok"}
 
 @app.post("/api/move")
@@ -706,23 +671,14 @@ def generate_qr(code: str):
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
-# ==========================================
-# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА (ЛЮБЫЕ ССЫЛКИ)
-# ==========================================
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
-    # 1. Если стучатся в API, но не нашли там роут, отдаем JSON-ошибку
     if full_path.startswith("api/"):
         return JSONResponse(status_code=404, content={"detail": "API route not found"})
-    
-    # 2. Если просят конкретный файл (картинку, шрифт), отдаем его
     if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
         return FileResponse(full_path)
-        
-    # 3. Если просят просто страницу (например, "/" или "/beta"), отдаем HTML
     if os.path.exists("index.html"):
         return FileResponse("index.html")
     elif os.path.exists("beta.html"):
         return FileResponse("beta.html")
-        
     return JSONResponse(status_code=404, content={"detail": "HTML file not found"})
