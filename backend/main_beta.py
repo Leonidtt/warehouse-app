@@ -707,7 +707,20 @@ def generate_qr(code: str):
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
+import os
+
 @app.get("/")
-def serve_main(): return FileResponse("index.html")
+def serve_main(): 
+    # Если есть index.html — отдаем его. Если нет, но есть beta.html — отдаем бету.
+    if os.path.exists("index.html"): return FileResponse("index.html")
+    if os.path.exists("beta.html"): return FileResponse("beta.html")
+    return {"error": "Файл index.html или beta.html не найден"}
+
+@app.get("/beta")
+def serve_beta(): 
+    # Если открывают по ссылке /beta, отдаем beta.html (или index.html, если бета-файла нет)
+    if os.path.exists("beta.html"): return FileResponse("beta.html")
+    if os.path.exists("index.html"): return FileResponse("index.html")
+    return {"error": "Файл beta.html не найден"}
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
