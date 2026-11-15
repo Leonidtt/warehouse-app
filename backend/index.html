@@ -359,7 +359,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v13</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v14</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -1535,14 +1535,7 @@
                 } else if (otherCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
                 } else { 
-                    if (currentItem.stocks.some(s => s.quantity > 0)) {
-                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
-                    } else {
-                        html += `<div class="status-badge status-broken" style="margin-top:20px;">На складе: 0 шт.</div>`;
-                        if (currentUser.role === 'admin') {
-                            html += `<button class="ok" onclick="replenishItem('${currentItem.code}')">📦 Добавить 1 шт на склад</button>`;
-                        }
-                    }
+                    html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
                 } 
             } else { 
                 html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${s.location_name} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
@@ -1553,17 +1546,6 @@
                 html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
             }
             box.innerHTML = html; 
-        }
-        
-        async function replenishItem(code) {
-            if (!locations || !locations.length) { notify("Нет доступных комнат!"); return; }
-            const locId = locations[0].id;
-            try {
-                await api(`/api/items/${code}/replenish`, { method: "POST", body: JSON.stringify({ location_id: locId, quantity: 1 }) });
-                showToast("Добавлено на склад");
-                openItem(code);
-                loadItems();
-            } catch (e) { notify(e.message); }
         }
         
         async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
