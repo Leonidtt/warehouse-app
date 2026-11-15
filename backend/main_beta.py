@@ -32,7 +32,7 @@ urllib3.disable_warnings()
 # ВАЖНО: ТОКЕН И БАЗА ДЛЯ БЕТЫ
 # =======================================================
 # Вставь сюда токен БЕТА-бота или задай BOT_TOKEN в Railway
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
+BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
 
 # База для беты
