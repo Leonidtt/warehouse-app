@@ -1,9 +1,12 @@
+# ==========================================
+# БЛОК 1: ИМПОРТЫ И НАСТРОЙКИ
+# ==========================================
 import sqlite3
 import json
 import hashlib
 import hmac
 from urllib.parse import parse_qsl
-from fastapi import FastAPI, HTTPException, Header, Request, Query, Form, File, UploadFile
+from fastapi import FastAPI, HTTPException, Header, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -18,6 +21,7 @@ import base64
 from datetime import datetime, timedelta
 import os
 import traceback
+import pandas as pd
 import asyncio
 import gspread
 from google.oauth2.service_account import Credentials
@@ -25,15 +29,20 @@ import urllib3
 urllib3.disable_warnings()
 
 # =======================================================
-# ЖЕСТКО ВПИШИ СЮДА ТОКЕН ОСНОВНОГО БОТА
+# ВАЖНО: ТОКЕН И БАЗА
 # =======================================================
-BOT_TOKEN = "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg"
+# 1. Если используешь Основной бот, оставь BOT_TOKEN основного бота.
+# 2. Если Бета, замени на токен Беты (или задай через Railway Variables).
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0"
-DB_PATH = "/data/warehouse.db"
+DB_PATH = "/data/warehouse.db" # Если это бета, можешь поменять на /data/warehouse_beta.db
 
 app = FastAPI()
 
+# ==========================================
+# БЛОК 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И УВЕДОМЛЕНИЯ
+# ==========================================
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
         conn = get_conn()
@@ -73,6 +82,9 @@ def get_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
+# ==========================================
+# БЛОК 3: ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
+# ==========================================
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -90,13 +102,20 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS terminal_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, sql_query TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
 
     migrations = [
-        "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0", "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
-        "ALTER TABLE items ADD COLUMN kit_body TEXT DEFAULT ''", "ALTER TABLE items ADD COLUMN kit_lens TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN kit_flash TEXT DEFAULT ''", "ALTER TABLE items ADD COLUMN budget_tag TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN serial_number TEXT DEFAULT ''", "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
-        "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''", "ALTER TABLE items ADD COLUMN is_archived INTEGER DEFAULT 0",
-        "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''", "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
-        "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0", "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
+        "ALTER TABLE items ADD COLUMN needs_repair INTEGER DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN price REAL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN kit_body TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN kit_lens TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN kit_flash TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN budget_tag TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN serial_number TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN is_archived INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
+        "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
+        "ALTER TABLE checkouts ADD COLUMN returned_by INTEGER",
         "ALTER TABLE checkouts ADD COLUMN taken_for TEXT DEFAULT ''"
     ]
     for q in migrations:
@@ -114,6 +133,9 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# БЛОК 4: АВТОРИЗАЦИЯ И МОДЕЛИ ДАННЫХ
+# ==========================================
 def verify_init_data(init_data: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     except Exception: raise HTTPException(status_code=401, detail="Некорректный initData")
@@ -182,6 +204,9 @@ class InventoryResult(BaseModel):
 class LogErrorRequest(BaseModel):
     error: str
 
+# ==========================================
+# БЛОК 5: ЭНДПОИНТЫ (API)
+# ==========================================
 @app.get("/api/me")
 def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
 
@@ -286,25 +311,6 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     for r in wo: rows.append({"date": r["date"], "type": "writeoff", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—"})
     conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
 
-@app.get("/api/tech_stats")
-def get_tech_stats(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data)
-    conn = get_conn()
-    items = conn.execute("""
-        SELECT i.code, i.name, i.serial_number, i.needs_repair, c.taken_at, c.returned_at, c.taken_for, u1.full_name as taker_name, u2.full_name as returner_name
-        FROM items i
-        LEFT JOIN checkouts c ON c.item_code = i.code AND c.taken_at = (SELECT MAX(taken_at) FROM checkouts WHERE item_code = i.code)
-        LEFT JOIN users u1 ON u1.tg_id = c.user_id LEFT JOIN users u2 ON u2.tg_id = c.returned_by
-        WHERE i.kind = 'equipment' AND i.is_archived = 0
-        ORDER BY CASE WHEN c.taken_at IS NULL THEN 1 ELSE 0 END, c.taken_at DESC
-    """).fetchall()
-    result = []
-    for it in items:
-        holder = conn.execute("SELECT u.full_name FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchone()
-        result.append({"code": it["code"], "name": it["name"], "serial_number": it["serial_number"] or "", "needs_repair": it["needs_repair"], "last_taken_at": it["taken_at"], "last_returned_at": it["returned_at"], "last_taker": it["taker_name"], "last_returner": it["returner_name"], "taken_for": it["taken_for"] or "", "current_holder": holder["full_name"] if holder else None})
-    conn.close()
-    return result
-
 @app.get("/api/export_history")
 def export_history(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
     auth = x_init_data or init_data
@@ -350,13 +356,6 @@ def export_qr_sheet(x_init_data: Optional[str] = Header(None), init_data: Option
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "attachment; filename=qrs.png"})
 
-@app.get("/api/backup_db")
-def backup_db(x_init_data: Optional[str] = Header(None), init_data: Optional[str] = Query(None)):
-    auth = x_init_data or init_data
-    check_admin(auth)
-    if not os.path.exists(DB_PATH): raise HTTPException(404, "Файл базы данных не найден")
-    return FileResponse(DB_PATH, media_type="application/x-sqlite3", filename="warehouse_backup.db")
-
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
@@ -364,11 +363,11 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn()
-    users = conn.execute("SELECT tg_id, full_name, username, role FROM users ORDER BY role DESC").fetchall()
+    users = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall()
     result = []
     for u in users:
         held = conn.execute("SELECT item_code FROM checkouts WHERE user_id = ? AND returned_at IS NULL", (u["tg_id"],)).fetchall()
-        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "username": u["username"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
+        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": u["role"], "held_items": [h["item_code"] for h in held]})
     conn.close(); return result
 
 @app.post("/api/users/{tg_id}/update")
@@ -707,20 +706,23 @@ def generate_qr(code: str):
     buf = io.BytesIO(); result_img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
-import os
-
-@app.get("/")
-def serve_main(): 
-    # Если есть index.html — отдаем его. Если нет, но есть beta.html — отдаем бету.
-    if os.path.exists("index.html"): return FileResponse("index.html")
-    if os.path.exists("beta.html"): return FileResponse("beta.html")
-    return {"error": "Файл index.html или beta.html не найден"}
-
-@app.get("/beta")
-def serve_beta(): 
-    # Если открывают по ссылке /beta, отдаем beta.html (или index.html, если бета-файла нет)
-    if os.path.exists("beta.html"): return FileResponse("beta.html")
-    if os.path.exists("index.html"): return FileResponse("index.html")
-    return {"error": "Файл beta.html не найден"}
-
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+# ==========================================
+# БЛОК 6: УМНАЯ ОТДАЧА ФРОНТЕНДА (ЛЮБЫЕ ССЫЛКИ)
+# ==========================================
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    # 1. Если стучатся в API, но не нашли там роут, отдаем JSON-ошибку
+    if full_path.startswith("api/"):
+        return JSONResponse(status_code=404, content={"detail": "API route not found"})
+    
+    # 2. Если просят конкретный файл (картинку, шрифт), отдаем его
+    if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
+        return FileResponse(full_path)
+        
+    # 3. Если просят просто страницу (например, "/" или "/beta"), отдаем HTML
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    elif os.path.exists("beta.html"):
+        return FileResponse("beta.html")
+        
+    return JSONResponse(status_code=404, content={"detail": "HTML file not found"})
