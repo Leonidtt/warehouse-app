@@ -121,7 +121,7 @@ def init_db():
         "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN is_archived INTEGER DEFAULT 0",
-        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP", # БЕЗ DEFAULT (чтобы не было ошибки 500)
+        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP",
         "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
@@ -184,6 +184,10 @@ def check_admin(x_init_data: Optional[str]):
     user = get_user(x_init_data)
     if user["role"] != "admin": raise HTTPException(status_code=403, detail="Доступ только для администратора")
     return user
+
+class ReplenishRequest(BaseModel):
+    location_id: int
+    quantity: int = 1
 
 class MoveRequest(BaseModel):
     code: str; from_location: int; to_location: int; quantity: int
@@ -369,6 +373,18 @@ def export_qr_sheet(x_init_data: Optional[str] = Header(None), init_data: Option
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "attachment; filename=qrs.png"})
 
+@app.post("/api/items/{code}/replenish")
+def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    conn = get_conn(x_init_data)
+    stock = conn.execute("SELECT quantity FROM stock WHERE item_code = ? AND location_id = ?", (code, req.location_id)).fetchone()
+    if stock:
+        conn.execute("UPDATE stock SET quantity = quantity + ? WHERE item_code = ? AND location_id = ?", (req.quantity, code, req.location_id))
+    else:
+        conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, req.location_id, req.quantity))
+    conn.commit(); conn.close()
+    return {"status": "ok"}
+
 @app.post("/api/register")
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
@@ -545,6 +561,10 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
     check_admin(x_init_data); conn = get_conn(x_init_data); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     
+    loc_exists = conn.execute("SELECT id FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not loc_exists:
+        location_id = 1 # Default to first location if invalid
+        
     if kind == "equipment" and quantity == 0: quantity = 1
     
     try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category))
@@ -650,7 +670,6 @@ def writeoff(req: WriteoffRequest, x_init_data: Optional[str] = Header(None)):
     conn.execute("DELETE FROM stock WHERE item_code = ? AND location_id = ? AND quantity = 0", (req.code, req.location_id))
     conn.execute("INSERT INTO writeoffs (item_code, quantity, location_id, user_id) VALUES (?,?,?,?)", (req.code, req.quantity, req.location_id, user["tg_id"]))
     
-    # Проверка на мин. остаток
     item_info = conn.execute("SELECT name, min_stock, kind FROM items WHERE code = ?", (req.code,)).fetchone()
     if item_info and item_info["kind"] == "consumable" and item_info["min_stock"] > 0 and new_qty <= item_info["min_stock"]:
         asyncio.create_task(notify_admin_action(f"⚠️ Внимание! Расходник '{item_info['name']}' заканчивается. Осталось: {new_qty} шт. (Мин. остаток: {item_info['min_stock']})"))
