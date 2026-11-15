@@ -29,7 +29,7 @@ urllib3.disable_warnings()
 
 # --- ТОКЕНЫ ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
-BOT_TOKEN_BETA = os.environ.get("BOT_TOKEN_BETA", "") # Если не нужна бета на этом сервере, оставь пустым
+BOT_TOKEN_BETA = os.environ.get("BOT_TOKEN_BETA", "")
 
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 
@@ -65,7 +65,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 @app.get("/health")
 def healthcheck(): return {"status": "ok"}
 
-# --- СТРУКТУРА БАЗ (КАК БЫЛО) ---
 DB_PATH = "/data/warehouse.db"
 DB_PATH_BETA = "/data/warehouse_beta.db"
 
@@ -122,7 +121,7 @@ def init_db():
         "ALTER TABLE items ADD COLUMN buyout_status TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN category TEXT DEFAULT ''",
         "ALTER TABLE items ADD COLUMN is_archived INTEGER DEFAULT 0",
-        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE items ADD COLUMN created_at TIMESTAMP", # БЕЗ DEFAULT (чтобы не было ошибки 500)
         "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
@@ -483,7 +482,12 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (it["code"],)).fetchall()
         holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (it["code"],)).fetchall()
         total = sum(s["quantity"] for s in stocks)
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": it["created_at"], "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        
+        # Безопасная проверка на наличие колонки created_at
+        c_at = it["created_at"] if "created_at" in it.keys() else ""
+        
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        
         if is_admin: item_data["price"] = it["price"]
         result.append(item_data)
     conn.close(); return result
@@ -498,7 +502,11 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.item_code = ? AND c.returned_at IS NULL", (code,)).fetchall()
     conn.close()
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": item["created_at"], "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    
+    c_at = item["created_at"] if "created_at" in item.keys() else ""
+    
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    
     if is_admin: result["price"] = item["price"]
     return result
 
@@ -538,7 +546,6 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
     check_admin(x_init_data); conn = get_conn(x_init_data); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     
-    # ФИКС: Если добавили оборудование и не указали количество, ставим 1
     if kind == "equipment" and quantity == 0: quantity = 1
     
     try: conn.execute("INSERT INTO items (code, name, kind, min_stock, photo, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (code, name, kind, min_stock, photo_base64, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status, category))
