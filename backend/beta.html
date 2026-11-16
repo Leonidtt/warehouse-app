@@ -48,7 +48,7 @@
         .held-text { font-size: 12px; color: var(--warning); font-weight: 600; margin-top: 4px; }
 
         .room-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; text-align: left; width: 100%; padding: 16px 20px; margin-bottom: 8px; }
-        .room-info { flex: 1; display: flex; align-items: center; gap: 8px; }
+        .room-info { flex: 1; display: flex; align-items: center; gap: 10px; }
         .room-title { font-weight: 700; font-size: 17px; color: var(--text); letter-spacing: -0.3px; }
         .room-count-badge { background: var(--skeleton-bg); color: var(--text-muted); font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
         .room-arrow-circle { width: 32px; height: 32px; border-radius: 50%; background: rgba(0, 122, 255, 0.1); color: var(--primary); display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold; }
@@ -158,10 +158,16 @@
         .floating-bar { position: fixed; bottom: 85px; left: 16px; right: 16px; background: var(--card-bg); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 800; display: none; align-items: center; justify-content: space-between; border: 1px solid var(--primary); animation: slideUp 0.3s ease; }
         .floating-btn-group { display: flex; gap: 8px; }
         .floating-btn-group button { margin: 0; padding: 10px 14px; width: auto; font-size: 14px; }
-        
-        /* Стили для фильтров статистики */
+
         .stats-filters { display: flex; gap: 8px; margin: 0 16px 16px; }
         .stats-filters input, .stats-filters select { padding: 12px; font-size: 14px; margin: 0; flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; font-weight: 600; color: var(--text); }
+
+        /* Стили для таблицы цен */
+        .price-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+        .price-table th { text-align: left; padding: 10px; background: var(--skeleton-bg); color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        .price-table td { padding: 10px; border-bottom: 1px solid var(--border); }
+        .price-table tr:last-child td { border-bottom: none; }
+        .price-table .total-row { background: rgba(0, 122, 255, 0.05); font-weight: 700; font-size: 16px; color: var(--primary); }
     </style>
 </head>
 <body>
@@ -261,7 +267,6 @@
             <div style="width: 80px;"></div>
         </div>
         
-        <!-- НОВЫЕ ФИЛЬТРЫ (КАЛЕНДАРЬ И СОРТИРОВКА) -->
         <div class="stats-filters">
             <input type="month" id="stats-month-picker" onchange="applyStatsFilter()">
             <select id="stats-sort-select" onchange="applyStatsFilter()">
@@ -361,7 +366,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v11</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v14</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -412,6 +417,23 @@
                 <div id="kit-body-text"></div>
                 <div id="kit-lens-text"></div>
                 <div id="kit-flash-text"></div>
+                <div id="kit-acc-text"></div>
+                <div id="kit-add-text"></div>
+            </div>
+
+            <!-- ТАБЛИЦА ЦЕН ДЛЯ АДМИНА -->
+            <div id="admin-price-box" class="hidden" style="margin-top:20px; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+                <table class="price-table">
+                    <thead>
+                        <tr>
+                            <th>Компонент</th>
+                            <th style="text-align:right;">Цена</th>
+                        </tr>
+                    </thead>
+                    <tbody id="price-table-body">
+                        <!-- Заполняется через JS -->
+                    </tbody>
+                </table>
             </div>
             
             <div id="actions"></div>
@@ -472,15 +494,29 @@
             <div class="input-group"><label>Название</label><input id="edit-name"></div>
             <div class="input-group"><label>Тип</label><select id="edit-kind" onchange="toggleEditFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="edit-serial-number"></div>
-            <div class="input-group"><label>Стоимость (для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
+            <div class="input-group"><label>Стоимость (общая для админа)</label><input id="edit-price" type="number" placeholder="0"></div>
             <div class="input-group">
                 <label>Бюджет (для админа)</label>
                 <select id="edit-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ (Красный)</option><option value="ТХ">ТХ (Зеленый)</option></select>
             </div>
             <div class="input-group"><label>На выкупе у</label><input id="edit-buyout-status" placeholder="Например: Мартемьянов"></div>
+            
+            <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
             <div class="input-group"><label>Тушка</label><input id="edit-kit-body"></div>
+            <div class="input-group"><label>Цена тушки</label><input id="edit-price-body" type="number" placeholder="0"></div>
+            
             <div class="input-group"><label>Объектив</label><input id="edit-kit-lens"></div>
+            <div class="input-group"><label>Цена объектива</label><input id="edit-price-lens" type="number" placeholder="0"></div>
+            
             <div class="input-group"><label>Вспышка</label><input id="edit-kit-flash"></div>
+            <div class="input-group"><label>Цена вспышки</label><input id="edit-price-flash" type="number" placeholder="0"></div>
+
+            <div class="input-group"><label>Аксессуары</label><input id="edit-kit-acc"></div>
+            <div class="input-group"><label>Цена аксессуаров</label><input id="edit-price-acc" type="number" placeholder="0"></div>
+
+            <div class="input-group"><label>Допы</label><input id="edit-kit-add"></div>
+            <div class="input-group"><label>Цена допов</label><input id="edit-price-add" type="number" placeholder="0"></div>
+
             <div id="edit-consumable-fields" class="hidden">
                 <div class="input-group"><label>Мин. остаток</label><input id="edit-min-stock" type="number"></div>
             </div>
@@ -501,15 +537,29 @@
             <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
             <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
             <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
-            <div class="input-group"><label>Стоимость</label><input id="add-price" type="number" placeholder="0" value="0"></div>
+            <div class="input-group"><label>Стоимость (общая для админа)</label><input id="add-price" type="number" placeholder="0" value="0"></div>
             <div class="input-group">
                 <label>Бюджет</label>
                 <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
             </div>
             <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
+            
+            <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
             <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
+            <div class="input-group"><label>Цена тушки</label><input id="add-price-body" type="number" placeholder="0"></div>
+
             <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
+            <div class="input-group"><label>Цена объектива</label><input id="add-price-lens" type="number" placeholder="0"></div>
+
             <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
+            <div class="input-group"><label>Цена вспышки</label><input id="add-price-flash" type="number" placeholder="0"></div>
+
+            <div class="input-group"><label>Аксессуары</label><input id="add-kit-acc"></div>
+            <div class="input-group"><label>Цена аксессуаров</label><input id="add-price-acc" type="number" placeholder="0"></div>
+
+            <div class="input-group"><label>Допы</label><input id="add-kit-add"></div>
+            <div class="input-group"><label>Цена допов</label><input id="add-price-add" type="number" placeholder="0"></div>
+
             <div id="consumable-fields" class="hidden">
                 <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
                 <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
@@ -827,13 +877,11 @@
             } catch (e) { console.log("Stats error:", e); }
         }
 
-        // --- НОВАЯ ЛОГИКА ДЛЯ СТАТИСТИКИ КАТЕГОРИИ ---
         function openCategoryStats(catName) {
             currentStatsCategory = catName;
             document.getElementById("cat-stats-title").textContent = catName === 'Без категории' ? 'Без категории' : catName;
             currentStatsItems = allItems.filter(i => (i.category || 'Без категории') === catName);
             
-            // Сброс фильтров
             document.getElementById("stats-month-picker").value = "";
             document.getElementById("stats-sort-select").value = "name";
             
@@ -843,11 +891,10 @@
 
         function applyStatsFilter() {
             const sortBy = document.getElementById("stats-sort-select").value;
-            const monthFilter = document.getElementById("stats-month-picker").value; // YYYY-MM
+            const monthFilter = document.getElementById("stats-month-picker").value;
 
             let filtered = [...currentStatsItems];
 
-            // Фильтр по месяцу (если выбран)
             if (monthFilter) {
                 filtered = filtered.filter(item => {
                     if (!item.created_at) return false;
@@ -855,19 +902,16 @@
                 });
             }
 
-            // Сортировка
             filtered.sort((a, b) => {
                 if (sortBy === "name") {
                     return a.name.localeCompare(b.name);
                 }
                 if (sortBy === "status") {
-                    // 0 - Свободен, 1 - На руках, 2 - Ремонт (в конце)
                     const statusA = a.needs_repair ? 2 : (a.holders.length > 0 ? 1 : 0);
                     const statusB = b.needs_repair ? 2 : (b.holders.length > 0 ? 1 : 0);
                     return statusB - statusA;
                 }
                 if (sortBy === "date") {
-                    // По дате создания (сначала новые)
                     const dateA = new Date(a.created_at || 0).getTime();
                     const dateB = new Date(b.created_at || 0).getTime();
                     return dateB - dateA;
@@ -902,6 +946,8 @@
                 if (i.kit_body) kitArr.push(`📷 ${i.kit_body}`);
                 if (i.kit_lens) kitArr.push(`🔭 ${i.kit_lens}`);
                 if (i.kit_flash) kitArr.push(`⚡ ${i.kit_flash}`);
+                if (i.kit_acc) kitArr.push(`🔋 ${i.kit_acc}`);
+                if (i.kit_add) kitArr.push(`📦 ${i.kit_add}`);
                 const kitHtml = kitArr.length ? `<div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height: 1.4;">${kitArr.join('<br>')}</div>` : '';
 
                 const locations = i.stocks.map(s => s.location_name).join(', ') || '—';
@@ -926,8 +972,6 @@
             showScreen("screen-category-detailed");
         }
 
-        // ... (Дальше идет остальной твой код JS без изменений) ...
-        
         async function loadLocations() { 
             locations = await api("/api/locations"); 
             document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${l.name}</option>`).join(""); 
@@ -951,18 +995,19 @@
                 list.innerHTML = users.map(u => {
                     const held = u.held_items && u.held_items.length > 0 ? `<div style="font-size:11px; color:var(--warning); margin-top:4px;">Держит: ${u.held_items.join(', ')}</div>` : "";
                     const isAdmin = u.role === 'admin';
+                    const isGuest = u.role === 'guest';
                     const roleBtn = isAdmin 
                         ? `<button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'employee')">Снять админа</button>`
                         : `<button class="ok" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'admin')">Дать админа</button>`;
                     
-                    const deleteBtn = currentUser.role === 'admin' && u.role !== 'admin'
+                    const deleteBtn = currentUser.role === 'admin' && !isAdmin
                         ? `<button class="danger" style="width:auto; padding:8px; font-size:12px; margin:0; margin-left: 4px;" onclick="deleteUser(${u.tg_id})">🗑</button>` : "";
 
                     return `
                     <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;">
-                        <div><b>${u.full_name}</b> ${held}</div>
+                        <div><b>${u.full_name}</b> ${isGuest ? '<span style="font-size:10px; color:var(--text-muted);">(Гость)</span>' : ''} ${held}</div>
                         <div style="display:flex; gap:6px; align-items:center;">
-                            ${roleBtn}
+                            ${isGuest ? '' : roleBtn}
                             <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserNameModal(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
                             ${deleteBtn}
                         </div>
@@ -1023,7 +1068,16 @@
         
         async function loadMyItems() { 
             try { 
-                const myItems = await api("/api/my_items"); 
+                let myItems = await api("/api/my_items"); 
+                
+                myItems.sort((a, b) => {
+                    const aForOther = a.taken_for && a.taken_for.trim() !== "";
+                    const bForOther = b.taken_for && b.taken_for.trim() !== "";
+                    if (aForOther && !bForOther) return 1;
+                    if (!aForOther && bForOther) return -1;
+                    return a.name.localeCompare(b.name); 
+                });
+
                 const section = document.getElementById("my-items-section"); 
                 const list = document.getElementById("my-items-list"); 
                 if (!myItems.length) { section.classList.add("hidden"); return; } 
@@ -1050,12 +1104,17 @@
             if (!itemsArray.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Ничего не найдено</p>"; return; } 
             
             const sorted = [...itemsArray].sort((a, b) => {
-                const aHeldForOther = a.holders && a.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
-                const bHeldForOther = b.holders && b.holders.some(h => h.taken_for && h.taken_for.trim() !== "");
+                const getPriority = (item) => {
+                    if (!item.holders || item.holders.length === 0) return 1;
+                    if (item.holders.some(h => h.taken_for && h.taken_for.trim() !== "")) return 3;
+                    return 2;
+                };
                 
-                if (aHeldForOther && !bHeldForOther) return 1;
-                if (!aHeldForOther && bHeldForOther) return -1;
-                return 0;
+                const priorityA = getPriority(a);
+                const priorityB = getPriority(b);
+                
+                if (priorityA !== priorityB) return priorityA - priorityB;
+                return a.name.localeCompare(b.name);
             });
 
             list.innerHTML = sorted.map(i => { 
@@ -1432,11 +1491,13 @@
                 let buyoutText = currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${currentItem.buyout_status}</div>` : ""; 
                 let catText = currentItem.category ? `<div class="meta">Категория: ${currentItem.category}</div>` : "";
                 
-                if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash) { 
+                if (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash || currentItem.kit_acc || currentItem.kit_add) { 
                     document.getElementById("kit-box").classList.remove("hidden"); 
                     document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${currentItem.kit_body}` : ""; 
                     document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${currentItem.kit_lens}` : ""; 
                     document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${currentItem.kit_flash}` : ""; 
+                    document.getElementById("kit-acc-text").innerHTML = currentItem.kit_acc ? `<b>Аксессуары:</b> ${currentItem.kit_acc}` : ""; 
+                    document.getElementById("kit-add-text").innerHTML = currentItem.kit_add ? `<b>Допы:</b> ${currentItem.kit_add}` : ""; 
                 } else { document.getElementById("kit-box").classList.add("hidden"); } 
                 
                 let statusHtml = ""; 
@@ -1456,6 +1517,36 @@
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
                 
+                // ТАБЛИЦА ЦЕН
+                const priceBox = document.getElementById("admin-price-box");
+                if (currentUser.role === 'admin' && currentItem.kind === 'equipment') {
+                    priceBox.classList.remove("hidden");
+                    let totalSum = 0;
+                    let rowsHtml = "";
+                    
+                    const addRow = (label, name, price) => {
+                        if (name || price > 0) {
+                            totalSum += (price || 0);
+                            rowsHtml += `<tr><td>${label} ${name ? `(${name})` : ''}</td><td style="text-align:right;">${price ? price + ' ₽' : '—'}</td></tr>`;
+                        }
+                    };
+                    
+                    addRow("Тушка", currentItem.kit_body, currentItem.price_body);
+                    addRow("Объектив", currentItem.kit_lens, currentItem.price_lens);
+                    addRow("Вспышка", currentItem.kit_flash, currentItem.price_flash);
+                    addRow("Аксессуары", currentItem.kit_acc, currentItem.price_acc);
+                    addRow("Допы", currentItem.kit_add, currentItem.price_add);
+                    
+                    if (rowsHtml) {
+                        rowsHtml += `<tr class="total-row"><td>Общая стоимость</td><td style="text-align:right;">${totalSum} ₽</td></tr>`;
+                        document.getElementById("price-table-body").innerHTML = rowsHtml;
+                    } else {
+                        priceBox.classList.add("hidden");
+                    }
+                } else {
+                    priceBox.classList.add("hidden");
+                }
+
                 renderActions(); 
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
@@ -1469,9 +1560,22 @@
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
             document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
             document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; 
+            
             document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
+            document.getElementById("edit-price-body").value = currentItem.price_body || 0; 
+            
             document.getElementById("edit-kit-lens").value = currentItem.kit_lens || ""; 
+            document.getElementById("edit-price-lens").value = currentItem.price_lens || 0; 
+            
             document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; 
+            document.getElementById("edit-price-flash").value = currentItem.price_flash || 0; 
+
+            document.getElementById("edit-kit-acc").value = currentItem.kit_acc || ""; 
+            document.getElementById("edit-price-acc").value = currentItem.price_acc || 0; 
+
+            document.getElementById("edit-kit-add").value = currentItem.kit_add || ""; 
+            document.getElementById("edit-price-add").value = currentItem.price_add || 0; 
+            
             document.getElementById("edit-min-stock").value = currentItem.min_stock || 0; 
             if (currentItem.kind === 'consumable') { document.getElementById("edit-consumable-fields").classList.remove("hidden"); } else { document.getElementById("edit-consumable-fields").classList.add("hidden"); } 
             showScreen("screen-edit-item"); 
@@ -1487,14 +1591,32 @@
             const budget_tag = document.getElementById("edit-budget-tag").value; 
             const serial_number = document.getElementById("edit-serial-number").value.trim(); 
             const buyout_status = document.getElementById("edit-buyout-status").value.trim(); 
+            
             const kit_body = document.getElementById("edit-kit-body").value.trim(); 
+            const price_body = parseFloat(document.getElementById("edit-price-body").value) || 0; 
+            
             const kit_lens = document.getElementById("edit-kit-lens").value.trim(); 
+            const price_lens = parseFloat(document.getElementById("edit-price-lens").value) || 0; 
+            
             const kit_flash = document.getElementById("edit-kit-flash").value.trim(); 
+            const price_flash = parseFloat(document.getElementById("edit-price-flash").value) || 0; 
+
+            const kit_acc = document.getElementById("edit-kit-acc").value.trim(); 
+            const price_acc = parseFloat(document.getElementById("edit-price-acc").value) || 0; 
+
+            const kit_add = document.getElementById("edit-kit-add").value.trim(); 
+            const price_add = parseFloat(document.getElementById("edit-price-add").value) || 0; 
+            
             const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; 
             
             setLoading(btn, true, "Сохранение..."); 
             try { 
-                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ name, kind, min_stock: minStock, price, kit_body, kit_lens, kit_flash, budget_tag, serial_number, buyout_status }) }); 
+                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ 
+                    name, kind, min_stock: minStock, price, 
+                    kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
+                    price_body, price_lens, price_flash, price_acc, price_add, 
+                    budget_tag, serial_number, buyout_status 
+                }) }); 
                 showToast("Сохранено"); openItem(currentItem.code); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
@@ -1511,7 +1633,20 @@
                 const logs = await api(`/api/history`); 
                 const filtered = logs.filter(l => l.item_code === currentItem.code); 
                 if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } 
-                list.innerHTML = filtered.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${l.type === 'checkout' ? 'Взял' : l.type === 'return' ? 'Вернул' : l.type === 'move' ? 'Переместил' : 'Списал'} — ${l.user_name} (${l.quantity} шт)</div></div>`).join(""); 
+                list.innerHTML = filtered.map(l => {
+                    let text = "";
+                    if (l.type === 'checkout') {
+                        if (l.taken_for) text = `<b>Выдал:</b> ${l.user_name} <b>Кому:</b> ${l.taken_for}`;
+                        else text = `<b>Взял:</b> ${l.user_name}`;
+                    } else if (l.type === 'return') {
+                        text = `<b>Вернул:</b> ${l.user_name}`;
+                    } else if (l.type === 'move') {
+                        text = `<b>Переместил:</b> ${l.user_name}`;
+                    } else {
+                        text = `<b>Списал:</b> ${l.user_name}`;
+                    }
+                    return `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${text} (${l.quantity} шт)</div></div>`;
+                }).join(""); 
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
         }
 
@@ -1529,14 +1664,16 @@
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
                 } else if (otherCheckout) {
-                    if (currentUser.role === 'admin') {
-                        html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
-                    } else {
-                        html += `<div class="status-badge status-taken">На руках у ${otherCheckout.full_name}.<br><span style="font-size:12px; font-weight:normal; color:var(--text-muted);">Вернуть может только администратор.</span></div>`;
-                    }
+                    // Разрешаем возвращать всем (и админам, и сотрудникам/фотографам)
+                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
                         html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
+                    } else {
+                        html += `<div class="status-badge status-broken" style="margin-top:20px;">На складе: 0 шт.</div>`;
+                        if (currentUser.role === 'admin') {
+                            html += `<button class="ok" onclick="replenishItem('${currentItem.code}')">📦 Добавить 1 шт на склад</button>`;
+                        }
                     }
                 } 
             } else { 
@@ -1550,10 +1687,21 @@
             box.innerHTML = html; 
         }
         
+        async function replenishItem(code) {
+            if (!locations || !locations.length) { notify("Нет доступных комнат!"); return; }
+            const locId = locations[0].id;
+            try {
+                await api(`/api/items/${code}/replenish`, { method: "POST", body: JSON.stringify({ location_id: locId, quantity: 1 }) });
+                showToast("Добавлено на склад");
+                openItem(code);
+                loadItems();
+            } catch (e) { notify(e.message); }
+        }
+        
         async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doCheckoutFor() { const person = prompt("Для кого?"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doCheckoutFor() { const person = prompt("Для кого? (Введите Фамилию)"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         
         function showMoveItemScreen() {
@@ -1629,9 +1777,36 @@
             if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } 
             
             const formData = new FormData(); 
-            formData.append("code", code); formData.append("name", name); formData.append("kind", document.getElementById("add-kind").value); formData.append("location_id", loc); formData.append("price", document.getElementById("add-price").value); formData.append("budget_tag", document.getElementById("add-budget-tag").value); formData.append("serial_number", document.getElementById("add-serial-number").value); formData.append("buyout_status", document.getElementById("add-buyout-status").value); formData.append("kit_body", document.getElementById("add-kit-body").value); formData.append("kit_lens", document.getElementById("add-kit-lens").value); formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
+            formData.append("code", code); 
+            formData.append("name", name); 
+            formData.append("kind", document.getElementById("add-kind").value); 
+            formData.append("location_id", loc); 
+            formData.append("price", document.getElementById("add-price").value); 
+            formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
+            formData.append("serial_number", document.getElementById("add-serial-number").value); 
+            formData.append("buyout_status", document.getElementById("add-buyout-status").value); 
             
-            if (document.getElementById("add-kind").value === "consumable") { formData.append("quantity", document.getElementById("add-qty").value); formData.append("min_stock", document.getElementById("add-min-stock").value); } 
+            formData.append("kit_body", document.getElementById("add-kit-body").value); 
+            formData.append("price_body", document.getElementById("add-price-body").value); 
+            
+            formData.append("kit_lens", document.getElementById("add-kit-lens").value); 
+            formData.append("price_lens", document.getElementById("add-price-lens").value); 
+            
+            formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
+            formData.append("price_flash", document.getElementById("add-price-flash").value); 
+
+            formData.append("kit_acc", document.getElementById("add-kit-acc").value); 
+            formData.append("price_acc", document.getElementById("add-price-acc").value); 
+
+            formData.append("kit_add", document.getElementById("add-kit-add").value); 
+            formData.append("price_add", document.getElementById("add-price-add").value); 
+            
+            if (document.getElementById("add-kind").value === "consumable") { 
+                formData.append("quantity", document.getElementById("add-qty").value); 
+                formData.append("min_stock", document.getElementById("add-min-stock").value); 
+            } else {
+                formData.append("quantity", "1"); 
+            }
             
             setLoading(btn, true, "Сохранение..."); 
             try { await api("/api/items", { method: "POST", body: formData }); showToast("Добавлено"); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } 
@@ -1641,8 +1816,20 @@
             updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; 
             try { 
                 const logs = await api("/api/history"); 
-                const typeName = t => t === 'checkout' ? '📤 Взял' : t === 'return' ? '📥 Вернул' : t === 'move' ? '📦 Переместил' : t === 'writeoff' ? '📉 Списано' : t; 
-                list.innerHTML = logs.length ? logs.map(l => `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${typeName(l.type)} — ${l.name} (${l.quantity} шт) — ${l.user_name}</div></div>`).join("") : "<p>История пуста</p>"; 
+                list.innerHTML = logs.length ? logs.map(l => {
+                    let text = "";
+                    if (l.type === 'checkout') {
+                        if (l.taken_for) text = `📤 <b>Выдал:</b> ${l.user_name} <b>Кому:</b> ${l.taken_for}`;
+                        else text = `📤 <b>Взял:</b> ${l.user_name}`;
+                    } else if (l.type === 'return') {
+                        text = `📥 <b>Вернул:</b> ${l.user_name}`;
+                    } else if (l.type === 'move') {
+                        text = `📦 <b>Переместил:</b> ${l.user_name}`;
+                    } else {
+                        text = `📉 <b>Списал:</b> ${l.user_name}`;
+                    }
+                    return `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${text} (${l.name}, ${l.quantity} шт)</div></div>`;
+                }).join("") : "<p>История пуста</p>"; 
             } catch (e) { list.innerHTML = `<p style="color:red">${e.message}</p>`; } 
         }
         
