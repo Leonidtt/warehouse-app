@@ -17,7 +17,6 @@ from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime, timedelta
 import os
-import shutil
 import traceback
 import pandas as pd
 import asyncio
@@ -27,8 +26,10 @@ from google.oauth2.service_account import Credentials
 import urllib3
 urllib3.disable_warnings()
 
+# --- ТОКЕНЫ ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg")
-BOT_TOKEN_BETA = os.environ.get("9259053694:AAFCDpRbUmoWQpNxbG7jz1-4CRBsMcEaFyg", "")
+BOT_TOKEN_MAIN = os.environ.get("BOT_TOKEN_MAIN", "9136250747:AAHKFT5aMfLPuf64AX1ouyQRiq_aLEHywhI")
+
 SPREADSHEET_ID = "1T8yAWtkmSo-qL9OciGsAVO3UpjqYNt9jjhirjkrqMr0" 
 
 app = FastAPI()
@@ -63,13 +64,27 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 @app.get("/health")
 def healthcheck(): return {"status": "ok"}
 
-DB_PATH = "/data/warehouse_beta.db"
+DB_PATH_BETA = "/data/warehouse_beta.db"
+DB_PATH_MAIN = "/data/warehouse.db"
 
 def get_conn(x_init_data: Optional[str] = None):
     if not os.path.exists("/data"):
         try: os.makedirs("/data")
         except: pass
-    conn = sqlite3.connect(DB_PATH)
+        
+    db_path = DB_PATH_BETA
+    if x_init_data and BOT_TOKEN_MAIN:
+        try:
+            pairs = dict(parse_qsl(x_init_data, keep_blank_values=True))
+            received_hash = pairs.pop("hash", None)
+            data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+            secret_key = hmac.new(b"WebAppData", BOT_TOKEN_MAIN.encode(), hashlib.sha256).digest()
+            calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+            if calculated == received_hash:
+                db_path = DB_PATH_MAIN
+        except: pass
+        
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
@@ -79,15 +94,18 @@ def find_or_create_guest(full_name, conn):
     if not name: return None
     row = conn.execute("SELECT tg_id FROM users WHERE full_name = ?", (name,)).fetchone()
     if row: return row["tg_id"]
+    
     min_id_row = conn.execute("SELECT MIN(tg_id) FROM users WHERE tg_id < 0").fetchone()
     min_id = min_id_row[0] if min_id_row and min_id_row[0] is not None else 0
     new_id = min_id - 1
+    
     conn.execute("INSERT INTO users (tg_id, full_name, role, is_registered) VALUES (?, ?, 'guest', 1)", (new_id, name))
     conn.commit()
     return new_id
 
-def init_db():
-    conn = get_conn()
+def init_db(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, type TEXT NOT NULL DEFAULT 'storage')""")
     c.execute("""CREATE TABLE IF NOT EXISTS users (tg_id INTEGER PRIMARY KEY, first_name TEXT, username TEXT, full_name TEXT DEFAULT '', role TEXT DEFAULT 'employee')""")
@@ -142,7 +160,8 @@ def init_db():
     c.execute("UPDATE users SET is_registered = 1 WHERE full_name != '' AND is_registered = 0")
     conn.commit(); conn.close()
 
-init_db()
+init_db(DB_PATH_MAIN)
+init_db(DB_PATH_BETA)
 
 def verify_init_data(init_data: str, token: str) -> dict:
     try: pairs = dict(parse_qsl(init_data, keep_blank_values=True))
@@ -163,8 +182,8 @@ def get_user(x_init_data: Optional[str]):
     try:
         user = verify_init_data(x_init_data, BOT_TOKEN)
     except:
-        if BOT_TOKEN_BETA:
-            try: user = verify_init_data(x_init_data, BOT_TOKEN_BETA)
+        if BOT_TOKEN_MAIN:
+            try: user = verify_init_data(x_init_data, BOT_TOKEN_MAIN)
             except: pass
     if not user: raise HTTPException(status_code=401, detail="Неверная подпись")
     
@@ -499,11 +518,40 @@ def get_stats(x_init_data: Optional[str] = Header(None)):
     conn.close()
     return result
 
+@app.get("/api/low_stock")
+def get_low_stock(x_init_data: Optional[str] = Header(None)):
+    conn = get_conn(x_init_data)
+    rows = conn.execute("""
+        SELECT i.code, i.name, i.min_stock, COALESCE(SUM(s.quantity), 0) as total_qty
+        FROM items i
+        LEFT JOIN stock s ON i.code = s.item_code
+        WHERE i.kind = 'consumable' AND i.min_stock > 0 AND i.is_archived = 0
+        GROUP BY i.code
+        HAVING total_qty <= i.min_stock
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 @app.get("/api/next_code")
-def get_next_code(x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data); rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
-    max_num = max([int(r["code"].split("-")[1]) for r in rows if r["code"].split("-")[1].isdigit()] + [0])
-    conn.close(); return {"code": f"ITEM-{max_num + 1}"}
+def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data); conn = get_conn(x_init_data)
+    if prefix and len(prefix) >= 2:
+        rows = conn.execute("SELECT code FROM items WHERE code LIKE ?", (f"{prefix}-%",)).fetchall()
+        max_num = 0
+        for r in rows:
+            try:
+                parts = r["code"].split("-")
+                if len(parts) >= 2:
+                    num = int(parts[-1])
+                    if num > max_num: max_num = num
+            except: pass
+        conn.close()
+        return {"code": f"{prefix}-{max_num + 1}"}
+    else:
+        rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
+        max_num = max([int(r["code"].split("-")[1]) for r in rows if r["code"].split("-")[1].isdigit()] + [0])
+        conn.close()
+        return {"code": f"ITEM-{max_num + 1}"}
 
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
@@ -610,13 +658,13 @@ def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
     conn.commit(); conn.close(); return {"status": "ok"}
 
 @app.post("/api/items")
-async def create_item(code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(...), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)):
+async def create_item(code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); conn = get_conn(x_init_data); photo_base64 = ""
     if photo: photo_base64 = base64.b64encode(await photo.read()).decode("utf-8")
     
-    loc_exists = conn.execute("SELECT id FROM locations WHERE id = ?", (location_id,)).fetchone()
-    if not loc_exists:
-        location_id = 1
+    if location_id == 0:
+        loc = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
+        location_id = loc["id"] if loc else 1
         
     if kind == "equipment" and quantity == 0: quantity = 1
     
@@ -836,6 +884,19 @@ def generate_qr(code: str):
     return StreamingResponse(buf, media_type="image/png")
 
 @app.get("/")
-def serve_main(): return FileResponse("beta.html")
+def serve_main(): return FileResponse("index.html")
 
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
+@app.get("/beta")
+def serve_beta(): return FileResponse("beta.html")
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    if full_path.startswith("api/"):
+        return JSONResponse(status_code=404, content={"detail": "API route not found"})
+    if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
+        return FileResponse(full_path)
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    elif os.path.exists("beta.html"):
+        return FileResponse("beta.html")
+    return JSONResponse(status_code=404, content={"detail": "HTML file not found"})
