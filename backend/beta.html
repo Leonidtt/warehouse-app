@@ -162,12 +162,15 @@
         .stats-filters { display: flex; gap: 8px; margin: 0 16px 16px; }
         .stats-filters input, .stats-filters select { padding: 12px; font-size: 14px; margin: 0; flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; font-weight: 600; color: var(--text); }
 
-        /* Стили для таблицы цен */
         .price-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
         .price-table th { text-align: left; padding: 10px; background: var(--skeleton-bg); color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
         .price-table td { padding: 10px; border-bottom: 1px solid var(--border); }
         .price-table tr:last-child td { border-bottom: none; }
         .price-table .total-row { background: rgba(0, 122, 255, 0.05); font-weight: 700; font-size: 16px; color: var(--primary); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(5px); animation: fadeIn 0.2s ease; }
+        .modal-content { background: var(--bg); width: 100%; max-width: 500px; height: 90%; border-radius: 20px 20px 0 0; padding: 20px; overflow-y: auto; animation: slideUpModal 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes slideUpModal { from { transform: translateY(100%); } to { transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -175,6 +178,63 @@
     <div id="toast-container"></div>
     <div id="scroll-top-btn" onclick="window.scrollTo({top:0, behavior:'smooth'})">↑</div>
 
+    <!-- Модальное окно создания товара -->
+    <div id="create-item-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0; font-size:20px;">Новый товар</h2>
+                <button class="secondary" style="width:auto; padding:8px 12px; margin:0; border-radius:10px;" onclick="closeAddItemModal()">✕ Закрыть</button>
+            </div>
+            
+            <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Удлинители" oninput="onNameInput()"></div>
+            
+            <div id="qr-preview-box" class="hidden" style="text-align:center; margin-bottom: 16px;">
+                <img id="qr-preview-img" src="" style="width:150px; height:150px; border-radius:12px; border:1px solid var(--border); padding:4px; background:white;">
+                <div id="qr-preview-code" style="font-weight:bold; margin-top:8px; font-size:18px;"></div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-bottom:16px;">
+                <button class="secondary" style="margin:0;" onclick="generateCodeForNew()">🎲 Сгенерировать код</button>
+                <input id="add-code" placeholder="Код" style="flex:1;">
+            </div>
+
+            <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
+            
+            <div id="consumable-fields" class="hidden">
+                <div class="input-group"><label>Количество (на складе)</label><input id="add-qty" type="number" placeholder="0" value="1"></div>
+                <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="1"></div>
+                <div class="input-group"><label>Стоимость за 1 шт</label><input id="add-price" type="number" placeholder="0" value="0"></div>
+                <div class="input-group"><label>Описание (где лежит)</label><input id="add-location-desc" placeholder="Например, Склад, полка 2"></div>
+            </div>
+
+            <div id="equipment-fields">
+                <div class="input-group"><label>Локация (Комната)</label><select id="add-location"></select></div>
+                <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
+                <div class="input-group"><label>Стоимость (общая)</label><input id="add-price-eq" type="number" placeholder="0" value="0"></div>
+                <div class="input-group">
+                    <label>Бюджет</label>
+                    <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
+                </div>
+                <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
+                
+                <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
+                <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
+                <div class="input-group"><label>Цена тушки</label><input id="add-price-body" type="number" placeholder="0"></div>
+                <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
+                <div class="input-group"><label>Цена объектива</label><input id="add-price-lens" type="number" placeholder="0"></div>
+                <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
+                <div class="input-group"><label>Цена вспышки</label><input id="add-price-flash" type="number" placeholder="0"></div>
+                <div class="input-group"><label>Аксессуары</label><input id="add-kit-acc"></div>
+                <div class="input-group"><label>Цена аксессуаров</label><input id="add-price-acc" type="number" placeholder="0"></div>
+                <div class="input-group"><label>Допы</label><input id="add-kit-add"></div>
+                <div class="input-group"><label>Цена допов</label><input id="add-price-add" type="number" placeholder="0"></div>
+            </div>
+
+            <button class="ok" id="save-item-btn" onclick="saveNewItem()" style="margin-top:20px;">Сохранить</button>
+        </div>
+    </div>
+
+    <!-- Панель массовых действий в комнате -->
     <div id="batch-actions" class="floating-bar">
         <div class="floating-btn-group">
             <button class="ok" onclick="showBatchMoveForm()">Переместить</button>
@@ -186,6 +246,7 @@
         </div>
     </div>
 
+    <!-- Панель массового взятия -->
     <div id="take-batch-actions" class="floating-bar" style="border-color: var(--success);">
         <div class="floating-btn-group">
             <button class="ok" onclick="executeBatchTake()">Взять</button>
@@ -212,6 +273,12 @@
             <div style="width: 80px;"></div>
             <div class="sticky-title" id="user-info" onclick="editMyName()" style="cursor:pointer;">Учёт</div>
             <div style="width: 80px;"></div>
+        </div>
+
+        <!-- Блок "Заканчивается" -->
+        <div id="low-stock-banner" class="hidden" style="background: rgba(255, 59, 48, 0.1); border: 1px solid rgba(255, 59, 48, 0.3); padding: 16px; border-radius: 16px; margin-bottom: 16px; color: var(--danger); font-weight: 600;">
+            <div style="font-size: 14px; margin-bottom: 8px;">⚠️ Заканчивается:</div>
+            <div id="low-stock-list" style="font-size: 14px; line-height: 1.5;"></div>
         </div>
 
         <button class="qr-btn-main" onclick="scanQr()">
@@ -262,7 +329,7 @@
 
     <div id="screen-category-stats" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title" id="cat-stats-title">Категория</div>
             <div style="width: 80px;"></div>
         </div>
@@ -281,7 +348,7 @@
 
     <div id="screen-category-detailed" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title" id="cat-detailed-title">Детали</div>
             <div style="width: 80px;"></div>
         </div>
@@ -290,7 +357,7 @@
 
     <div id="screen-take" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Взять технику</div>
             <button class="sticky-scan" onclick="scanTakeQr()">📷</button>
         </div>
@@ -342,7 +409,7 @@
 
     <div id="screen-settings" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Настройки</div>
             <div style="width: 80px;"></div>
         </div>
@@ -366,7 +433,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v14</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v15</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -384,12 +451,17 @@
             <div class="sticky-title">Склад (Комнаты)</div>
             <div style="width: 80px;"></div>
         </div>
+        
+        <!-- Кнопка создания товара перенесена сюда -->
+        <div style="padding: 0 16px; margin-top: 16px;">
+            <button class="ok" onclick="openAddItemModal()" id="add-item-btn">➕ Добавить товар</button>
+        </div>
         <div id="rooms-list" style="margin-top: 16px; padding: 0 16px;"></div>
     </div>
 
     <div id="screen-room-view" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="showRooms()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title" id="room-title">Комната</div>
             <button class="secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px; border-radius:8px;" onclick="selectAllInRoom()">Выбрать все</button>
         </div>
@@ -398,7 +470,7 @@
 
     <div id="screen-item" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title" id="item-title">Товар</div>
             <div style="width: 80px;"></div>
         </div>
@@ -421,7 +493,6 @@
                 <div id="kit-add-text"></div>
             </div>
 
-            <!-- ТАБЛИЦА ЦЕН ДЛЯ АДМИНА -->
             <div id="admin-price-box" class="hidden" style="margin-top:20px; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
                 <table class="price-table">
                     <thead>
@@ -430,9 +501,7 @@
                             <th style="text-align:right;">Цена</th>
                         </tr>
                     </thead>
-                    <tbody id="price-table-body">
-                        <!-- Заполняется через JS -->
-                    </tbody>
+                    <tbody id="price-table-body"></tbody>
                 </table>
             </div>
             
@@ -460,7 +529,7 @@
 
     <div id="screen-item-history" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">История товара</div>
             <div style="width: 80px;"></div>
         </div>
@@ -469,7 +538,7 @@
 
     <div id="screen-inventory" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Инвентаризация</div>
             <div style="width: 80px;"></div>
         </div>
@@ -486,7 +555,7 @@
 
     <div id="screen-edit-item" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Редактирование</div>
             <div style="width: 80px;"></div>
         </div>
@@ -525,52 +594,9 @@
         </div>
     </div>
 
-    <div id="screen-add" class="screen hidden">
-        <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
-            <div class="sticky-title">Новый товар</div>
-            <div style="width: 80px;"></div>
-        </div>
-        <div style="margin-top: 16px;">
-            <div class="input-group"><label>Код</label><input id="add-code" placeholder="Например, ITEM-1"></div>
-            <div class="input-group"><label>Название</label><input id="add-name" placeholder="Например, Фотоаппарат Sony"></div>
-            <div class="input-group"><label>Тип</label><select id="add-kind" onchange="toggleFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
-            <div class="input-group"><label>Локация</label><select id="add-location"></select></div>
-            <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
-            <div class="input-group"><label>Стоимость (общая для админа)</label><input id="add-price" type="number" placeholder="0" value="0"></div>
-            <div class="input-group">
-                <label>Бюджет</label>
-                <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
-            </div>
-            <div class="input-group"><label>На выкупе</label><input id="add-buyout-status" placeholder="Например: Мартемьянов"></div>
-            
-            <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
-            <div class="input-group"><label>Тушка</label><input id="add-kit-body"></div>
-            <div class="input-group"><label>Цена тушки</label><input id="add-price-body" type="number" placeholder="0"></div>
-
-            <div class="input-group"><label>Объектив</label><input id="add-kit-lens"></div>
-            <div class="input-group"><label>Цена объектива</label><input id="add-price-lens" type="number" placeholder="0"></div>
-
-            <div class="input-group"><label>Вспышка</label><input id="add-kit-flash"></div>
-            <div class="input-group"><label>Цена вспышки</label><input id="add-price-flash" type="number" placeholder="0"></div>
-
-            <div class="input-group"><label>Аксессуары</label><input id="add-kit-acc"></div>
-            <div class="input-group"><label>Цена аксессуаров</label><input id="add-price-acc" type="number" placeholder="0"></div>
-
-            <div class="input-group"><label>Допы</label><input id="add-kit-add"></div>
-            <div class="input-group"><label>Цена допов</label><input id="add-price-add" type="number" placeholder="0"></div>
-
-            <div id="consumable-fields" class="hidden">
-                <div class="input-group"><label>Количество</label><input id="add-qty" type="number" placeholder="0" value="0"></div>
-                <div class="input-group"><label>Мин. остаток</label><input id="add-min-stock" type="number" placeholder="0" value="0"></div>
-            </div>
-            <button class="ok" id="save-item-btn" onclick="saveItem()">Сохранить</button>
-        </div>
-    </div>
-
     <div id="screen-terminal" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="showSettings()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Терминал</div>
             <div style="width: 80px;"></div>
         </div>
@@ -584,7 +610,7 @@
 
     <div id="screen-history" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="backToMain()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">История действий</div>
             <div style="width: 80px;"></div>
         </div>
@@ -596,7 +622,7 @@
 
     <div id="screen-batch-move" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="showRooms()">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Перемещение</div>
             <div style="width: 80px;"></div>
         </div>
@@ -611,7 +637,7 @@
 
     <div id="screen-move-item" class="screen hidden">
         <div class="sticky-header">
-            <button class="sticky-back" onclick="openItem(currentItem.code)">← Назад</button>
+            <button class="sticky-back" onclick="goBack()">← Назад</button>
             <div class="sticky-title">Перемещение</div>
             <div style="width: 80px;"></div>
         </div>
@@ -666,6 +692,11 @@
         
         let currentStatsCategory = "";
         let currentStatsItems = [];
+        
+        let navHistory = [];
+        let currentScreen = 'screen-main';
+
+        const ruToEn = {'а':'a', 'б':'b', 'в':'v', 'г':'g', 'д':'d', 'е':'e', 'ё':'e', 'ж':'zh', 'з':'z', 'и':'i', 'й':'y', 'к':'k', 'л':'l', 'м':'m', 'н':'n', 'о':'o', 'п':'p', 'р':'r', 'с':'s', 'т':'t', 'у':'u', 'ф':'f', 'х':'h', 'ц':'ts', 'ч':'ch', 'ш':'sh', 'щ':'sch', 'ъ':'', 'ы':'y', 'ь':'', 'э':'e', 'ю':'yu', 'я':'ya'};
 
         window.onerror = function(message, source, lineno, colno, error) {
             const errorText = `JS Error: ${message} at ${source}:${lineno}`;
@@ -783,10 +814,12 @@
                     document.getElementById("nav-rooms").classList.remove("hidden");
                     document.getElementById("export-history-btn").classList.remove("hidden");
                     document.getElementById("delete-item-btn").classList.remove("hidden");
+                    document.getElementById("add-item-btn").classList.remove("hidden");
                 } else {
                     document.getElementById("nav-rooms").classList.add("hidden");
                     document.getElementById("nav-settings").classList.add("hidden");
                     document.getElementById("delete-item-btn").classList.add("hidden");
+                    document.getElementById("add-item-btn").classList.add("hidden");
                 }
                 
                 const cached = localStorage.getItem("cachedPlatforms_v9");
@@ -796,13 +829,25 @@
                 
                 document.getElementById("items-list").innerHTML = `<div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div><div class="card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>`;
 
-                await loadLocations(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings();
+                await loadLocations(); await loadItems(); await loadStats(); await loadDailyReport(); await loadMyBookings(); await loadLowStock();
                 showScreen("screen-main");
 
                 if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-                autoRefreshInterval = setInterval(() => { loadItems(); }, 15000);
+                autoRefreshInterval = setInterval(() => { loadItems(); loadLowStock(); }, 15000);
 
             } catch (e) { notify("Ошибка инициализации: " + e.message); }
+        }
+
+        async function loadLowStock() {
+            try {
+                const list = await api("/api/low_stock");
+                const banner = document.getElementById("low-stock-banner");
+                const container = document.getElementById("low-stock-list");
+                if (!list.length) { banner.classList.add("hidden"); return; }
+                
+                banner.classList.remove("hidden");
+                container.innerHTML = list.map(i => `• <b>${i.name}</b> (осталось ${i.total_qty} шт)`).join('<br>');
+            } catch(e) { console.log(e); }
         }
 
         async function doRegister() { 
@@ -1381,6 +1426,7 @@
             finally { setLoading(btn, false); btn.innerHTML = "🔄 Обновить данные"; }
         }
 
+        // --- Комнаты ---
         async function showRooms() { 
             if (currentUser.role !== 'admin') return;
             showScreen("screen-rooms"); updateNavActive("nav-rooms"); document.getElementById("batch-actions").style.display = "none";
@@ -1517,7 +1563,6 @@
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); loadBookings(currentItem.code); } 
                 
-                // ТАБЛИЦА ЦЕН
                 const priceBox = document.getElementById("admin-price-box");
                 if (currentUser.role === 'admin' && currentItem.kind === 'equipment') {
                     priceBox.classList.remove("hidden");
@@ -1664,7 +1709,6 @@
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
                 } else if (otherCheckout) {
-                    // Разрешаем возвращать всем (и админам, и сотрудникам/фотографам)
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
@@ -1771,45 +1815,108 @@
         async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
         function toggleFields() { if (document.getElementById("add-kind").value === "consumable") document.getElementById("consumable-fields").classList.remove("hidden"); else document.getElementById("consumable-fields").classList.add("hidden"); }
         
-        async function saveItem() { 
+        function showAddForm() { openAddItemModal(); }
+
+        function openAddItemModal() {
+            document.getElementById("add-name").value = "";
+            document.getElementById("add-code").value = "";
+            document.getElementById("qr-preview-box").classList.add("hidden");
+            document.getElementById("add-kind").value = "equipment";
+            document.getElementById("add-qty").value = "1";
+            document.getElementById("add-min-stock").value = "1";
+            document.getElementById("add-price").value = "0";
+            document.getElementById("add-location-desc").value = "";
+            document.getElementById("add-serial-number").value = "";
+            document.getElementById("add-price-eq").value = "0";
+            document.getElementById("add-budget-tag").value = "";
+            document.getElementById("add-buyout-status").value = "";
+            document.getElementById("add-kit-body").value = "";
+            document.getElementById("add-price-body").value = "0";
+            document.getElementById("add-kit-lens").value = "";
+            document.getElementById("add-price-lens").value = "0";
+            document.getElementById("add-kit-flash").value = "";
+            document.getElementById("add-price-flash").value = "0";
+            document.getElementById("add-kit-acc").value = "";
+            document.getElementById("add-price-acc").value = "0";
+            document.getElementById("add-kit-add").value = "";
+            document.getElementById("add-price-add").value = "0";
+            toggleFields();
+            document.getElementById("create-item-modal").classList.remove("hidden");
+        }
+
+        function closeAddItemModal() {
+            document.getElementById("create-item-modal").classList.add("hidden");
+        }
+
+        function onNameInput() {
+            document.getElementById("qr-preview-box").classList.add("hidden");
+        }
+
+        async function generateCodeForNew() {
+            const name = document.getElementById("add-name").value.trim();
+            if (!name) { notify("Введите название"); return; }
+            let en = name.toLowerCase().split('').map(c => ruToEn[c] || c).join('');
+            en = en.replace(/[^a-z]/g, '').toUpperCase();
+            const prefix = en.substring(0, 3) || 'ITM';
+            
+            try {
+                const res = await api(`/api/next_code?prefix=${prefix}`);
+                document.getElementById("add-code").value = res.code;
+                
+                const qrBox = document.getElementById("qr-preview-box");
+                const qrImg = document.getElementById("qr-preview-img");
+                const qrCode = document.getElementById("qr-preview-code");
+                
+                qrImg.src = `/api/qr/${res.code}`;
+                qrCode.textContent = res.code;
+                qrBox.classList.remove("hidden");
+            } catch(e) { notify("Ошибка генерации кода"); }
+        }
+
+        async function saveNewItem() { 
             const btn = document.getElementById("save-item-btn"); 
-            const code = document.getElementById("add-code").value.trim(); const name = document.getElementById("add-name").value.trim(); const loc = parseInt(document.getElementById("add-location").value); 
-            if (!code || !name || !loc) { notify("Заполните код, название и локацию"); return; } 
+            const code = document.getElementById("add-code").value.trim(); 
+            const name = document.getElementById("add-name").value.trim(); 
+            const kind = document.getElementById("add-kind").value;
+            
+            if (!code || !name) { notify("Заполните код и название"); return; } 
             
             const formData = new FormData(); 
             formData.append("code", code); 
             formData.append("name", name); 
-            formData.append("kind", document.getElementById("add-kind").value); 
-            formData.append("location_id", loc); 
-            formData.append("price", document.getElementById("add-price").value); 
-            formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
-            formData.append("serial_number", document.getElementById("add-serial-number").value); 
-            formData.append("buyout_status", document.getElementById("add-buyout-status").value); 
+            formData.append("kind", kind); 
             
-            formData.append("kit_body", document.getElementById("add-kit-body").value); 
-            formData.append("price_body", document.getElementById("add-price-body").value); 
-            
-            formData.append("kit_lens", document.getElementById("add-kit-lens").value); 
-            formData.append("price_lens", document.getElementById("add-price-lens").value); 
-            
-            formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
-            formData.append("price_flash", document.getElementById("add-price-flash").value); 
-
-            formData.append("kit_acc", document.getElementById("add-kit-acc").value); 
-            formData.append("price_acc", document.getElementById("add-price-acc").value); 
-
-            formData.append("kit_add", document.getElementById("add-kit-add").value); 
-            formData.append("price_add", document.getElementById("add-price-add").value); 
-            
-            if (document.getElementById("add-kind").value === "consumable") { 
+            if (kind === "consumable") {
                 formData.append("quantity", document.getElementById("add-qty").value); 
                 formData.append("min_stock", document.getElementById("add-min-stock").value); 
+                formData.append("price", document.getElementById("add-price").value); 
+                formData.append("location_id", "0"); // Сервер подставит по умолчанию
             } else {
-                formData.append("quantity", "1"); 
+                formData.append("location_id", document.getElementById("add-location").value); 
+                formData.append("price", document.getElementById("add-price-eq").value); 
+                formData.append("serial_number", document.getElementById("add-serial-number").value); 
+                formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
+                formData.append("buyout_status", document.getElementById("add-buyout-status").value); 
+                formData.append("kit_body", document.getElementById("add-kit-body").value); 
+                formData.append("price_body", document.getElementById("add-price-body").value); 
+                formData.append("kit_lens", document.getElementById("add-kit-lens").value); 
+                formData.append("price_lens", document.getElementById("add-price-lens").value); 
+                formData.append("kit_flash", document.getElementById("add-kit-flash").value); 
+                formData.append("price_flash", document.getElementById("add-price-flash").value); 
+                formData.append("kit_acc", document.getElementById("add-kit-acc").value); 
+                formData.append("price_acc", document.getElementById("add-price-acc").value); 
+                formData.append("kit_add", document.getElementById("add-kit-add").value); 
+                formData.append("price_add", document.getElementById("add-price-add").value); 
             }
             
             setLoading(btn, true, "Сохранение..."); 
-            try { await api("/api/items", { method: "POST", body: formData }); showToast("Добавлено"); backToMain(); } catch (e) { notify(e.message); setLoading(btn, false); } 
+            try { 
+                await api("/api/items", { method: "POST", body: formData }); 
+                showToast("Добавлено"); 
+                closeAddItemModal();
+                loadItems();
+                loadLowStock();
+            } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
         async function showHistory() { 
@@ -1882,6 +1989,9 @@
         });
         
         function showScreen(id) { 
+            if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
+            currentScreen = id;
+
             ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
             }); 
@@ -1895,7 +2005,20 @@
             window.scrollTo(0, 0);
         }
         
-        function backToMain() { showScreen("screen-main"); loadItems(); }
+        function goBack() {
+            if (navHistory.length > 0) {
+                const prev = navHistory.pop();
+                showScreen(prev);
+            } else {
+                backToMain();
+            }
+        }
+
+        function backToMain() { 
+            navHistory = [];
+            showScreen("screen-main"); 
+            loadItems(); 
+        }
 
         (async () => { await init(); })();
     </script>
