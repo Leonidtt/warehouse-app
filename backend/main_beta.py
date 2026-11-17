@@ -68,6 +68,7 @@ DB_PATH_BETA = "/data/warehouse_beta.db"
 DB_PATH_MAIN = "/data/warehouse.db"
 
 def get_conn(x_init_data: Optional[str] = None):
+    # Создаем папку, если ее нет
     if not os.path.exists("/data"):
         try: os.makedirs("/data")
         except: pass
@@ -104,6 +105,9 @@ def find_or_create_guest(full_name, conn):
     return new_id
 
 def init_db(db_path):
+    # Создаем директорию для файла базы данных, если ее нет
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -159,6 +163,11 @@ def init_db(db_path):
 
     c.execute("UPDATE users SET is_registered = 1 WHERE full_name != '' AND is_registered = 0")
     conn.commit(); conn.close()
+
+# Создаем папку /data перед инициализацией баз
+if not os.path.exists("/data"):
+    try: os.makedirs("/data")
+    except: pass
 
 init_db(DB_PATH_MAIN)
 init_db(DB_PATH_BETA)
