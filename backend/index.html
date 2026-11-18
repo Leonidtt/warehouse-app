@@ -355,6 +355,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--primary); font-weight: 700; letter-spacing: -0.5px;">Экспорт</h2>
         <button class="ok" onclick="exportStock()" id="export-stock-btn">📥 Выгрузить склад в Excel</button>
         <button class="secondary" onclick="downloadQrSheet()" id="export-qr-btn">🖨️ Скачать QR-лист для печати</button>
+        <button class="secondary hidden" onclick="sendOwnerBackup()" id="owner-backup-btn">Скачать резервную копию базы</button>
         
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
@@ -931,7 +932,10 @@
         async function createLocation() { const name = document.getElementById("new-location-name").value.trim(); if (!name) return; try { await api("/api/locations", { method: "POST", body: JSON.stringify({ name }) }); showToast("Добавлено"); document.getElementById("new-location-name").value = ""; loadLocations(); } catch (e) { notify(e.message); } }
         async function renameLocation(id, oldName) { const newName = prompt("Новое название комнаты:", oldName); if (!newName || newName === oldName) return; try { await api("/api/locations/update", { method: "POST", body: JSON.stringify({ id, name: newName }) }); showToast("Обновлено"); loadLocations(); } catch (e) { notify(e.message); } }
 
-        function showSettings() { loadLocations(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
+        function showSettings() {
+            document.getElementById("owner-backup-btn").classList.toggle("hidden", currentUser?.can_backup !== true);
+            loadLocations(); showScreen("screen-settings"); updateNavActive("nav-settings");
+        }
         
         async function loadUsers() { 
             const list = document.getElementById("users-list"); 
@@ -1662,6 +1666,19 @@
                 link.click();
                 link.remove();
             } catch (e) { notify("Ошибка скачивания: " + e.message); }
+        }
+
+        async function sendOwnerBackup() {
+            const btn = document.getElementById("owner-backup-btn");
+            if (btn.disabled || currentUser?.can_backup !== true) return;
+            if (!confirm("Создать свежую резервную копию и отправить её в личный чат с ботом?")) return;
+            setLoading(btn, true, "Создаём копию...");
+            try {
+                const res = await api("/api/owner/backup", {method: "POST"}, 0);
+                if (res.status !== "ok") throw new Error("Отправка не подтверждена");
+                showToast("Копия отправлена в личный чат с ботом");
+            } catch (e) { notify(e.message || "Не удалось создать копию"); }
+            finally { setLoading(btn, false); }
         }
 
         async function downloadHistory() { downloadFile("/api/export_history", "history.csv"); }
