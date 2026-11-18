@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from warehouse_v18 import label_font, label_dimensions
 
 
-def prepare_migration(path):
+def prepare_migration(path, version="18.2"):
     db = Path(path).resolve()
     if not db.is_file() or not db.stat().st_size:
         raise RuntimeError('Рабочая база отсутствует: запуск отменён')
@@ -22,7 +22,7 @@ def prepare_migration(path):
         tables = {r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {'items', 'users', 'locations', 'stock', 'checkouts', 'bookings'}.issubset(tables):
             raise RuntimeError('Рабочая база не соответствует ожидаемой схеме')
-        if 'warehouse_release_meta' in tables and source.execute("SELECT 1 FROM warehouse_release_meta WHERE version='18.2'").fetchone():
+        if 'warehouse_release_meta' in tables and source.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (version,)).fetchone():
             return
         fd, pending = tempfile.mkstemp(prefix='.warehouse_pre_v182_', suffix='.db', dir=db.parent)
         os.close(fd)
@@ -33,7 +33,7 @@ def prepare_migration(path):
                     raise RuntimeError('Резервная копия не прошла проверку')
             with open(pending, 'rb') as stream:
                 os.fsync(stream.fileno())
-            target = db.parent / ('warehouse_pre_v18_2_' + datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f') + '.db')
+            target = db.parent / ('warehouse_pre_v' + version.replace('.','_') + '_' + datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f') + '.db')
             os.replace(pending, target)
             print('Pre-release SQLite snapshot verified:', target.name, flush=True)
         finally:
@@ -163,8 +163,8 @@ def register_release(app, get_user, session):
                 LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0''').fetchall()
             yesterday = conn.execute("SELECT date('now','-1 day')").fetchone()[0]
             daily = dict(conn.execute('''SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at)=?) AS taken,
-                (SELECT COUNT(*) FROM checkouts WHERE date(returned_at)=?) AS returned,
-                (SELECT COALESCE(SUM(quantity),0) FROM writeoffs WHERE date(created_at)=?) AS written_off''', (yesterday,)*3).fetchone())
+                ((SELECT COUNT(*) FROM checkouts WHERE date(returned_at)=?) + (SELECT COALESCE(SUM(quantity),0) FROM consumable_returns WHERE date(created_at)=?)) AS returned,
+                (SELECT COALESCE(SUM(quantity),0) FROM writeoffs WHERE date(created_at)=?) AS written_off''', (yesterday,)*4).fetchone())
         counts = dict(stock=0, working=0, repair=0, total=0)
         cats, booked, low = {}, [], []
         for r in rows:

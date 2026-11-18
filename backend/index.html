@@ -183,6 +183,8 @@
     <script src="/warehouse-v18.js"></script>
     <link rel="stylesheet" href="/release-v182.css">
     <script src="/release-v182.js"></script>
+    <link rel="stylesheet" href="/release-v183.css">
+    <script src="/release-v183.js"></script>
 </head>
 <body>
 
@@ -444,7 +446,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button><button class="secondary" onclick="showExtra('inventorylog')">История инвентаризаций</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.2</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.3</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -1181,6 +1183,7 @@
             
             const sorted = [...itemsArray].sort((a, b) => {
                 const getPriority = (item) => {
+                    if (item.kind === "equipment" && item.needs_repair) return 4;
                     if (!item.holders || item.holders.length === 0) return 1;
                     if (item.holders.some(h => h.taken_for && h.taken_for.trim() !== "")) return 3;
                     return 2;
@@ -1766,7 +1769,7 @@
             try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: moveFromLocId, to_location: selectedMoveRoomId, quantity: qty }) }); showToast("Перемещено!"); setLoading(btn,false); loadItems(); openItem(currentItem.code); } catch (e) { notify(e.message); setLoading(btn, false); }
         }
         
-        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doWriteoff() { const code=currentItem.code,loc=Number($("wo-loc").value),qty=Number($("wo-qty").value),btn=$("actions").querySelector('button[onclick="doWriteoff()"]'); if(btn?.disabled)return; if(!loc||!Number.isInteger(qty)||qty<=0||qty>1000000)return notify("Укажите помещение и целое положительное количество"); if(!confirm("Взять / списать "+qty+" "+(currentItem.unit||"шт.")+"?"))return;setLoading(btn,true,"Списание..."); try{await api("/api/writeoff",{method:"POST",body:JSON.stringify({code,location_id:loc,quantity:qty})},0);showToast("Списано");await loadItems();loadDashboard17();if(currentItem?.code===code)await openItem(code)}catch(e){notify(e.message)}finally{setLoading(btn,false)} }
         
         
         
@@ -2059,6 +2062,7 @@
 
         installV18();
         installRelease182();
+        installRelease183();
         (async () => { await init(); })();
     </script>
 </body>

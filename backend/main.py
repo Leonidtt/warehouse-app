@@ -30,6 +30,7 @@ from contextlib import contextmanager
 from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
+from release_v183 import register_183
 from owner_backup import register_owner_backup
 
 import urllib3
@@ -49,7 +50,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.2")
+app = FastAPI(title="Склад", version="18.3")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -175,6 +176,7 @@ def init_db(db_path):
     c.execute("CREATE INDEX IF NOT EXISTS idx_checkouts_code_return ON checkouts(item_code,returned_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(item_code,date_from,date_to)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_location ON stock(location_id)")
+    c.execute("CREATE TABLE IF NOT EXISTS consumable_returns (id INTEGER PRIMARY KEY, item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0), user_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL, unit_price REAL NOT NULL, user_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS repair_photos (repair_id INTEGER PRIMARY KEY, photo TEXT NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS inventory_runs (id INTEGER PRIMARY KEY, location_id INTEGER NOT NULL, user_id INTEGER NOT NULL, report TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
@@ -187,7 +189,7 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-prepare_migration(DB_PATH)
+prepare_migration(DB_PATH, "18.3")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -459,6 +461,8 @@ def get_history(x_init_data: Optional[str] = Header(None)):
     for r in mv: rows.append({"date": r["date"], "type": "move", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—", "taken_for": ""})
     wo = conn.execute("SELECT w.item_code, i.name, w.quantity, w.created_at AS date, u.full_name FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id ORDER BY w.created_at DESC LIMIT 500").fetchall()
     for r in wo: rows.append({"date": r["date"], "type": "writeoff", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—", "taken_for": ""})
+    for r in conn.execute("SELECT r.item_code, i.name, r.quantity, r.created_at AS date, u.full_name FROM consumable_returns r JOIN items i ON i.code=r.item_code LEFT JOIN users u ON u.tg_id=r.user_id ORDER BY r.created_at DESC LIMIT 500"):
+        rows.append({"date":r["date"],"type":"return","item_code":r["item_code"],"name":r["name"],"quantity":r["quantity"],"user_name":r["full_name"] or "—","taken_for":""})
     conn.close(); rows.sort(key=lambda x: x["date"], reverse=True); return rows
 
 def csv_safe(v):
@@ -1393,6 +1397,9 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_owner_backup(app, DB_PATH, BOT_TOKEN)
 register_release(app, get_user, contextmanager_session)
+register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
+with transaction() as conn:
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.3')")
 
 @app.get("/")
 @app.get("/index.html")
