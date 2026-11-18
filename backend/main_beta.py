@@ -28,6 +28,7 @@ import re
 from urllib.parse import urlsplit
 from contextlib import contextmanager
 from datetime import date
+from beta_v18 import label_font, label_dimensions, register_v18
 
 import urllib3
 urllib3.disable_warnings()
@@ -46,7 +47,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад — Бета", version="17")
+app = FastAPI(title="Склад — Бета", version="18")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -495,8 +496,7 @@ def export_qr_sheet(x_init_data: Optional[str] = Header(None)):
     img_w = cols * cell_w; img_h = rows_count * cell_h
     if img_h == 0: img_h = 100
     img = Image.new("RGB", (img_w, img_h), "white"); draw = ImageDraw.Draw(img)
-    try: font = ImageFont.truetype("DejaVuSans.ttf", 14)
-    except IOError: font = ImageFont.load_default()
+    font = label_font(14)
     for idx, item in enumerate(items):
         row = idx // cols; col = idx % cols
         x = col * cell_w + padding; y = row * cell_h + padding
@@ -1034,8 +1034,7 @@ def generate_qr(code: str):
     width, height = qr_img.size
     result_img = Image.new("RGB", (width, height + 60), "white"); result_img.paste(qr_img, (0, 0))
     draw = ImageDraw.Draw(result_img)
-    try: font = ImageFont.truetype("DejaVuSans.ttf", 36)
-    except IOError: font = ImageFont.load_default()
+    font = label_font(36)
     try: text_w = draw.textlength(code, font=font)
     except AttributeError: text_w = draw.textsize(code, font=font)[0]
     draw.text(((width - text_w) / 2, height + 10), code, fill="black", font=font)
@@ -1167,14 +1166,14 @@ def seed_demo_data(actor):
     return {'status':'ok','created':len(sample)}
 
 
-def label_image(code,name,dpi=203):
-    width=round(50/25.4*dpi); height=round(80/25.4*dpi)
+def label_image(code,name,dpi=203,width_mm=50,height_mm=80):
+    label_dimensions(width_mm,height_mm)
+    width=round(width_mm/25.4*dpi); height=round(height_mm/25.4*dpi)
     image=Image.new('RGB',(width,height),'white'); draw=ImageDraw.Draw(image)
     def text_fit(text,top,area,initial):
         text=' '.join(text.split())
         for size in range(initial,9,-1):
-            try: font=ImageFont.truetype(os.environ.get('LABEL_FONT_PATH','DejaVuSans-Bold.ttf'),size)
-            except OSError: raise HTTPException(503,'На сервере нет шрифта для этикеток')
+            font=label_font(size)
             lines=[]; line=''
             for word in text.split():
                 if line and draw.textlength(line+' '+word,font=font)>width-24: lines.append(line); line=''
@@ -1196,14 +1195,14 @@ def label_image(code,name,dpi=203):
     return image
 
 @app.get('/api/label/{code}')
-def print_label(code: str,name: Optional[str]=None,dpi: int=203,format: str='png',x_init_data: Optional[str]=Header(None)):
+def print_label(code: str,name: Optional[str]=None,dpi: int=203,format: str='png',width_mm: int=50,height_mm: int=80,x_init_data: Optional[str]=Header(None)):
     if name is None: get_user(x_init_data)
     else: check_admin(x_init_data)
     if dpi not in (203,300) or format not in ('png','pdf') or not 1<=len(code)<=64: raise HTTPException(400,'Некорректные параметры этикетки')
     if name is None:
         with transaction() as conn: name=active_item(conn,code)['name']
     if not name.strip() or len(name)>250: raise HTTPException(400,'Укажите название')
-    im=label_image(code,name,dpi); buf=io.BytesIO()
+    im=label_image(code,name,dpi,width_mm,height_mm); buf=io.BytesIO()
     if format=='pdf': im.save(buf,format='PDF',resolution=dpi)
     else: im.save(buf,format='PNG',dpi=(dpi,dpi))
     buf.seek(0)
@@ -1389,7 +1388,7 @@ def booking_calendar(x_init_data:Optional[str]=Header(None)):
         return [dict(r) for r in conn.execute("SELECT b.*,i.name,u.full_name FROM bookings b JOIN items i ON i.code=b.item_code LEFT JOIN users u ON u.tg_id=b.user_id WHERE i.is_archived=0 AND date_to>=date('now') ORDER BY date_from,name")]
 
 @app.get('/api/export_labels')
-def export_labels(dpi:int=203,x_init_data:Optional[str]=Header(None)):
+def export_labels(dpi:int=203,width_mm:int=50,height_mm:int=80,x_init_data:Optional[str]=Header(None)):
     check_admin(x_init_data)
     if dpi not in (203,300): raise HTTPException(400,'Выберите 203 или 300 dpi')
     with contextmanager_session() as conn: rows=conn.execute('SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 500').fetchall()
@@ -1397,7 +1396,9 @@ def export_labels(dpi:int=203,x_init_data:Optional[str]=Header(None)):
     if len(rows)==500:
         with contextmanager_session() as conn:
             if conn.execute('SELECT COUNT(*) FROM items WHERE is_archived=0').fetchone()[0]>500: raise HTTPException(400,'За один раз можно выгрузить до 500 этикеток; скачивайте этикетки отдельно')
-    images=[label_image(r['code'],r['name'],dpi) for r in rows]
+    label_dimensions(width_mm,height_mm)
+    if len(rows)*round(width_mm/25.4*dpi)*round(height_mm/25.4*dpi)>100_000_000: raise HTTPException(400,'Слишком большой PDF, уменьшите размер или dpi')
+    images=[label_image(r['code'],r['name'],dpi,width_mm,height_mm) for r in rows]
     buf=io.BytesIO(); images[0].save(buf,format='PDF',resolution=dpi,save_all=True,append_images=images[1:]); buf.seek(0)
     return StreamingResponse(buf,media_type='application/pdf')
 
@@ -1442,6 +1443,8 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 # Only populate a genuinely new Beta database; never modify an existing stock on deployment.
 if BETA_FRESH_DB:
     seed_demo_data({'tg_id':BETA_ADMIN_ID})
+
+register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 
 @app.get("/")
 @app.get("/beta")

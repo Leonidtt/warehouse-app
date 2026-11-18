@@ -179,6 +179,8 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
+<link rel="stylesheet" href="/beta-v18.css">
+    <script src="/beta-v18.js"></script>
 </head>
 <body>
 
@@ -1314,28 +1316,9 @@
             } catch (e) { notify(e.message); }
         }
 
-        function scanQr() { 
-            if (!tg.showScanQrPopup) { notify("Сканер доступен только с телефона"); return; } 
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => { if (text) { openItem(text.trim()); return true; } }); 
-        }
+        
 
-        function scanTakeQr() {
-            if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; }
-            tg.showScanQrPopup({ text: "Наведите на QR товара" }, (text) => {
-                if (text) {
-                    const code = text.trim();
-                    const item = allItems.find(i => i.code === code);
-                    if (item) {
-                        if (item.kind !== 'equipment') { showToast("Это расходник", "error"); return true; }
-                        if (item.needs_repair) { showToast("Товар в ремонте", "error"); return true; }
-                        if (item.holders && item.holders.length > 0) { showToast(`На руках у ${item.holders[0].full_name}`, "error"); return true; }
-                        if (item.total <= 0) { showToast("Нет в наличии", "error"); return true; }
-                        openItem(code);
-                    } else { showToast("Товар не найден", "error"); }
-                    return true;
-                }
-            });
-        }
+        
 
         function showPlatforms() {
             updateNavActive("nav-platforms");
@@ -1521,33 +1504,11 @@
             try { await api("/api/move_batch", { method: "POST", body: JSON.stringify({ codes: selectedItems, from_location: currentRoomId, to_location: toLocation }) }); showToast("Перемещено!"); setLoading(btn,false); loadItems(); loadDashboard17(); document.getElementById("batch-actions").style.display = "none"; showRooms(); } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
 
-        function showInventory() { invScannedCodes = []; document.getElementById("inv-scanned-list").innerHTML = ""; document.getElementById("inv-finish-btn").classList.add("hidden"); showScreen("screen-inventory"); }
+        
 
-        function startInventoryScan() {
-            if (!tg.showScanQrPopup) { notify("Сканер недоступен"); return; }
-            tg.showScanQrPopup({ text: "Сканируйте QR товаров" }, (text) => {
-                if (text) {
-                    const code = text.trim();
-                    if (!invScannedCodes.includes(code)) { invScannedCodes.push(code); haptic('medium'); document.getElementById("inv-scanned-list").innerHTML += `<div class="card" style="padding:12px; margin-bottom:8px; border-left:4px solid var(--success); font-weight:600;">✅ ${code}</div>`; document.getElementById("inv-finish-btn").classList.remove("hidden"); } 
-                    else { showToast("Уже отсканирован"); }
-                    return true;
-                }
-            });
-        }
+        
 
-        async function finishInventory() {
-            const locId = parseInt(document.getElementById("inv-location").value);
-            const btn = document.getElementById("inv-finish-btn"); setLoading(btn, true, "Подсчет...");
-            try {
-                const res = await api("/api/inventory_finish", { method: "POST", body: JSON.stringify({ location_id: locId, found: invScannedCodes }) });
-                let msg = "";
-                if (res.missing && res.missing.length > 0) msg += `Не найдено: ${res.missing.length} шт.\n`;
-                if (res.extra && res.extra.length > 0) msg += `Лишние (не по базе): ${res.extra.length} шт.\n`;
-                if (msg) { showToast("Есть расхождения", 'error'); alert(msg + "\nПотеряшки:\n" + (res.missing || []).join('\n') + "\nЛишние:\n" + (res.extra || []).join('\n')); } 
-                else { showToast("Все на месте!"); }
-                showSettings();
-            } catch (e) { notify(e.message); setLoading(btn, false); }
-        }
+        
 
         async function openItem(code) { 
             try { 
@@ -1769,7 +1730,7 @@
             } catch (e) { notify(e.message); }
         }
         
-        async function markRepair() { try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/repair`, { method: "POST" }); showToast(res.message); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         async function doCheckoutFor() { const person = prompt("Для кого? (Введите Фамилию)"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
@@ -1805,12 +1766,7 @@
         
         async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         
-        function showQr() { 
-            const url = `/api/qr/${currentItem.code}`; 
-            document.getElementById("item-status-box").innerHTML = `<div style="text-align:center; margin-top:10px;"><img src="${url}" style="width:200px; height:200px; border-radius:12px;" onclick="window.open('${url}')" /></div>`; 
-            document.getElementById("actions").innerHTML = ""; 
-            document.getElementById("booking-section").classList.add("hidden"); 
-        }
+        
         
         async function loadBookings(code) { 
             const list = document.getElementById("bookings-list"); 
@@ -1839,7 +1795,7 @@
             try { await api("/api/comments", { method: "POST", body: JSON.stringify({ code: currentItem.code, text }) }); document.getElementById("comment-text").value = ""; loadComments(currentItem.code); } catch (e) { notify(e.message); } 
         }
         
-        async function showAddForm() { try { const res = await api("/api/next_code"); document.getElementById("add-code").value = res.code; } catch (e) {} toggleFields(); showScreen("screen-add"); }
+        
         function toggleFields() { const c=$("add-kind").value==="consumable"; $("consumable-fields").classList.toggle("hidden",!c); $("equipment-fields").classList.toggle("hidden",c); }
         
         function showAddForm() { openAddItemModal(); }
@@ -1948,26 +1904,7 @@
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
-        async function showHistory() { 
-            updateNavActive("nav-history"); const list = document.getElementById("history-list"); showScreen("screen-history"); list.innerHTML = "<p>Загрузка...</p>"; 
-            try { 
-                const logs = await api("/api/history"); 
-                list.innerHTML = logs.length ? logs.map(l => {
-                    let text = "";
-                    if (l.type === 'checkout') {
-                        if (l.taken_for) text = `📤 <b>Выдал:</b> ${escapeOwnerText(l.user_name)} <b>Кому:</b> ${escapeOwnerText(l.taken_for)}`;
-                        else text = `📤 <b>Взял:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'return') {
-                        text = `📥 <b>Вернул:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'move') {
-                        text = `📦 <b>Переместил:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else {
-                        text = `📉 <b>Списал:</b> ${escapeOwnerText(l.user_name)}`;
-                    }
-                    return `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${text} (${escapeOwnerText(l.name)}, ${l.quantity} шт)</div></div>`;
-                }).join("") : "<p>История пуста</p>"; 
-            } catch (e) { list.innerHTML = `<p style="color:red">${escapeOwnerText(e.message)}</p>`; } 
-        }
+        
         
         async function downloadFile(url, filename) {
             const fullUrl = url;
@@ -2119,6 +2056,7 @@
 
         $('qr-preview-code').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copyText($('add-code').value)}});
 
+        installV18();
         (async () => { await init(); })();
     </script>
 </body>

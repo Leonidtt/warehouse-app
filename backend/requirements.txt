@@ -8,3 +8,5 @@ gspread
 google-auth
 pandas
 openpyxl
+
+matplotlib==3.10.7
