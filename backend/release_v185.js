@@ -3,6 +3,9 @@ function catalog185(item){
   const category=String(item.category||'').toLowerCase(), name=String(item.name||'').toLowerCase(), body=String(item.kit_body||'').toLowerCase();
   const meaningful=v=>!['','-','—','нет','none','0','n/a','без'].includes(String(v||'').trim().toLowerCase());
   const text=(meaningful(body)?body:name).replace(/[αа]/g,'a').replace(/[–—]/g,'-');
+  const combined=category+' '+name, dnp=/\bdnp\b|(?:ds[-\s]*)?rx[-\s]?1(?:hs)?\b/i.test(combined), other=/epson|selphy|canon|mitsubishi|hiti|fujifilm|kodak|sinfonia|hp\b|brother/i.test(combined);
+  if(item.kind==='consumable'&&(dnp||/фотобумаг|photo\s*paper|термобумаг|красящ.*лент/i.test(combined)&&!other))return 17;
+  if(item.kind!=='consumable'&&(dnp||/принтер|printer/i.test(combined)&&!other))return 16;
   const camera=item.kind!=='consumable'&&(meaningful(body)||/фотокомплект|фотоаппарат|камер/.test(category)||/фотокомплект|фотоаппарат|камера|eos|sony\s*a[0-9]|nikon\s*z[0-9]/i.test(name));
   if(camera){
     if(/\br6\b/.test(text)&&! /\br6\s*(mark\s*ii|mkii|ii|2)\b/.test(text))return 0;
@@ -25,7 +28,7 @@ function catalog185(item){
 }
 function catalogTile185(item){
   const n=document.createElement('span'), idx=catalog185(item);
-  n.className='r185-catalog';n.style.backgroundPosition=`${(idx%4)*100/3}% ${Math.floor(idx/4)*100/3}%`;
+  n.className='r185-catalog'+(idx>=16?' r1851-dnp':'');n.style.backgroundPosition=idx>=16?`${(idx-16)*100}% 0%`:`${(idx%4)*100/3}% ${Math.floor(idx/4)*100/3}%`;
   n.setAttribute('role','img');n.setAttribute('aria-label','Иллюстрация по модели или типу товара');return n;
 }
 function openPhoto185(item,original){
@@ -63,8 +66,32 @@ async function showBlocked185(){
   for(const u of rows){const c=card17(b,u.full_name||('Telegram ID '+u.tg_id),'ID '+u.tg_id+(u.username?' · @'+u.username:''));btn17(c,'Разблокировать',async()=>{if(await block185(u.tg_id,false,u.full_name||'Telegram ID')){o.remove();await loadUsers();showBlocked185()}},'secondary')}
 }
 function installRelease185(){
-  const footer=[...$('screen-settings').querySelectorAll('.v18-muted')].find(n=>n.textContent.includes('Склад ·'));if(footer)footer.textContent='Склад · Бета v18.5';
+  const footer=[...$('screen-settings').querySelectorAll('.v18-muted')].find(n=>n.textContent.includes('Склад ·'));if(footer)footer.textContent='Склад · Бета v18.5.1';
+  installRooms1851();
   const oldApi=api;let revoked=false;
   api=async(...args)=>{try{const result=await oldApi(...args);if(/\/api\/items\/[^/]+(?:\/photo|\/passport)?$/.test(args[0])&&['POST','PUT','PATCH'].includes(args[1]?.method))document.dispatchEvent(new Event('warehouse-photo-changed'));return result}catch(e){if((e.message==='Доступ к приложению заблокирован владельцем.'||e.message==='Войдите на сайт заново'||e.message==='Срок авторизации истёк. Откройте приложение заново.')&&currentUser&&!revoked){revoked=true;clearInterval(autoRefreshInterval);currentUser=null;currentItem=null;allItems=[];document.querySelectorAll('.modal-overlay').forEach(n=>n.remove());document.querySelector('.bottom-nav')?.classList.add('hidden');showScreen('screen-login');$('screen-login').querySelector('.login-card').textContent=e.message;location.reload()}throw e}};
   const oldToast=showToast;showToast=(message,type='success')=>{try{tg.HapticFeedback?.notificationOccurred(type==='error'?'error':'success')}catch(e){}return oldToast(message,type)};
+}
+
+/* v18.5.1: room counts come from the current server response, not allItems. */
+const r1851IconPaths={workshop:'<path d="M14.7 6.3a5 5 0 0 0-6.6 6.6L3 18l3 3 5.1-5.1a5 5 0 0 0 6.6-6.6l-3.5 3.5-3-3 3.5-3.5z"/>',storage:'<path d="m3 8 9-5 9 5v13H3zM7 21V11h10v10M7 15h10M7 18h10"/>',office:'<path d="M5 21V4h14v17M3 21h18M9 8h1m4 0h1M9 12h1m4 0h1M10 21v-5h4v5"/>',arrow:'<path d="m9 18 6-6-6-6"/>',plus:'<path d="M12 5v14M5 12h14"/>'};
+function icon1851(kind){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('class','r1851-symbol');svg.setAttribute('aria-hidden','true');svg.innerHTML=r1851IconPaths[kind]||r1851IconPaths.storage;return svg}
+function roomCard1851(room){
+  const make=(tag,cls,txt)=>{const n=document.createElement(tag);n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
+  const kind=['workshop','storage','office'].includes(room.type)?room.type:/мастер/i.test(room.name)?'workshop':/офис/i.test(room.name)?'office':'storage';
+  const card=make('article','card r1851-room-card');card.dataset.kind=kind;card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',room.name);
+  const header=make('div','r1851-room-head'),symbol=make('span','r1851-room-icon'),arrow=make('span','r1851-room-arrow');symbol.append(icon1851(kind));arrow.append(icon1851('arrow'));header.append(symbol,make('div','r1851-room-title',room.name),arrow);
+  const metrics=make('div','r1851-room-metrics');for(const [label,key,unit] of [['Оборудование','equipment_count',''],['Расходники','consumable_count','шт.']]){const metric=make('div','r1851-room-metric'),value=make('div','r1851-room-value');value.append(make('strong','',Number.isFinite(room[key])?room[key].toLocaleString('ru-RU'):'—'));if(unit)value.append(make('span','r1851-room-unit',unit));metric.append(make('div','r1851-room-metric-label',label),value);metrics.append(metric)}
+  card.append(header,metrics);card.onclick=()=>openRoom(room.id,room.name);card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click()}};return card;
+}
+function installRooms1851(){
+  document.querySelectorAll('.sticky-header').forEach(h=>{if(h.querySelector('.v18-header-left')&&h.querySelector('.v18-header-right'))h.classList.add('r1851-balanced')});
+  const detail=$('screen-room-view'),select=detail.querySelector('button[onclick="selectAllInRoom()"]');if(select){const row=document.createElement('div');row.className='r1851-room-actions';detail.querySelector('.sticky-header').after(row);row.append(select)}
+  const section=$('screen-rooms'),list=$('rooms-list'),add=$('add-item-btn');section.querySelector('.sticky-title').textContent='Склад';add.parentElement.classList.add('r1851-add-wrap');add.replaceChildren(icon1851('plus'),document.createTextNode('Добавить товар'));const label=document.createElement('h2');label.className='r1851-rooms-label';label.textContent='ПОМЕЩЕНИЯ';list.before(label);
+  let request=0;showRooms=async()=>{
+    if(currentUser?.role!=='admin')return;
+    const id=++request;showScreen('screen-rooms');updateNavActive('nav-rooms');$('batch-actions').style.display='none';
+    if(!list.querySelector('.r1851-room-card')){const skeleton=document.createElement('div');skeleton.className='card';skeleton.textContent='Загрузка помещений…';list.replaceChildren(skeleton)}
+    try{const rooms=await api('/api/locations_view');if(id!==request||currentUser?.role!=='admin')return;list.replaceChildren(...rooms.map(roomCard1851));if(!rooms.length)list.textContent='Нет помещений'}catch(e){if(id!==request)return;if(list.querySelector('.r1851-room-card'))notify(e.message||'Не удалось обновить помещения');else list.textContent=e.message||'Не удалось загрузить помещения'}
+  };
 }

@@ -52,7 +52,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад — Бета", version="18.5")
+app = FastAPI(title="Склад — Бета", version="18.5.1")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -592,11 +592,15 @@ def list_locations(x_init_data: Optional[str] = Header(None)):
 @app.get("/api/locations_view")
 def locations_view(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    conn = get_conn(x_init_data); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
-    for loc in locations:
-        count = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS c FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (loc["id"],)).fetchone()["c"]
-        result.append({"id": loc["id"], "name": loc["name"], "count": count})
-    conn.close(); return result
+    with contextmanager_session() as conn:
+        rows = conn.execute("""SELECT l.id, l.name, l.type,
+            COALESCE(SUM(CASE WHEN i.code IS NOT NULL THEN s.quantity ELSE 0 END),0) AS count,
+            COALESCE(SUM(CASE WHEN i.kind='equipment' THEN s.quantity ELSE 0 END),0) AS equipment_count,
+            COALESCE(SUM(CASE WHEN i.kind='consumable' THEN s.quantity ELSE 0 END),0) AS consumable_count
+            FROM locations l LEFT JOIN stock s ON s.location_id=l.id AND s.quantity>0
+            LEFT JOIN items i ON i.code=s.item_code AND i.is_archived=0
+            GROUP BY l.id,l.name,l.type ORDER BY l.id""").fetchall()
+        return [dict(row) for row in rows]
 
 @app.get("/api/room_detail/{location_id}")
 def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):

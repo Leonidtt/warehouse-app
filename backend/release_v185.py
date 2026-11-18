@@ -22,7 +22,8 @@ def register_185(app, check_owner, session, transaction, audit, owner_id):
     directory = Path(__file__).resolve().parent
     assets = {'/release-v185.css': ('release_v185.css', 'text/css'),
               '/release-v185.js': ('release_v185.js', 'text/javascript'),
-              '/catalog-v185.webp': ('catalog_v185.webp', 'image/webp')}
+              '/catalog-v185.webp': ('catalog_v185.webp', 'image/webp'),
+              '/catalog-dnp-v1851.webp': ('catalog_dnp_v1851.webp', 'image/webp')}
     for route, (filename, media) in assets.items():
         def endpoint(filename=filename, media=media):
             return FileResponse(directory / filename, media_type=media,
