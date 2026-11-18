@@ -65,7 +65,7 @@ async function showBlocked185(){
   for(const u of rows){const c=card17(b,u.full_name||('Telegram ID '+u.tg_id),'ID '+u.tg_id+(u.username?' · @'+u.username:''));btn17(c,'Разблокировать',async()=>{if(await block185(u.tg_id,false,u.full_name||'Telegram ID')){o.remove();await loadUsers();showBlocked185()}},'secondary')}
 }
 function installRelease185(){
-  const footer=[...$('screen-settings').querySelectorAll('.v18-muted')].find(n=>n.textContent.includes('Склад ·'));if(footer)footer.textContent='Склад · v18.5.2';
+  const footer=[...$('screen-settings').querySelectorAll('.v18-muted')].find(n=>n.textContent.includes('Склад ·'));if(footer)footer.textContent='Склад · v18.5.3';
   installRooms1851();
   const oldApi=api;let revoked=false;
   api=async(...args)=>{try{const result=await oldApi(...args);if(/\/api\/items\/[^/]+(?:\/photo|\/passport)?$/.test(args[0])&&['POST','PUT','PATCH'].includes(args[1]?.method))document.dispatchEvent(new Event('warehouse-photo-changed'));return result}catch(e){if((e.message==='Доступ к приложению заблокирован владельцем.'||e.message==='Войдите на сайт заново'||e.message==='Срок авторизации истёк. Откройте приложение заново.')&&currentUser&&!revoked){revoked=true;clearInterval(autoRefreshInterval);currentUser=null;currentItem=null;allItems=[];document.querySelectorAll('.modal-overlay').forEach(n=>n.remove());document.querySelector('.bottom-nav')?.classList.add('hidden');showScreen('screen-login');$('screen-login').querySelector('.login-card').textContent=e.message;location.reload()}throw e}};
