@@ -31,6 +31,7 @@ from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import effective_user, register_184
+from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 
@@ -51,7 +52,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад — Бета", version="18.4")
+app = FastAPI(title="Склад — Бета", version="18.5")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -184,6 +185,7 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
     conn.commit(); conn.close()
 
 # Создаем папку /data перед инициализацией баз
@@ -193,7 +195,7 @@ if not os.path.exists("/data"):
 
 BETA_FRESH_DB = not os.path.isfile(DB_PATH)
 if not BETA_FRESH_DB:
-    prepare_migration(DB_PATH, "18.4")
+    prepare_migration(DB_PATH, "18.5")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -226,6 +228,7 @@ def real_user(x_init_data: Optional[str]):
         if x_init_data.startswith("web:"):
             with contextmanager_session() as session_conn:
                 session = session_conn.execute("SELECT u.* FROM web_sessions s JOIN users u ON u.tg_id=s.user_id WHERE s.digest=? AND s.expires>?", (web_digest(x_init_data[4:]), int(time.time()))).fetchone()
+                if session: deny_blocked(session_conn, session["tg_id"], MAIN_ADMIN_ID)
             if not session: raise HTTPException(401,"Войдите на сайт заново")
             user=dict(session); user["is_owner"]=user["tg_id"]==MAIN_ADMIN_ID
             if user["is_owner"]: user["role"]="admin"
@@ -242,10 +245,14 @@ def real_user(x_init_data: Optional[str]):
     is_owner = tg_id == MAIN_ADMIN_ID
     conn = get_conn(x_init_data)
     try:
+        deny_blocked(conn, tg_id, MAIN_ADMIN_ID)
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
         if not row:
             full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
             conn.execute("INSERT OR IGNORE INTO users (tg_id, first_name, username, full_name, role, is_registered) VALUES (?, ?, ?, ?, ?, 0)", (tg_id, user.get("first_name", ""), user.get("username", ""), full_name, "admin" if is_owner else "employee"))
+        username = user.get("username", "")
+        if not isinstance(username, str): username = ""
+        conn.execute("UPDATE users SET username=? WHERE tg_id=? AND COALESCE(username,'')<>?", (username, tg_id, username))
         if is_owner:
             conn.execute("UPDATE users SET role = 'admin' WHERE tg_id = ? AND role IS NOT 'admin'", (tg_id,))
         conn.commit()
@@ -542,11 +549,11 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     actor = check_admin(x_init_data); conn = get_conn(x_init_data)
-    users = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall()
+    users = conn.execute("SELECT u.tg_id,u.full_name,u.role,u.username,EXISTS(SELECT 1 FROM blocked_telegram b WHERE b.tg_id=u.tg_id) AS blocked FROM users u ORDER BY u.role DESC,u.full_name COLLATE NOCASE").fetchall()
     result = []
     for u in users:
         held = conn.execute("SELECT item_code FROM checkouts WHERE user_id = ? AND returned_at IS NULL", (u["tg_id"],)).fetchall()
-        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": ("" if u["tg_id"] == MAIN_ADMIN_ID and not actor["is_owner"] else u["role"]), "is_owner": actor["is_owner"] and u["tg_id"] == MAIN_ADMIN_ID, "held_items": [h["item_code"] for h in held]})
+        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": ("" if u["tg_id"] == MAIN_ADMIN_ID and not actor["is_owner"] else u["role"]), "is_owner": actor["is_owner"] and u["tg_id"] == MAIN_ADMIN_ID, "held_items": [h["item_code"] for h in held], "username": (u["username"] or "") if u["tg_id"] != MAIN_ADMIN_ID or actor["is_owner"] else "", "blocked": bool(u["blocked"])})
     conn.close(); return result
 
 @app.post("/api/users/{tg_id}/update")
@@ -1313,6 +1320,7 @@ def web_login(req: WebLogin):
     with transaction() as conn:
         row=conn.execute("SELECT c.user_id FROM web_codes c JOIN users u ON u.tg_id=c.user_id WHERE digest=? AND expires>?",(web_digest(code),int(time.time()))).fetchone()
         if not row: raise HTTPException(401,"Код неверный или истёк")
+        deny_blocked(conn, row[0], MAIN_ADMIN_ID)
         conn.execute("DELETE FROM web_codes WHERE digest=?",(web_digest(code),))
         conn.execute("DELETE FROM web_sessions WHERE expires<=?",(int(time.time()),))
         conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+43200))
@@ -1406,8 +1414,9 @@ register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
 register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
+register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
-    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.4')")
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5')")
     if BETA_FRESH_DB and not conn.execute("SELECT 1 FROM items LIMIT 1").fetchone():
         loc=conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()[0]
         for code,name,kind,category,qty,minimum,price,body,lens,flash in [("DEMO-CAM-1","Тестовый фотокомплект","equipment","Фотокомплекты",1,0,85000,"Canon EOS R6","Canon RF 24–70mm","Godox V1"),("DEMO-CAM-2","Тестовый фотокомплект 2","equipment","Фотокомплекты",1,0,110000,"Canon EOS R5","Canon RF 24–105mm","Godox V860 III"),("DEMO-PRT-1","Тестовый принтер","equipment","Принтеры",1,0,38000,"","",""),("DEMO-AA-1","Тестовые батарейки AA","consumable","Расходники",4,10,80,"","",""),("DEMO-PAP-1","Тестовая фотобумага","consumable","Расходники",20,5,300,"","","")]:

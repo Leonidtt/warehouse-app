@@ -187,6 +187,8 @@
     <script src="/release-v183.js"></script>
     <link rel="stylesheet" href="/release-v184.css">
     <script src="/release-v184.js"></script>
+    <link rel="stylesheet" href="/release-v185.css">
+    <script src="/release-v185.js"></script>
 </head>
 <body>
 
@@ -1064,35 +1066,37 @@
             try {
                 const users = await api("/api/users");
                 list.replaceChildren();
+                if(currentUser.is_owner){const block=document.createElement('button');block.className='secondary r184-admin-dot r185-block-entry';block.textContent='Блокировка по Telegram ID';block.onclick=()=>showBlocked185().catch(e=>notify(e.message));list.append(block);}
                 for (const u of users) {
                     const isAdmin = u.role === 'admin';
                     const isBoss = u.role === 'boss';
                     const isGuest = u.role === 'guest';
                     const isOwner = u.is_owner === true;
                     const card = document.createElement('div');
-                    card.className = 'card';
-                    card.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;';
-                    const info = document.createElement('div'); info.style.cursor="pointer"; info.addEventListener("click",()=>userCard17(u));
+                    card.className = 'card r185-user-card';
+                    const info = document.createElement('div'); info.className='r185-user-info'; info.style.cursor="pointer"; info.addEventListener("click",()=>userCard17(u));
                     const name = document.createElement('b'); name.textContent = u.full_name || '—'; info.appendChild(name);
                     const label = document.createElement('span');
-                    label.style.cssText = 'font-size:10px; color:var(--text-muted);';
-                    label.textContent = currentUser.is_owner ? (isOwner?' (Главный администратор)':isGuest?' (Гость)':isAdmin?' (Администратор)':isBoss?' (Босс)':' (Сотрудник)') : ''; if(!u.role) {card.append(info);list.appendChild(card);continue;}
+                    label.className='r185-user-role';
+                    label.textContent = currentUser.is_owner ? (isOwner?' (Главный администратор)':isGuest?' (Гость)':isAdmin?' (Администратор)':isBoss?' (Босс)':' (Сотрудник)') : ''; if(!u.role) {card.append(info,telegramNick185(u));list.appendChild(card);continue;}
                     info.appendChild(label);
+                    if(u.blocked){const blocked=document.createElement('span');blocked.className='r185-blocked';blocked.textContent='Заблокирован';info.append(blocked);}
                     if (u.held_items && u.held_items.length) {
                         const held = document.createElement('div');
                         held.style.cssText = 'font-size:11px; color:var(--warning); margin-top:4px;';
                         held.textContent = 'Держит: ' + u.held_items.join(', '); info.appendChild(held);
                     }
-                    const controls = document.createElement('div'); controls.style.cssText = 'display:flex; gap:6px; align-items:center;';
+                    const controls = document.createElement('div'); controls.className='r185-user-controls';
                     const addButton = (label, cls, action) => {
                         const button = document.createElement('button'); button.className = cls; button.textContent = label;
-                        button.style.cssText = 'width:auto; padding:8px 12px; margin:0; font-size:12px;';
+                        button.classList.add('r184-admin-dot');
                         button.addEventListener('click', action); controls.appendChild(button);
                     };
                     if (currentUser.is_owner && !isGuest && !isOwner) addButton('Роль', 'secondary', () => {const {o,b}=overlay17('Роль · '+u.full_name);for(const [v,l] of [['employee','Сотрудник'],['boss','Босс'],['admin','Администратор']])btn17(b,l,async()=>{if(!confirm('Назначить роль: '+l+'?'))return;await api('/api/users/'+u.tg_id+'/update',{method:'POST',body:JSON.stringify({full_name:u.full_name,role:v})});o.remove();loadUsers()})});
                     if (currentUser.is_owner || (!isOwner && !isAdmin && !isBoss)) addButton('✏️', 'secondary', () => editUserNameModal(u.tg_id, u.full_name, u.role));
                     if (currentUser.role === 'admin' && ((!isAdmin && !isBoss) || currentUser.is_owner) && !isOwner) addButton('🗑', 'danger', () => deleteUser(u.tg_id));
-                    card.append(info, controls); list.appendChild(card);
+                    if(currentUser.is_owner && !isOwner && !isGuest && u.tg_id>0) addButton(u.blocked?'Разблокировать':'Блокировать',u.blocked?'secondary':'danger',async()=>{try{if(await block185(u.tg_id,!u.blocked,u.full_name||u.username||'Пользователь'))loadUsers()}catch(e){notify(e.message)}});
+                    card.append(info, telegramNick185(u), controls); list.appendChild(card);
                 }
             } catch (e) { list.textContent = e.message; }
         }
@@ -2077,6 +2081,7 @@
         installRelease182();
         installRelease183();
         installRelease184();
+        installRelease185();
         (async () => { await init(); })();
     </script>
 </body>
