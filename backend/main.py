@@ -30,6 +30,8 @@ from contextlib import contextmanager
 from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
+from release_v184 import effective_user, register_184
+from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 
@@ -50,7 +52,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.3")
+app = FastAPI(title="Склад", version="18.5.2")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -182,6 +184,8 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS inventory_runs (id INTEGER PRIMARY KEY, location_id INTEGER NOT NULL, user_id INTEGER NOT NULL, report TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
     conn.commit(); conn.close()
 
 # Создаем папку /data перед инициализацией баз
@@ -189,7 +193,7 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-prepare_migration(DB_PATH, "18.3")
+prepare_migration(DB_PATH, "18.5.2")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -214,14 +218,15 @@ def verify_init_data(init_data: str, token: str) -> dict:
     if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
     return json.loads(user_json)
 
-def get_user(x_init_data: Optional[str]):
+def real_user(x_init_data: Optional[str]):
     if not x_init_data:
         raise HTTPException(status_code=401, detail="Нет авторизации")
-    # ID берется только из данных, подписанных токеном Беты.
+    # ID берется только из данных, подписанных токеном Основы.
     try:
         if x_init_data.startswith("web:"):
             with contextmanager_session() as session_conn:
                 session = session_conn.execute("SELECT u.* FROM web_sessions s JOIN users u ON u.tg_id=s.user_id WHERE s.digest=? AND s.expires>?", (web_digest(x_init_data[4:]), int(time.time()))).fetchone()
+                if session: deny_blocked(session_conn, session["tg_id"], MAIN_ADMIN_ID)
             if not session: raise HTTPException(401,"Войдите на сайт заново")
             user=dict(session); user["is_owner"]=user["tg_id"]==MAIN_ADMIN_ID
             if user["is_owner"]: user["role"]="admin"
@@ -238,10 +243,14 @@ def get_user(x_init_data: Optional[str]):
     is_owner = tg_id == MAIN_ADMIN_ID
     conn = get_conn(x_init_data)
     try:
+        deny_blocked(conn, tg_id, MAIN_ADMIN_ID)
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
         if not row:
             full_name = f"{user.get('last_name', '')} {user.get('first_name', '')}".strip()
             conn.execute("INSERT OR IGNORE INTO users (tg_id, first_name, username, full_name, role, is_registered) VALUES (?, ?, ?, ?, ?, 0)", (tg_id, user.get("first_name", ""), user.get("username", ""), full_name, "admin" if is_owner else "employee"))
+        username = user.get("username", "")
+        if not isinstance(username, str): username = ""
+        conn.execute("UPDATE users SET username=? WHERE tg_id=? AND COALESCE(username,'')<>?", (username, tg_id, username))
         if is_owner:
             conn.execute("UPDATE users SET role = 'admin' WHERE tg_id = ? AND role IS NOT 'admin'", (tg_id,))
         conn.commit()
@@ -252,6 +261,9 @@ def get_user(x_init_data: Optional[str]):
         return user_dict
     finally:
         conn.close()
+
+def get_user(x_init_data: Optional[str]):
+    return effective_user(real_user(x_init_data), x_init_data, web_digest, contextmanager_session)
 
 def check_admin(x_init_data: Optional[str]):
     user = get_user(x_init_data)
@@ -429,7 +441,7 @@ def my_items(x_init_data: Optional[str] = Header(None)):
 
 @app.get("/api/daily_report")
 def get_daily_report(x_init_data: Optional[str] = Header(None)):
-    get_user(x_init_data); conn = get_conn(x_init_data); today = datetime.now().strftime("%Y-%m-%d")
+    check_admin(x_init_data); conn = get_conn(x_init_data); today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute("SELECT report_text FROM daily_reports WHERE date = ?", (today,)).fetchone()
     if not row:
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -535,22 +547,22 @@ def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
     actor = check_admin(x_init_data); conn = get_conn(x_init_data)
-    users = conn.execute("SELECT tg_id, full_name, role FROM users ORDER BY role DESC").fetchall()
+    users = conn.execute("SELECT u.tg_id,u.full_name,u.role,u.username,EXISTS(SELECT 1 FROM blocked_telegram b WHERE b.tg_id=u.tg_id) AS blocked FROM users u ORDER BY u.role DESC,u.full_name COLLATE NOCASE").fetchall()
     result = []
     for u in users:
         held = conn.execute("SELECT item_code FROM checkouts WHERE user_id = ? AND returned_at IS NULL", (u["tg_id"],)).fetchall()
-        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": ("" if u["tg_id"] == MAIN_ADMIN_ID and not actor["is_owner"] else u["role"]), "is_owner": actor["is_owner"] and u["tg_id"] == MAIN_ADMIN_ID, "held_items": [h["item_code"] for h in held]})
+        result.append({"tg_id": u["tg_id"], "full_name": u["full_name"], "role": ("" if u["tg_id"] == MAIN_ADMIN_ID and not actor["is_owner"] else u["role"]), "is_owner": actor["is_owner"] and u["tg_id"] == MAIN_ADMIN_ID, "held_items": [h["item_code"] for h in held], "username": (u["username"] or "") if u["tg_id"] != MAIN_ADMIN_ID or actor["is_owner"] else "", "blocked": bool(u["blocked"])})
     conn.close(); return result
 
 @app.post("/api/users/{tg_id}/update")
 def update_user(tg_id: int, req: UserUpdate, x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
-    if req.role not in ("admin","employee","guest") or not req.full_name.strip(): raise HTTPException(400,"Некорректные данные пользователя")
+    if req.role not in ("admin","employee","guest","boss") or not req.full_name.strip(): raise HTTPException(400,"Некорректные данные пользователя")
     with transaction() as conn:
         target=conn.execute("SELECT role FROM users WHERE tg_id=?",(tg_id,)).fetchone()
         if not target: raise HTTPException(404,"Пользователь не найден")
         if tg_id==MAIN_ADMIN_ID and (not actor["is_owner"] or req.role!="admin"): raise HTTPException(403,"Главный администратор защищён")
-        if not actor["is_owner"] and (target["role"]=="admin" or req.role=="admin"): raise HTTPException(403,"Только главный администратор управляет администраторами")
+        if not actor["is_owner"] and (target["role"] in ("admin","boss") or req.role in ("admin","boss")): raise HTTPException(403,"Только главный администратор управляет администраторами")
         if (tg_id<0)!=(req.role=="guest"): raise HTTPException(400,"Нельзя изменить тип аккаунта")
         conn.execute("UPDATE users SET full_name=?,role=? WHERE tg_id=?",(req.full_name.strip(),req.role,tg_id))
         audit(conn,actor,"Изменение пользователя",tg_id)
@@ -562,7 +574,7 @@ def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
     with transaction() as conn:
         target=conn.execute("SELECT role FROM users WHERE tg_id=?",(tg_id,)).fetchone()
         if not target: raise HTTPException(404,"Пользователь не найден")
-        if tg_id==MAIN_ADMIN_ID or (target["role"]=="admin" and not actor["is_owner"]): raise HTTPException(403,"Нельзя удалить этого администратора")
+        if tg_id==MAIN_ADMIN_ID or (target["role"] in ("admin","boss") and not actor["is_owner"]): raise HTTPException(403,"Нельзя удалить этого администратора")
         if conn.execute("SELECT 1 FROM checkouts WHERE (user_id=? OR giver_id=?) AND returned_at IS NULL",(tg_id,tg_id)).fetchone(): raise HTTPException(409,"Сначала верните оборудование")
         conn.execute("DELETE FROM web_sessions WHERE user_id=?",(tg_id,))
         conn.execute("DELETE FROM web_codes WHERE user_id=?",(tg_id,))
@@ -578,11 +590,15 @@ def list_locations(x_init_data: Optional[str] = Header(None)):
 @app.get("/api/locations_view")
 def locations_view(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    conn = get_conn(x_init_data); locations = conn.execute("SELECT id, name FROM locations ORDER BY id").fetchall(); result = []
-    for loc in locations:
-        count = conn.execute("SELECT COALESCE(SUM(s.quantity), 0) AS c FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (loc["id"],)).fetchone()["c"]
-        result.append({"id": loc["id"], "name": loc["name"], "count": count})
-    conn.close(); return result
+    with contextmanager_session() as conn:
+        rows = conn.execute("""SELECT l.id, l.name, l.type,
+            COALESCE(SUM(CASE WHEN i.code IS NOT NULL THEN s.quantity ELSE 0 END),0) AS count,
+            COALESCE(SUM(CASE WHEN i.kind='equipment' THEN s.quantity ELSE 0 END),0) AS equipment_count,
+            COALESCE(SUM(CASE WHEN i.kind='consumable' THEN s.quantity ELSE 0 END),0) AS consumable_count
+            FROM locations l LEFT JOIN stock s ON s.location_id=l.id AND s.quantity>0
+            LEFT JOIN items i ON i.code=s.item_code AND i.is_archived=0
+            GROUP BY l.id,l.name,l.type ORDER BY l.id""").fetchall()
+        return [dict(row) for row in rows]
 
 @app.get("/api/room_detail/{location_id}")
 def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
@@ -685,8 +701,8 @@ def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Hea
 
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
-    is_admin = get_user(x_init_data)["role"] == "admin"
-    conn = get_conn(x_init_data); items = conn.execute("SELECT i.code,i.name,i.kind,i.min_stock,i.needs_repair,i.kit_body,i.kit_lens,i.kit_flash,i.kit_acc,i.kit_add,i.budget_tag,i.serial_number,i.buyout_status,i.category,i.created_at,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add,COALESCE(m.site,'') AS site,COALESCE(m.vessel,'') AS vessel,COALESCE(m.unit,'шт.') AS unit FROM items i LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 ORDER BY i.name").fetchall(); result = []
+    is_admin = get_user(x_init_data)["role"] in ("admin","boss")
+    conn = get_conn(x_init_data); items = conn.execute("SELECT i.code,i.name,i.kind,i.min_stock,i.needs_repair,i.kit_body,i.kit_lens,i.kit_flash,i.kit_acc,i.kit_add,i.budget_tag,i.serial_number,i.buyout_status,i.category,i.created_at,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add,CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo,COALESCE(m.site,'') AS site,COALESCE(m.vessel,'') AS vessel,COALESCE(m.unit,'шт.') AS unit FROM items i LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 ORDER BY i.name").fetchall(); result = []
     stock_map={}; holder_map={}
     for row in conn.execute("SELECT s.item_code,s.location_id,l.name AS location_name,s.quantity FROM stock s JOIN locations l ON l.id=s.location_id WHERE s.quantity>0"):
         v=dict(row); key=v.pop("item_code"); stock_map.setdefault(key,[]).append(v)
@@ -700,7 +716,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         
         item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "kit_acc": it["kit_acc"], "kit_add": it["kit_add"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         
-        item_data.update({"site":it["site"],"vessel":it["vessel"],"unit":it["unit"]})
+        item_data.update({"has_photo":bool(it["has_photo"]),"site":it["site"],"vessel":it["vessel"],"unit":it["unit"]})
         if is_admin: 
             item_data["price"] = it["price"]
             item_data["price_body"] = it["price_body"]
@@ -714,7 +730,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
 
 @app.get("/api/items/{code}")
 def get_item(code: str, x_init_data: Optional[str] = Header(None)):
-    is_admin = get_user(x_init_data)["role"] == "admin"
+    is_admin = get_user(x_init_data)["role"] in ("admin","boss")
     conn = get_conn(x_init_data); item = conn.execute("SELECT * FROM items WHERE code = ? AND is_archived=0", (code,)).fetchone()
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
@@ -1107,7 +1123,7 @@ def dashboard(x_init_data: Optional[str] = Header(None)):
         value=price*(qty+held); money['total']+=value
         cat=r['category'] or 'Без категории'; by_cat[cat]=by_cat.get(cat,0)+value
     result={'counts':counts}
-    if user['role']=='admin':
+    if user['role'] in ('admin','boss'):
         with contextmanager_session() as conn:
             money['repair_cost_30_days']=conn.execute("SELECT COALESCE(SUM(cost),0) FROM repair_records WHERE finished_at>=datetime('now','-30 days')").fetchone()[0]
             money['receipt_cost_30_days']=conn.execute("SELECT COALESCE(SUM(quantity*unit_price),0) FROM receipts WHERE created_at>=datetime('now','-30 days')").fetchone()[0]
@@ -1178,7 +1194,7 @@ def item_passport(code: str,x_init_data: Optional[str]=Header(None)):
         item=active_item(conn,code)
         meta=conn.execute('SELECT unit,supplier,site,vessel,notes FROM item_metadata WHERE code=?',(code,)).fetchone()
         result=dict(meta) if meta else dict(ItemMetadata())
-        if user['role']!='admin': result.pop('supplier',None)
+        if user['role'] not in ('admin','boss'): result.pop('supplier',None)
         result['has_photo']=bool(item['photo'])
     return result
 
@@ -1215,7 +1231,7 @@ def repair_history(code: str,x_init_data: Optional[str]=Header(None)):
     with transaction() as conn:
         active_item(conn,code)
         rows=[dict(r) for r in conn.execute('SELECT r.*,EXISTS(SELECT 1 FROM repair_photos p WHERE p.repair_id=r.id) AS has_photo FROM repair_records r WHERE code=? ORDER BY r.id DESC',(code,))]
-    if user['role']!='admin':
+    if user['role'] not in ('admin','boss'):
         for r in rows: r.pop('cost',None)
     return rows
 
@@ -1245,7 +1261,7 @@ def finish_repair(code: str,req: RepairDetails,x_init_data: Optional[str]=Header
 
 @app.get('/api/purchases')
 def purchase_suggestions(x_init_data: Optional[str]=Header(None)):
-    check_admin(x_init_data)
+    if get_user(x_init_data)['role'] not in ('admin','boss'): raise HTTPException(403,'Нет доступа')
     with transaction() as conn:
         return [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.min_stock,i.price,COALESCE(s.qty,0) AS remaining,COALESCE(w.qty,0) AS used_30_days,COALESCE(m.unit,'шт.') AS unit,COALESCE(m.supplier,'') AS supplier, MAX(0,i.min_stock+1-COALESCE(s.qty,0)) AS suggested_quantity FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM writeoffs WHERE created_at>=datetime('now','-30 days') GROUP BY item_code) w ON w.item_code=i.code LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 AND i.kind='consumable' AND i.min_stock>0 AND COALESCE(s.qty,0)<=i.min_stock ORDER BY i.name""")]
 
@@ -1306,6 +1322,7 @@ def web_login(req: WebLogin):
     with transaction() as conn:
         row=conn.execute("SELECT c.user_id FROM web_codes c JOIN users u ON u.tg_id=c.user_id WHERE digest=? AND expires>?",(web_digest(code),int(time.time()))).fetchone()
         if not row: raise HTTPException(401,"Код неверный или истёк")
+        deny_blocked(conn, row[0], MAIN_ADMIN_ID)
         conn.execute("DELETE FROM web_codes WHERE digest=?",(web_digest(code),))
         conn.execute("DELETE FROM web_sessions WHERE expires<=?",(int(time.time()),))
         conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+43200))
@@ -1395,11 +1412,14 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
     return StreamingResponse(io.BytesIO(base64.b64decode(row[0])),media_type='image/jpeg')
 
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
-register_owner_backup(app, DB_PATH, BOT_TOKEN)
+register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
 register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
+register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
+register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
-    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.3')")
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.2')")
+
 
 @app.get("/")
 @app.get("/index.html")

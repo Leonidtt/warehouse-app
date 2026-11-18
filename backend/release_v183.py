@@ -50,7 +50,7 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
     @app.post('/api/items/{code}/return-consumable')
     def return_consumable(code: str, req: ConsumableReturn, x_init_data: Optional[str] = Header(None)):
         actor = get_user(x_init_data)
-        if not actor.get('is_registered') or actor['role'] not in ('admin','employee'):
+        if not actor.get('is_registered') or actor['role'] not in ('admin','employee','boss'):
             raise HTTPException(403,'Доступ только зарегистрированным сотрудникам')
         with transaction() as conn:
             item = active_item(conn,code)

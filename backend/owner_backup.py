@@ -73,7 +73,7 @@ def make_backup(path, target):
             if time.monotonic() > deadline:
                 raise HTTPException(503, 'База занята. Повторите позже.')
         source.backup(dest, pages=128, progress=progress, sleep=0.1)
-        for table in ('web_codes', 'web_sessions'):
+        for table in ('web_codes', 'web_sessions', 'employee_preview'):
             if dest.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                 dest.execute('DELETE FROM '+table)
         dest.commit()
@@ -88,13 +88,15 @@ def make_backup(path, target):
         raise HTTPException(413, 'База слишком большая для отправки ботом.')
 
 
-def register_owner_backup(app, path, token):
+def register_owner_backup(app, path, token, get_user):
     lock = threading.Lock()
     last_attempt = float('-inf')
 
     @app.post('/api/owner/backup')
     def send_backup(x_init_data: str = Header(default='')):
         nonlocal last_attempt
+        if not get_user(x_init_data).get("is_owner"):
+            raise HTTPException(403,"Резервная копия доступна только владельцу")
         uid = verify_owner(x_init_data, token, path)
         if not lock.acquire(blocking=False):
             raise HTTPException(429, 'Копия уже создаётся.')

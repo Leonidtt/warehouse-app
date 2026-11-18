@@ -153,7 +153,7 @@ def register_release(app, get_user, session):
 
     @app.get('/api/v18/overview')
     def overview(x_init_data: Optional[str] = Header(None)):
-        get_user(x_init_data)
+        user=get_user(x_init_data)
         with session() as conn:
             rows = conn.execute('''SELECT i.code,i.name,i.category,i.kind,i.needs_repair,i.min_stock,
                 COALESCE(s.qty,0) AS stock,COALESCE(h.qty,0) AS held,COALESCE(m.unit,'шт.') AS unit,
@@ -185,7 +185,7 @@ def register_release(app, get_user, session):
                 else:
                     target['stock'] += stock
                     target['working'] += held
-        return dict(counts=counts, categories=[dict(name=k, **v) for k,v in sorted(cats.items())], booked=booked, low=sorted(low,key=lambda r:r['name'].casefold()), daily=dict(date=yesterday, **daily))
+        return dict(counts=counts, categories=[dict(name=k, **v) for k,v in sorted(cats.items())], booked=booked, low=sorted(low,key=lambda r:r['name'].casefold()), daily=dict(date=yesterday, **daily) if user['role']=='admin' else None)
 
     with session() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS warehouse_release_meta (version TEXT PRIMARY KEY)')
