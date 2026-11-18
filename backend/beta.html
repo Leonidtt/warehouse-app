@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Склад (Бета)</title>
+    <title>Склад</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -179,8 +179,14 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/beta-v18.css">
-    <script src="/beta-v18.js"></script>
+<link rel="stylesheet" href="/warehouse-v18.css">
+    <script src="/warehouse-v18.js"></script>
+    <link rel="stylesheet" href="/release-v182.css">
+    <script src="/release-v182.js"></script>
+    <link rel="stylesheet" href="/release-v183.css">
+    <script src="/release-v183.js"></script>
+    <link rel="stylesheet" href="/release-v184.css">
+    <script src="/release-v184.js"></script>
 </head>
 <body>
 
@@ -423,7 +429,7 @@
             <div style="width: 80px;"></div>
         </div>
         
-        <div class="card settings-grid"><button class="secondary" onclick="showExtra('categories')">Категории</button><button class="secondary" onclick="showExtra('finance')">Финансы</button><button class="secondary" onclick="showExtra('purchases')">Закупки</button><button class="secondary" onclick="showExtra('archive')">Архив</button><button class="secondary owner-only hidden" onclick="showExtra('audit')">Журнал администратора</button><button class="secondary owner-only hidden" onclick="downloadFile('/api/backup','warehouse_beta_backup.db')">Резервная копия</button><button class="secondary owner-only hidden" onclick="seedDemo()">Заполнить демо-товарами</button><button class="secondary" onclick="cycleTheme()">Тема оформления</button></div><h2 style="font-size: 20px; margin-top: 24px; font-weight: 700; letter-spacing: -0.5px;">Комнаты</h2>
+        <div class="card settings-grid"><button class="secondary" onclick="showExtra('categories')">Категории</button><button class="secondary" onclick="showExtra('finance')">Финансы</button><button class="secondary" onclick="showExtra('purchases')">Закупки</button><button class="secondary" onclick="showExtra('archive')">Архив</button><button class="secondary owner-only hidden" onclick="showExtra('audit')">Журнал администратора</button><button class="secondary owner-only hidden" onclick="downloadFile('/api/backup','warehouse_beta_backup.db')">Резервная копия</button><button class="secondary" onclick="cycleTheme()">Тема оформления</button></div><h2 style="font-size: 20px; margin-top: 24px; font-weight: 700; letter-spacing: -0.5px;">Комнаты</h2>
         <div class="input-group"><input id="new-location-name" placeholder="Название новой комнаты"></div>
         <button onclick="createLocation()" class="secondary">Добавить комнату</button>
         <div id="locations-list"></div>
@@ -442,7 +448,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button><button class="secondary" onclick="showExtra('inventorylog')">История инвентаризаций</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v17</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.3</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -674,7 +680,7 @@
         </div>
     </div>
 
-    <div id="screen-login" class="screen hidden"><div class="login-card card"><h1>Склад · Бета</h1><p>Открой склад в Telegram, нажми «Вход на сайт» на Главной и введи полученный код.</p><input id="web-code" autocomplete="one-time-code" placeholder="XXXX-XXXX-XXXX" maxlength="16"><button onclick="webLogin(this)">Войти</button><p class="meta">Код действует 5 минут и только один раз.</p></div></div>
+    <div id="screen-login" class="screen hidden"><div class="login-card card"><h1>Склад</h1><p>Открой склад в Telegram, нажми «Вход на сайт» на Главной и введи полученный код.</p><input id="web-code" autocomplete="one-time-code" placeholder="XXXX-XXXX-XXXX" maxlength="16"><button onclick="webLogin(this)">Войти</button><p class="meta">Код действует 5 минут и только один раз.</p></div></div>
     <div id="screen-extra" class="screen hidden"><div class="sticky-header"><button class="sticky-back" onclick="goBack()">← Назад</button><div id="extra-title" class="sticky-title"></div></div><div id="extra-content"></div></div>
     <div id="net-state" class="hidden">Нет интернета. Проверьте подключение.</div>
     <div class="bottom-nav hidden">
@@ -1060,6 +1066,7 @@
                 list.replaceChildren();
                 for (const u of users) {
                     const isAdmin = u.role === 'admin';
+                    const isBoss = u.role === 'boss';
                     const isGuest = u.role === 'guest';
                     const isOwner = u.is_owner === true;
                     const card = document.createElement('div');
@@ -1069,7 +1076,7 @@
                     const name = document.createElement('b'); name.textContent = u.full_name || '—'; info.appendChild(name);
                     const label = document.createElement('span');
                     label.style.cssText = 'font-size:10px; color:var(--text-muted);';
-                    label.textContent = currentUser.is_owner ? (isOwner?' (Главный администратор)':isGuest?' (Гость)':isAdmin?' (Администратор)':' (Сотрудник)') : ''; if(!u.role) {card.append(info);list.appendChild(card);continue;}
+                    label.textContent = currentUser.is_owner ? (isOwner?' (Главный администратор)':isGuest?' (Гость)':isAdmin?' (Администратор)':isBoss?' (Босс)':' (Сотрудник)') : ''; if(!u.role) {card.append(info);list.appendChild(card);continue;}
                     info.appendChild(label);
                     if (u.held_items && u.held_items.length) {
                         const held = document.createElement('div');
@@ -1082,9 +1089,9 @@
                         button.style.cssText = 'width:auto; padding:8px 12px; margin:0; font-size:12px;';
                         button.addEventListener('click', action); controls.appendChild(button);
                     };
-                    if (currentUser.is_owner && !isGuest && !isOwner) addButton(isAdmin ? 'Снять админа' : 'Дать админа', isAdmin ? 'danger' : 'ok', () => toggleUserRole(u.tg_id, u.full_name, isAdmin ? 'employee' : 'admin'));
-                    if (currentUser.is_owner || (!isOwner && !isAdmin)) addButton('✏️', 'secondary', () => editUserNameModal(u.tg_id, u.full_name, u.role));
-                    if (currentUser.role === 'admin' && (!isAdmin || currentUser.is_owner) && !isOwner) addButton('🗑', 'danger', () => deleteUser(u.tg_id));
+                    if (currentUser.is_owner && !isGuest && !isOwner) addButton('Роль', 'secondary', () => {const {o,b}=overlay17('Роль · '+u.full_name);for(const [v,l] of [['employee','Сотрудник'],['boss','Босс'],['admin','Администратор']])btn17(b,l,async()=>{if(!confirm('Назначить роль: '+l+'?'))return;await api('/api/users/'+u.tg_id+'/update',{method:'POST',body:JSON.stringify({full_name:u.full_name,role:v})});o.remove();loadUsers()})});
+                    if (currentUser.is_owner || (!isOwner && !isAdmin && !isBoss)) addButton('✏️', 'secondary', () => editUserNameModal(u.tg_id, u.full_name, u.role));
+                    if (currentUser.role === 'admin' && ((!isAdmin && !isBoss) || currentUser.is_owner) && !isOwner) addButton('🗑', 'danger', () => deleteUser(u.tg_id));
                     card.append(info, controls); list.appendChild(card);
                 }
             } catch (e) { list.textContent = e.message; }
@@ -1179,6 +1186,7 @@
             
             const sorted = [...itemsArray].sort((a, b) => {
                 const getPriority = (item) => {
+                    if (item.kind === "equipment" && item.needs_repair) return 4;
                     if (!item.holders || item.holders.length === 0) return 1;
                     if (item.holders.some(h => h.taken_for && h.taken_for.trim() !== "")) return 3;
                     return 2;
@@ -1510,9 +1518,13 @@
 
         
 
-        async function openItem(code) { 
-            try { 
-                currentItem = await api(`/api/items/${encodeURIComponent(code)}`); 
+        let itemRequest184=0, screenEpoch184=0, mainScroll184=0;
+        async function openItem(code) {
+            const requestId=++itemRequest184, epoch=screenEpoch184;
+            try {
+                const data=await api(`/api/items/${encodeURIComponent(code)}`);
+                if(requestId!==itemRequest184||epoch!==screenEpoch184)return;
+                currentItem=data; 
                 document.getElementById("item-title").textContent = currentItem.name; 
                 
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
@@ -1552,7 +1564,7 @@
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); $("book-from").min=$("book-to").min=localDay17(); $("book-from").value=""; $("book-to").value=""; loadBookings(currentItem.code); } 
                 
                 const priceBox = document.getElementById("admin-price-box");
-                if (currentUser.role === 'admin' && currentItem.kind === 'equipment') {
+                if (['admin','boss'].includes(currentUser.role) && currentItem.kind === 'equipment') {
                     priceBox.classList.remove("hidden");
                     let totalSum = 0;
                     let rowsHtml = "";
@@ -1583,7 +1595,7 @@
                 renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
-            } catch (e) { notify(e.message); } 
+            } catch (e) { if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message); } 
         }
         
         function showEditForm() { 
@@ -1642,15 +1654,17 @@
             
             const minStock = parseInt(document.getElementById("edit-min-stock").value) || 0; 
             
+            if(btn.disabled)return;
+            const savedCode=currentItem.code,epoch=screenEpoch184;
             setLoading(btn, true, "Сохранение..."); 
             try { 
-                await api(`/api/items/${currentItem.code}/update`, { method: "POST", body: JSON.stringify({ 
+                await api(`/api/items/${encodeURIComponent(savedCode)}/update`, { method: "POST", body: JSON.stringify({ 
                     name, kind, min_stock: minStock, price, 
                     kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
                     price_body, price_lens, price_flash, price_acc, price_add, 
                     budget_tag, serial_number, buyout_status, category:$("edit-category").value 
                 }) }); 
-                showToast("Сохранено"); setLoading(btn,false); openItem(currentItem.code); 
+                showToast("Сохранено"); setLoading(btn,false); loadItems(); if(currentScreen==="screen-edit-item"&&epoch===screenEpoch184){await openItem(savedCode);} 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
@@ -1764,7 +1778,7 @@
             try { await api("/api/move", { method: "POST", body: JSON.stringify({ code: currentItem.code, from_location: moveFromLocId, to_location: selectedMoveRoomId, quantity: qty }) }); showToast("Перемещено!"); setLoading(btn,false); loadItems(); openItem(currentItem.code); } catch (e) { notify(e.message); setLoading(btn, false); }
         }
         
-        async function doWriteoff() { const loc = parseInt(document.getElementById("wo-loc").value); const qty = parseInt(document.getElementById("wo-qty").value) || 0; try { await api("/api/writeoff", { method: "POST", body: JSON.stringify({ code: currentItem.code, location_id: loc, quantity: qty }) }); showToast("Списано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doWriteoff() { const code=currentItem.code,loc=Number($("wo-loc").value),qty=Number($("wo-qty").value),btn=$("actions").querySelector('button[onclick="doWriteoff()"]'); if(btn?.disabled)return; if(!loc||!Number.isInteger(qty)||qty<=0||qty>1000000)return notify("Укажите помещение и целое положительное количество"); if(!confirm("Взять / списать "+qty+" "+(currentItem.unit||"шт.")+"?"))return;setLoading(btn,true,"Списание..."); try{await api("/api/writeoff",{method:"POST",body:JSON.stringify({code,location_id:loc,quantity:qty})},0);showToast("Списано");await loadItems();loadDashboard17();if(currentItem?.code===code)await openItem(code)}catch(e){notify(e.message)}finally{setLoading(btn,false)} }
         
         
         
@@ -1900,7 +1914,7 @@
                 showToast("Добавлено"); 
                 closeAddItemModal();
                 loadItems();
-                loadLowStock(); loadDashboard17(); loadStats(); showRooms();
+                loadLowStock(); loadDashboard17(); loadStats(); showRooms(); showCreated182(code,name);
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
@@ -1956,7 +1970,11 @@
         });
         
         function showScreen(id) { 
-            if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
+            if(currentScreen===id&&!$(id)?.classList.contains("hidden"))return;
+            if(currentScreen==="screen-main")mainScroll184=window.scrollY;
+            screenEpoch184++;
+            if(currentScreen==="screen-edit-item"&&id==="screen-item"&&navHistory.at(-1)==="screen-item")navHistory.pop();
+            else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
             currentScreen = id;
             if(id!=="screen-room-view")$("batch-actions").style.display="none"; if(id!=="screen-take")$("take-batch-actions").style.display="none";
 
@@ -1970,12 +1988,12 @@
             if (id === "screen-rooms") updateNavActive("nav-rooms");
             if (id === "screen-history") updateNavActive("nav-history");
             if (id === "screen-settings") updateNavActive("nav-settings");
-            window.scrollTo(0, 0);
+            window.scrollTo(0, id==="screen-main"?mainScroll184:0);
         }
         
         function goBack() {
             if (navHistory.length > 0) {
-                const prev = navHistory.pop();
+                let prev = navHistory.pop(); while(prev===currentScreen&&navHistory.length)prev=navHistory.pop();
                 const remaining=[...navHistory];currentScreen=null; showScreen(prev);navHistory=remaining;
             } else {
                 backToMain();
@@ -2023,8 +2041,7 @@
         async function loadDashboard17(){try{const [r,b]=await Promise.all([api('/api/dashboard'),api('/api/booking_calendar')]);const today=localDay17();booked17=new Set(b.filter(x=>x.date_from<=today&&x.date_to>=today).map(x=>x.item_code));const box=$('dashboard-v17');box.replaceChildren();box.className='dashboard-grid';for(const [key,label,color]of [['free','Свободно','var(--success)'],['on_hand','На руках','var(--primary)'],['repair','В ремонте','var(--danger)'],['booked_today','Бронь сегодня','var(--warning)'],['low_stock','Мало расходников','var(--warning)']]){const el=document.createElement('button');el.className='metric';el.innerHTML=safe(label)+'<b style="color:'+color+'">'+Number(r.counts[key]||0)+'</b>';el.onclick=()=>{$('filter-status').value=key;$('filter-kind').value='';$('filter-category').value='';$('filter-location').value='';$('search-input').value='';filterItems();$('items-list').scrollIntoView({behavior:'smooth'})};box.append(el)}filterItems()}catch(e){console.log(e)}}
         function card17(parent,title,body){const c=document.createElement('div');c.className='card extra-card';const t=document.createElement('strong');t.textContent=title;c.append(t);if(body){const x=document.createElement('p');x.className='meta';x.style.whiteSpace='pre-line';x.textContent=body;c.append(x)}parent.append(c);return c;}
         async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await loadCategories17();box.replaceChildren();btn17(box,'Добавить категорию',async()=>{const name=prompt('Название категории');if(name?.trim()){await api('/api/categories',{method:'POST',body:JSON.stringify({name:name.trim()})});showExtra(section)}});for(const name of categories17){const c=card17(box,name);btn17(c,'Переименовать',async()=>{const n=prompt('Новое название',name);if(n?.trim()){await api('/api/categories/'+encodeURIComponent(name),{method:'PUT',body:JSON.stringify({name:n.trim()})});showExtra(section)}});btn17(c,'Удалить',async()=>{if(confirm('Удалить категорию?')){await api('/api/categories/'+encodeURIComponent(name),{method:'DELETE'});showExtra(section)}})}}else if(section==='finance'){const r=await api('/api/dashboard');box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Оплаченные ремонты за 30 дней','repair_cost_30_days'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label,money17(f[key]));renderFinanceBars17(box,f.by_category);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity} · ${money17(r.suggested_quantity*r.price)}\nПоставщик: ${r.supplier||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.code));btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
-        async function seedDemo(){if(!confirm('Создать демонстрационные товары на пустом складе?'))return;try{const r=await api('/api/demo_seed',{method:'POST'});showToast(r.message||'Добавлено: '+r.created);await loadItems();loadDashboard17();loadStats()}catch(e){notify(e.message)}}
-        function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
+        function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
         async function loadPassport17(code){const box=$('passport-v17');box.replaceChildren();try{const m=await api(itemPath17(code,'/passport'));if(currentItem?.code!==code)return;const c=card17(box,'Паспорт товара',[m.notes,m.site?'Площадка: '+m.site:'',m.vessel?'Теплоход: '+m.vessel:'',currentItem.kind==='consumable'?'Единица: '+m.unit:'',m.supplier?'Поставщик: '+m.supplier:''].filter(Boolean).join('\n'));if(m.has_photo){const im=document.createElement('img');im.style.cssText='max-width:100%;max-height:220px;object-fit:contain;border-radius:12px';im.alt='Фото товара';c.prepend(im);image17(im,itemPath17(code,'/photo')).catch(e=>im.remove())}btn17(c,'Копировать название',()=>copyText(currentItem.name));btn17(c,'Копировать код',()=>copyText(code));if(currentUser.role==='admin')btn17(c,'Редактировать паспорт',()=>editPassport17(code,m))}catch(e){box.textContent=e.message}}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}
         function editPassport17(code,m){const {b,o}=overlay17('Паспорт товара');const unit=field17(b,'Единица измерения',m.unit),supplier=field17(b,'Поставщик',m.supplier),site=field17(b,'Площадка',m.site),vessel=field17(b,'Теплоход',m.vessel);populateSuggestions17(b,site,'site',cachedPlatforms.map(r=>r['Площадка']));populateSuggestions17(b,vessel,'vessel',cachedTH.map(r=>r['Название']||Object.values(r)[0]));const notes=field17(b,'Описание и место хранения',m.notes,'textarea'),photo=field17(b,'Заменить фото','','file');photo.accept='image/*';btn17(b,'Сохранить',async()=>{await api(itemPath17(code,'/passport'),{method:'PUT',body:JSON.stringify({unit:unit.value,supplier:supplier.value,site:site.value,vessel:vessel.value,notes:notes.value})});if(photo.files[0]){let f=new FormData();f.append('photo',photo.files[0]);await api(itemPath17(code,'/photo'),{method:'PUT',body:f})}o.remove();loadPassport17(code);loadItems();showToast('Сохранено')},'ok')}
@@ -2032,7 +2049,7 @@
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
         async function showHistory(){showScreen('screen-history');$('history-list').textContent='Загрузка…';try{history17=await api('/api/history');renderHistory17()}catch(e){$('history-list').textContent=e.message}}
-        function renderHistory17(){const box=$('history-list'),q=$('history-query').value.toLowerCase(),d=$('history-date').value;box.replaceChildren();for(const l of history17.filter(l=>(!d||l.date?.startsWith(d))&&[l.name,l.item_code,l.user_name,l.taken_for].join(' ').toLowerCase().includes(q))){const type={checkout:l.taken_for?'Выдал':'Взял',return:'Вернул',move:'Переместил',writeoff:'Списал'}[l.type]||l.type;card17(box,`${type}: ${l.user_name||'—'}`,`${l.name} · ${l.quantity} шт.\n${l.taken_for?'Кому: '+l.taken_for+'\n':''}${l.date}`)}if(!box.children.length)box.textContent='Ничего не найдено'}
+        function renderHistory17(){const box=$('history-list'),q=$('history-query').value.toLowerCase(),d=$('history-date').value;box.replaceChildren();for(const l of history17.filter(l=>(!$('history-type182')?.value||l.type===$('history-type182').value)&&(!d||l.date?.startsWith(d))&&[l.name,l.item_code,l.user_name,l.taken_for].join(' ').toLowerCase().includes(q))){const type={checkout:l.taken_for?'Выдал':'Взял',return:'Вернул',move:'Переместил',writeoff:'Списал'}[l.type]||l.type;card17(box,`${type}: ${l.user_name||'—'}`,`${l.name} · ${l.quantity} шт.\n${l.taken_for?'Кому: '+l.taken_for+'\n':''}${l.date}`)}if(!box.children.length)box.textContent='Ничего не найдено'}
         function scan17(callback,multi=false){if(tg.initData&&tg.showScanQrPopup){try{tg.showScanQrPopup({text:multi?'Сканируйте товары. Закройте сканер, когда закончите.':'Наведите на QR товара'},v=>{if(v)callback(v.trim());return !multi});return}catch(e){}}const {o,b}=overlay17('Сканирование QR');const input=field17(b,'Код товара / USB-сканер');function accept(){if(!input.value.trim())return;callback(input.value.trim());input.value='';if(!multi)o.remove()}btn17(b,'Найти',accept);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();accept()}});input.focus();if('BarcodeDetector' in window&&navigator.mediaDevices?.getUserMedia)btn17(b,'Открыть камеру',async()=>{let detector;try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){throw Error('Камера не поддерживает QR в этом браузере')}const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});if(!o.isConnected){stream.getTracks().forEach(t=>t.stop());return}const video=document.createElement('video');video.srcObject=stream;video.playsInline=true;video.muted=true;video.style.width='100%';b.append(video);await video.play();let last='',lastAt=0,busy=false;const tick=setInterval(async()=>{if(!o.isConnected){clearInterval(tick);stream.getTracks().forEach(t=>t.stop());return}if(busy)return;busy=true;try{const rows=await detector.detect(video);const code=rows[0]?.rawValue?.trim();if(code&&(code!==last||Date.now()-lastAt>1800)){last=code;lastAt=Date.now();callback(code);if(!multi)o.remove()}}catch(e){}finally{busy=false}},250)});else card17(b,'Камера браузера здесь недоступна','Используйте обычный QR-сканер или введите код вручную.');}
 
         function scanQr(){scan17(openItem)}
@@ -2057,6 +2074,9 @@
         $('qr-preview-code').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copyText($('add-code').value)}});
 
         installV18();
+        installRelease182();
+        installRelease183();
+        installRelease184();
         (async () => { await init(); })();
     </script>
 </body>
