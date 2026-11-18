@@ -420,7 +420,7 @@
         <div id="locations-list"></div>
 
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--danger); font-weight: 700; letter-spacing: -0.5px;">Разработка</h2>
-        <button class="secondary" onclick="showTerminal()">💻 Терминал</button>
+        <button id="owner-terminal-btn" class="secondary hidden" onclick="showTerminal()">💻 Терминал</button>
         <button class="danger" onclick="openDevConsole()">🛠 Открыть консоль разработчика</button>
         <button class="danger" onclick="localStorage.clear(); location.reload();">🔄 Сбросить кэш браузера</button>
         <button class="secondary" onclick="showUsers()">👥 Пользователи</button>
@@ -433,7 +433,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v15</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: Бета v16</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -799,6 +799,7 @@
         async function init() {
             try {
                 currentUser = await api("/api/me");
+                document.getElementById("owner-terminal-btn").classList.toggle("hidden", !currentUser.is_owner);
                 
                 if (currentUser.is_registered === 0) { 
                     document.getElementById("reg-name").value = currentUser.full_name || "";
@@ -807,7 +808,7 @@
                 }
                 
                 const userInfoEl = document.getElementById("user-info");
-                if (userInfoEl) userInfoEl.innerHTML = `${currentUser.full_name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                if (userInfoEl) userInfoEl.innerHTML = `${escapeOwnerText(currentUser.full_name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : (currentUser.role === 'admin' ? 'Админ' : 'Сотрудник')}</span>`;
 
                 if (currentUser.role === "admin") { 
                     document.getElementById("nav-settings").classList.remove("hidden");
@@ -869,7 +870,7 @@
             overlay.innerHTML = `
                 <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
                     <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить моё имя</h3>
-                    <input id="edit-myname-input-${overlayId}" type="text" value="${currentUser.full_name || ''}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <input id="edit-myname-input-${overlayId}" type="text" value="${escapeOwnerText(currentUser.full_name || '')}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
                     <div style="display:flex; gap:10px;">
                         <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
                         <button class="ok" style="margin:0; flex:1;" onclick="saveMyName('${overlayId}', this)">Сохранить</button>
@@ -887,7 +888,7 @@
             try {
                 await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
                 currentUser.full_name = name;
-                document.getElementById("user-info").innerHTML = `${name}<br><span style="color:var(--primary); font-size:10px;">${currentUser.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>`;
+                document.getElementById("user-info").innerHTML = `${escapeOwnerText(name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : (currentUser.role === 'admin' ? 'Админ' : 'Сотрудник')}</span>`;
                 document.getElementById(overlayId).remove();
                 showToast("Имя сохранено");
             } catch (e) { notify(e.message); setLoading(btn, false); }
@@ -1032,35 +1033,48 @@
 
         function showSettings() { loadLocations(); showScreen("screen-settings"); updateNavActive("nav-settings"); }
         
-        async function loadUsers() { 
-            const list = document.getElementById("users-list"); 
-            list.innerHTML = "<p>Загрузка...</p>"; 
-            try { 
-                const users = await api("/api/users"); 
-                list.innerHTML = users.map(u => {
-                    const held = u.held_items && u.held_items.length > 0 ? `<div style="font-size:11px; color:var(--warning); margin-top:4px;">Держит: ${u.held_items.join(', ')}</div>` : "";
+        function escapeOwnerText(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+        }
+
+        async function loadUsers() {
+            const list = document.getElementById("users-list");
+            list.innerHTML = "<p>Загрузка...</p>";
+            try {
+                const users = await api("/api/users");
+                list.replaceChildren();
+                for (const u of users) {
                     const isAdmin = u.role === 'admin';
                     const isGuest = u.role === 'guest';
-                    const roleBtn = isAdmin 
-                        ? `<button class="danger" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'employee')">Снять админа</button>`
-                        : `<button class="ok" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="toggleUserRole(${u.tg_id}, '${u.full_name}', 'admin')">Дать админа</button>`;
-                    
-                    const deleteBtn = currentUser.role === 'admin' && !isAdmin
-                        ? `<button class="danger" style="width:auto; padding:8px; font-size:12px; margin:0; margin-left: 4px;" onclick="deleteUser(${u.tg_id})">🗑</button>` : "";
-
-                    return `
-                    <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;">
-                        <div><b>${u.full_name}</b> ${isGuest ? '<span style="font-size:10px; color:var(--text-muted);">(Гость)</span>' : ''} ${held}</div>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            ${isGuest ? '' : roleBtn}
-                            <button class="secondary" style="width:auto; padding:8px; font-size:12px; margin:0;" onclick="editUserNameModal(${u.tg_id}, '${u.full_name}', '${u.role}')">✏️</button>
-                            ${deleteBtn}
-                        </div>
-                    </div>`;
-                }).join(""); 
-            } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; } 
+                    const isOwner = u.is_owner === true;
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;';
+                    const info = document.createElement('div');
+                    const name = document.createElement('b'); name.textContent = u.full_name || '—'; info.appendChild(name);
+                    const label = document.createElement('span');
+                    label.style.cssText = 'font-size:10px; color:var(--text-muted);';
+                    label.textContent = isOwner ? ' (Главный администратор)' : (isGuest ? ' (Гость)' : '');
+                    info.appendChild(label);
+                    if (u.held_items && u.held_items.length) {
+                        const held = document.createElement('div');
+                        held.style.cssText = 'font-size:11px; color:var(--warning); margin-top:4px;';
+                        held.textContent = 'Держит: ' + u.held_items.join(', '); info.appendChild(held);
+                    }
+                    const controls = document.createElement('div'); controls.style.cssText = 'display:flex; gap:6px; align-items:center;';
+                    const addButton = (label, cls, action) => {
+                        const button = document.createElement('button'); button.className = cls; button.textContent = label;
+                        button.style.cssText = 'width:auto; padding:8px 12px; margin:0; font-size:12px;';
+                        button.addEventListener('click', action); controls.appendChild(button);
+                    };
+                    if (!isGuest && !isOwner) addButton(isAdmin ? 'Снять админа' : 'Дать админа', isAdmin ? 'danger' : 'ok', () => toggleUserRole(u.tg_id, u.full_name, isAdmin ? 'employee' : 'admin'));
+                    if (!isOwner || currentUser.is_owner) addButton('✏️', 'secondary', () => editUserNameModal(u.tg_id, u.full_name, u.role));
+                    if (currentUser.role === 'admin' && !isAdmin && !isOwner) addButton('🗑', 'danger', () => deleteUser(u.tg_id));
+                    card.append(info, controls); list.appendChild(card);
+                }
+            } catch (e) { list.textContent = e.message; }
         }
-        
+
         async function toggleUserRole(tg_id, full_name, newRole) {
             const actionText = newRole === 'admin' ? "выдать права администратора" : "забрать права администратора";
             if (!confirm(`Вы уверены, что хотите ${actionText} для ${full_name}?`)) return;
@@ -1080,7 +1094,7 @@
             overlay.innerHTML = `
                 <div style="background:var(--card-bg); padding:20px; border-radius:20px; width:100%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--border);">
                     <h3 style="margin-top:0; margin-bottom:16px; font-size:18px;">Изменить имя</h3>
-                    <input id="edit-user-input-${overlayId}" type="text" value="${oldName}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
+                    <input id="edit-user-input-${overlayId}" type="text" value="${escapeOwnerText(oldName)}" style="width:100%; padding:14px; margin-bottom:16px; border-radius:12px; border:1px solid var(--border); background:var(--skeleton-bg); color:var(--text); font-size:16px;">
                     <div style="display:flex; gap:10px;">
                         <button class="secondary" style="margin:0; flex:1;" onclick="document.getElementById('${overlayId}').remove()">Отмена</button>
                         <button class="ok" style="margin:0; flex:1;" onclick="saveUserName(${tg_id}, '${role}', '${overlayId}', this)">Сохранить</button>
@@ -1959,9 +1973,10 @@
         async function exportStock() { downloadFile("/api/export_stock", "warehouse_stock.csv"); }
         async function downloadQrSheet() { downloadFile("/api/export_qr_sheet", "qrs.png"); }
 
-        function showTerminal() { document.getElementById("terminal-sql").value = ""; document.getElementById("terminal-result").innerHTML = ""; showScreen("screen-terminal"); }
+        function showTerminal() { if (!currentUser?.is_owner) { notify("Доступ только для главного администратора"); return; } document.getElementById("terminal-sql").value = ""; document.getElementById("terminal-result").innerHTML = ""; showScreen("screen-terminal"); }
 
         async function executeTerminal() {
+            if (!currentUser?.is_owner) { notify("Доступ только для главного администратора"); return; }
             const sql = document.getElementById("terminal-sql").value.trim(); if (!sql) return;
             const resBox = document.getElementById("terminal-result"); resBox.innerHTML = "<p>Выполняется...</p>";
             try {
