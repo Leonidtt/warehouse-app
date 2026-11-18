@@ -45,7 +45,94 @@ function installRelease184(){
   // Boss view, with explicit stock-room interpretation and separate holder detail.
   const bossBox=el('section','r184-boss hidden');main.querySelector('.v18-quick').before(bossBox);let bossJob=null;
   function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
-  async function refreshBoss(){if(currentUser?.role!=='boss')return;if(bossJob)return bossJob;bossJob=api('/api/v184/boss').then(r=>{if(currentUser?.role!=='boss')return;const office=bossPanel('В офисе', 'office',r.office),held=bossPanel('На руках','held',r.held);office.append(el('small','meta','Все помещения склада'));const wasOpen=!!bossBox.querySelector('details')?.open,details=el('details'),summary=el('summary','','У кого на руках');details.open=wasOpen;details.append(summary);held.onclick=e=>{if(!e.target.closest('details,button'))details.open=!details.open};held.style.cursor='pointer';for(const p of r.people){const row=el('div','r184-person');row.append(el('b','',p.name),el('div','meta','Фотоаппараты: '+p.cameras+' · Вспышки: '+p.flashes));for(const i of p.items)row.append(button(i.name+' · '+i.code,()=>openItem(i.code)));details.append(row)}if(!r.people.length)details.append(el('p','meta','Нет выданной техники'));held.append(details);const showFinance=button('Финансы',()=>showExtra('finance'),'secondary');bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,showFinance);bossBox.classList.remove('hidden')}).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);return bossJob}
+function bossBrand1853(value,kind){
+  const s=String(value||'').normalize('NFKC').toLowerCase().replace(/[‐‑–—]/g,'-');
+  const canon=/(?:^|[^\p{L}\p{N}])(?:canon|к[еэ]нон|канон)(?=$|[^\p{L}\p{N}])/u.test(s);
+  const sony=/(?:^|[^\p{L}\p{N}])(?:sony|сони)(?=$|[^\p{L}\p{N}])/u.test(s);
+  if(canon||sony)return canon===sony?'?':canon?'К':'С';
+  if(kind==='camera'){
+    const c=/(?:^|[^\p{L}\p{N}])(?:eos|r[35678](?:\s*(?:mark\s*)?(?:ii|iii))?|rp|r10|r50|r100|[56]d(?:\s*mark\s*(?:ii|iii|iv))?)(?=$|[^\p{L}\p{N}])/u.test(s);
+    const a=/(?:^|[^\p{L}\p{N}])(?:[aαа]\s*(?:[179](?:r|s|c)?|6[0134567]00)(?:\s*(?:ii|iii|iv|v|[2345]|m[2345]))?)(?=$|[^\p{L}\p{N}])/u.test(s);
+    if(c!==a)return c?'К':'С';
+  }else{
+    const matches=[...s.matchAll(/(?:^|[^a-z0-9])(?:v1(?:pro)?|v860(?:iii|ii)?|tt685(?:ii)?|tt350|v350|tt600)[\s_-]*([cs])(?=$|[^a-z0-9])/g)].map(m=>m[1]);
+    if(matches.length&&new Set(matches).size===1)return matches[0]==='c'?'К':'С';
+    if(/(?:^|[^a-z0-9])hvl[-\s]*f\d+/i.test(s))return 'С';
+  }
+  return '?';
+}
+function bossCounts1853(items,kind){
+  const counts={'К':0,'С':0,'?':0};
+  for(const i of items||[]){
+    const q=Number(i[kind+'_count'])||0;
+    if(q<=0)continue;
+    const v=String(i[kind]||'').trim();
+    const model=['','-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase())?i.name:v;
+    counts[bossBrand1853(model,kind)]+=q;
+  }
+  return counts;
+}
+function bossCode1853(kind,brand,count,mode){
+  if(!count)return '';
+  const letter=mode==='icons'?(brand==='К'?'C':brand==='С'?'S':'?'):(kind==='camera'?'Ф':'В')+brand;
+  return letter+(count>1?'×'+count:'');
+}
+function bossSurname1853(name){
+  return String(name||'Не указан').trim().split(/\s+/)[0]||'Не указан';
+}
+
+  // Keep all three approved representations. Default: combined.
+  const bossMode1853='combined'; // 'icons' | 'letters' | 'combined'
+  const bossIcons1853={camera:'<rect x="3" y="6" width="18" height="15" rx="3"/><path d="M8 6l2-3h4l2 3"/><circle cx="12" cy="13" r="3.5"/>',flash:'<path d="m13 2-9 12h7l-1 8 10-12h-7z"/>',arrow:'<path d="m9 5 7 7-7 7"/>'};
+  function bossIcon1853(type){const n=document.createElementNS('http://www.w3.org/2000/svg','svg');n.setAttribute('viewBox','0 0 24 24');n.setAttribute('aria-hidden','true');n.setAttribute('class','r1853-icon');n.innerHTML=bossIcons1853[type];return n}
+  function bossCell1853(p,kind){
+    const n=el('span','r1853-cell '+kind),counts=bossCounts1853(p.items,kind),labels=el('span','r1853-labels'),total=Object.values(counts).reduce((a,b)=>a+b,0);
+    const type=kind==='camera'?'Фотоаппараты':'Вспышки';
+    if(!total){n.append(el('span','r1853-empty','—'));n.setAttribute('aria-label',type+': нет');return n}
+    if(bossMode1853!=='letters')n.append(bossIcon1853(kind));
+    const full=[];
+    for(const brand of ['К','С','?']){const q=counts[brand];if(!q)continue;labels.append(el('span','',bossCode1853(kind,brand,q,bossMode1853)));full.push((brand==='К'?'Canon':brand==='С'?'Sony':'бренд не указан')+' '+q)}
+    n.append(labels);n.title=type+': '+full.join(', ');n.setAttribute('aria-label',n.title);return n
+  }
+  function bossTotal1853(kind,n){
+    const cell=el('span','r1853-total '+kind);cell.append(bossIcon1853(kind),el('strong','',String(n||0)));cell.title=(kind==='camera'?'Фотоаппараты':'Вспышки')+': '+(n||0);cell.setAttribute('aria-label',cell.title);return cell
+  }
+  function bossPerson1853(p,key,expanded,duplicates){
+    const d=el('details','r1853-person');d.dataset.personKey=key;d.open=expanded;
+    const head=el('summary','r1853-person-line'),surname=bossSurname1853(p.name);
+    const name=el('span','r1853-name',duplicates.has(surname)?p.name:surname);name.title=p.name;
+    const buyout=(p.items||[]).filter(i=>String(i.buyout_status||'').trim());
+    const flag=el('span','r1853-buyout',buyout.length?'Выкуп':'');if(buyout.length)flag.title='На выкупе: '+buyout.length;
+    const arrow=el('span','r1853-arrow');arrow.append(bossIcon1853('arrow'));
+    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash'),flag,arrow);d.append(head);
+    const content=el('div','r1853-person-details');content.append(el('div','r1853-full-name',p.name));
+    for(const i of p.items||[]){
+      const item=el('div','r1853-detail-item'),link=button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link');item.append(link);
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash'],['На выкупе у','buyout_status']]){const v=String(i[k]||'').trim();if(v&&!['-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase()))item.append(el('div','meta',label+': '+v))}
+      if(i.taken_at){const raw=String(i.taken_at),match=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);item.append(el('div','meta','Выдано: '+(match?[match[3],match[2],match[1]].join('.'):raw)))}
+      content.append(item)
+    }
+    d.append(content);return d
+  }
+  async function refreshBoss(){
+    if(currentUser?.role!=='boss')return;if(bossJob)return bossJob;
+    bossJob=api('/api/v184/boss').then(r=>{
+      if(currentUser?.role!=='boss')return;
+      const expanded=new Set([...bossBox.querySelectorAll('.r1853-person[open]')].map(d=>d.dataset.personKey));
+      const office=bossPanel('В офисе','office',r.office);office.append(el('small','meta','Все помещения склада'));
+      const held=el('div','card r184-boss-panel held r1853-held'),header=el('div','r1853-held-head');
+      header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.flashes));held.append(header);
+      const list=el('div','r1853-people'),seen=new Set(),duplicates=new Set();
+      for(const p of r.people){const s=bossSurname1853(p.name);if(seen.has(s))duplicates.add(s);seen.add(s)}
+      let unknown=false;
+      for(const p of r.people){const key=JSON.stringify([p.person_id??null,p.name]);list.append(bossPerson1853(p,key,expanded.has(key),duplicates));unknown=unknown||!!(bossCounts1853(p.items,'camera')['?']+bossCounts1853(p.items,'flash')['?'])}
+      if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
+      held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
+      const showFinance=button('Финансы',()=>showExtra('finance'),'secondary');
+      bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,showFinance);bossBox.classList.remove('hidden');
+    }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
+    return bossJob
+  }
   const oldLoad=loadItems;loadItems=async()=>{await oldLoad();refreshBoss()};
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
