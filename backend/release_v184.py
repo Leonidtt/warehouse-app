@@ -77,5 +77,6 @@ def register_184(app, get_user, real_user, session, transaction, digest, list_it
                 name=h.get('taken_for') or h.get('full_name') or 'Не указан'
                 key=(h['user_id'],name)
                 p=people.setdefault(key,{'name':name,'cameras':0,'flashes':0,'items':[]})
-                p['cameras']+=cam;p['flashes']+=flash;p['items'].append({'code':row['code'],'name':row['name'],'camera':row['kit_body'],'flash':row['kit_flash']})
+                p['person_id']=h['user_id']; p['cameras']+=cam; p['flashes']+=flash
+                p['items'].append({'code':row['code'],'name':row['name'],'camera':row['kit_body'],'flash':row['kit_flash'],'lens':row.get('kit_lens',''),'camera_count':cam,'flash_count':flash,'buyout_status':row.get('buyout_status',''),'taken_at':h.get('taken_at','')})
         return {'office':office,'held':held,'people':sorted(people.values(),key=lambda p:p['name'].casefold()),'rooms':sorted(rooms.values(),key=lambda r:r['name'].casefold())}
