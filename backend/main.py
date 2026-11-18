@@ -21,6 +21,7 @@ import shutil
 import traceback
 import pandas as pd
 import asyncio
+from owner_backup import can_backup, register_owner_backup
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -219,7 +220,10 @@ class LogErrorRequest(BaseModel):
     error: str
 
 @app.get("/api/me")
-def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
+def get_me(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    user['can_backup'] = can_backup(user)
+    return user
 
 @app.post("/api/log_error")
 async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(None)):
@@ -750,5 +754,7 @@ def generate_qr(code: str):
 
 @app.get("/")
 def serve_main(): return FileResponse("index.html")
+
+register_owner_backup(app, DB_PATH, BOT_TOKEN)
 
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
