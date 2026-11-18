@@ -52,7 +52,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.5.2")
+app = FastAPI(title="Склад", version="18.5.3")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
