@@ -18,3 +18,192 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
 .v18-workspace{display:flex;flex-direction:column;gap:12px}.v18-inventory{min-width:0;order:2}.v18-overview{min-width:0;order:1}.v18-overview-details{background:var(--card-bg);border:1px solid var(--border);border-radius:15px;padding:12px 14px;margin:10px 0}.v18-overview-details summary{font-weight:600;cursor:pointer}.v18-overview-details .stats-card{box-shadow:none;border:0;padding:0;margin:13px 0 0}.v18-overview .v18-shortcuts button{font-size:12px;min-width:0;white-space:normal}.v18-desktop-heading{display:none}.v18-overview .v18-shortcuts{margin:9px 0}.v18-inventory .v18-title-row{margin-top:4px}.v18-overview #my-items-section,.v18-overview #my-bookings-section{margin-bottom:12px!important}.v18-overview #daily-report-box{margin-bottom:12px}
 @media(min-width:900px){.web-mode .v18-workspace{display:block}.web-mode .v18-overview{margin-top:22px}.web-mode #screen-main .sticky-header{grid-template-columns:minmax(0,1fr) auto auto}.web-mode .v18-desktop-heading{display:block;font-size:26px;font-weight:700;white-space:nowrap}.web-mode #screen-main #user-info{font-size:13px;text-align:right;line-height:1.2;cursor:pointer;padding:9px 11px;background:var(--card-bg);border-radius:13px}.web-mode #screen-main #user-info br{display:none}.web-mode #screen-main #user-info span{display:none}.web-mode #screen-main #low-stock-banner{padding:10px 14px!important;margin-bottom:10px!important;font-size:13px}.web-mode #screen-main #low-stock-banner>div{margin:0!important;display:inline}.web-mode #screen-main #low-stock-list{padding-left:9px;font-size:13px!important}.web-mode .v18-quick{margin-bottom:9px}.web-mode .v18-shortcuts{margin-bottom:11px}.web-mode .dashboard-grid{margin:10px 0 14px}.web-mode .metric{min-height:82px}.web-mode .v18-inventory .v18-title-row h2{font-size:21px}.web-mode .v18-inventory .search-wrapper{margin-bottom:8px}.web-mode .v18-inventory .filters{margin-bottom:9px}.web-mode .v18-inventory .search-wrapper input{padding-top:11px;padding-bottom:11px}.web-mode .v18-table{min-width:600px}.web-mode .v18-table th,.web-mode .v18-table td{padding:11px 9px}.web-mode .v18-overview-details{margin-top:5px}.web-mode .v18-overview .v18-shortcuts{flex-direction:column}.web-mode .v18-overview .v18-shortcuts button{width:100%}.web-mode #screen-settings .v18-settings-layout{align-items:start}.web-mode .v18-inventory .v18-title-row .v18-desktop-only{align-items:center;gap:6px}}
 @media(min-width:1280px){.web-mode .v18-workspace{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:15px;align-items:start}.web-mode .v18-overview{margin:0;order:2}.web-mode .v18-inventory{order:1}}
+
+
+/* v18.1 — tactile glass, inspired by the original warehouse UI.
+   Appearance only: layout, actions, visibility and permissions stay unchanged. */
+:root {
+  --v18-surface-top:#ffffff;
+  --v18-surface-bottom:#f3f6fc;
+  --v18-panel-top:#ffffff;
+  --v18-panel-bottom:#f9fafc;
+  --v18-rim:rgba(255,255,255,.92);
+  --v18-line:rgba(69,91,125,.14);
+  --v18-lift:0 6px 17px rgba(29,49,83,.075),0 1px 3px rgba(29,49,83,.045);
+  --v18-glass-lift:0 9px 28px rgba(29,49,83,.15),0 2px 6px rgba(29,49,83,.075);
+  --v18-link-ink:#0864ce;
+  --v18-press-shadow:0 1px 5px rgba(22,39,67,.14);
+  --v18-main-fill:linear-gradient(155deg,#086bd7,#0057c4);
+  --v18-main-glow:0 6px 15px rgba(0,100,208,.22);
+  --v18-ok-fill:linear-gradient(155deg,#208b4d,#08723a);
+  --v18-danger-fill:linear-gradient(155deg,#d63336,#b51f2e);
+  --v18-highlight:inset 0 1px 0 rgba(255,255,255,.48),inset 0 -1px 1px rgba(0,0,0,.07);
+  --v18-white-fill:linear-gradient(160deg,var(--v18-surface-top),var(--v18-surface-bottom));
+  --v18-panel-fill:linear-gradient(150deg,var(--v18-panel-top),var(--v18-panel-bottom));
+  --v18-nav-active:linear-gradient(160deg,#e6f2ff,#d9e9ff);
+  --v18-nav-line:rgba(0,90,200,.1);
+  --v18-setting-blue:linear-gradient(150deg,#287de0,#0858bd);
+  --v18-setting-purple:linear-gradient(150deg,#8a65dc,#6741b5);
+  --v18-setting-teal:linear-gradient(150deg,#188b81,#106c64);
+  --v18-setting-amber:linear-gradient(150deg,#b96b19,#99500d);
+  --shadow:var(--v18-lift);
+  --radius:20px;
+  --primary-gradient:var(--v18-main-fill);
+}
+@media(prefers-color-scheme:dark) {
+  :root:not([data-theme=light]) {
+    --v18-surface-top:#303946;--v18-surface-bottom:#222a37;
+    --v18-panel-top:#252e3b;--v18-panel-bottom:#202733;
+    --v18-rim:rgba(214,228,255,.13);--v18-line:rgba(184,201,230,.17);
+    --v18-lift:0 6px 20px rgba(0,0,0,.2),0 1px 3px rgba(0,0,0,.12);
+    --v18-glass-lift:0 10px 32px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.18);
+    --v18-link-ink:#8bc3ff;--v18-press-shadow:0 1px 4px rgba(0,0,0,.24);
+    --v18-nav-active:linear-gradient(155deg,#344c70,#263d5d);
+    --v18-nav-line:rgba(149,191,255,.21);
+  }
+}
+:root[data-theme=dark] {
+  --v18-surface-top:#303946;--v18-surface-bottom:#222a37;
+  --v18-panel-top:#252e3b;--v18-panel-bottom:#202733;
+  --v18-rim:rgba(214,228,255,.13);--v18-line:rgba(184,201,230,.17);
+  --v18-lift:0 6px 20px rgba(0,0,0,.2),0 1px 3px rgba(0,0,0,.12);
+  --v18-glass-lift:0 10px 32px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.18);
+  --v18-link-ink:#8bc3ff;--v18-press-shadow:0 1px 4px rgba(0,0,0,.24);
+  --v18-nav-active:linear-gradient(155deg,#344c70,#263d5d);
+  --v18-nav-line:rgba(149,191,255,.21);
+}
+@supports (color:color-mix(in srgb,red,blue)) {
+  :root {
+    --v18-main-fill:linear-gradient(155deg,color-mix(in srgb,var(--primary) 79%,#102a4c),color-mix(in srgb,var(--primary) 66%,#082d60));
+    --v18-main-glow:0 6px 16px color-mix(in srgb,var(--primary) 25%,transparent);
+    --v18-link-ink:color-mix(in srgb,var(--primary) 78%,#142b45);
+    --v18-nav-active:linear-gradient(155deg,color-mix(in srgb,var(--primary) 9%,#fff),color-mix(in srgb,var(--primary) 19%,#f4f7fc));
+    --v18-nav-line:color-mix(in srgb,var(--primary) 16%,transparent);
+  }
+  @media(prefers-color-scheme:dark) {
+    :root:not([data-theme=light]) {
+      --v18-link-ink:color-mix(in srgb,var(--primary) 47%,#e0eeff);
+      --v18-main-glow:0 6px 18px color-mix(in srgb,var(--primary) 18%,transparent);
+      --v18-nav-active:linear-gradient(155deg,color-mix(in srgb,var(--primary) 30%,#354052),color-mix(in srgb,var(--primary) 20%,#222c3b));
+      --v18-nav-line:color-mix(in srgb,var(--primary) 32%,#303a49);
+    }
+  }
+  :root[data-theme=dark] {
+    --v18-link-ink:color-mix(in srgb,var(--primary) 47%,#e0eeff);
+    --v18-main-glow:0 6px 18px color-mix(in srgb,var(--primary) 18%,transparent);
+    --v18-nav-active:linear-gradient(155deg,color-mix(in srgb,var(--primary) 30%,#354052),color-mix(in srgb,var(--primary) 20%,#222c3b));
+    --v18-nav-line:color-mix(in srgb,var(--primary) 32%,#303a49);
+  }
+}
+body {letter-spacing:-.012em;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.sticky-title,.v18-desktop-heading {letter-spacing:-.028em}
+.card,.stats-card,.my-item-card,.booking-item,.v18-overview-details,.v18-table-wrap {
+  background:var(--v18-panel-fill);
+  border-color:var(--v18-line);
+  box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim);
+}
+.card,.stats-card {border-radius:20px}
+.item-card,.room-card {transition:transform .16s ease,box-shadow .18s ease;border-radius:18px}
+.item-card:active,.room-card:active {transform:scale(.985);box-shadow:var(--v18-press-shadow)}
+.v18-overview-details .stats-card {background:none;box-shadow:none}
+button:where(:not(.metric,.v18-link,.v18-accent,.sticky-back,.sticky-scan,.v18-icon-btn,.v18-table button,.v18-settings-list>button,.calendar-grid17 button)) {
+  background:var(--v18-main-fill);
+  color:#fff;border:1px solid rgba(0,0,0,.06);border-radius:16px;
+  font-weight:650;letter-spacing:-.018em;
+  box-shadow:var(--v18-main-glow),var(--v18-highlight);
+  text-shadow:0 1px 1px rgba(0,0,0,.12);
+  transition:transform .14s cubic-bezier(.2,.7,.3,1),box-shadow .18s ease,filter .18s ease,opacity .18s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+button.secondary:where(:not(.v18-link,.v18-accent,.sticky-back,.sticky-scan,.v18-icon-btn,.v18-table button,.v18-settings-list>button,.calendar-grid17 button)),
+button.qr-btn-main {
+  background:var(--v18-white-fill);color:var(--v18-link-ink);
+  border:1px solid var(--v18-line);
+  box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim);
+  text-shadow:none;
+}
+button.ok:where(:not(.v18-settings-list>button)) {
+  background:var(--v18-ok-fill);color:#fff;
+  box-shadow:0 6px 15px rgba(13,122,60,.21),var(--v18-highlight);
+}
+button.danger:where(:not(.v18-settings-list>button)) {
+  background:var(--v18-danger-fill);color:#fff;
+  box-shadow:0 6px 15px rgba(189,36,45,.20),var(--v18-highlight);
+}
+button.active-filter:where(:not(.v18-settings-list>button)) {
+  background:var(--v18-nav-active);color:var(--v18-link-ink);
+  border-color:var(--v18-nav-line);box-shadow:inset 0 1px 0 var(--v18-rim);text-shadow:none;
+}
+.v18-quick button {border-radius:19px;font-weight:650;letter-spacing:-.025em;gap:8px}
+button.take-btn {background:var(--v18-main-fill);color:#fff;box-shadow:var(--v18-main-glow),var(--v18-highlight)!important;text-shadow:0 1px 1px rgba(0,0,0,.12)!important}
+button.qr-btn-main {box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim)!important}
+.v18-quick .v18-icon {width:23px;height:23px}
+.v18-shortcuts button {border-radius:13px}
+button:where(:not(.metric,.v18-link,.v18-accent,.sticky-back,.sticky-scan,.v18-icon-btn,.v18-table button,.v18-settings-list>button,.calendar-grid17 button)):active:not(:disabled) {
+  transform:scale(.972);filter:brightness(.96);opacity:1;box-shadow:var(--v18-press-shadow),var(--v18-highlight);
+}
+button.secondary:active:not(:disabled):where(:not(.v18-settings-list>button,.v18-table button,.v18-link,.v18-icon-btn,.sticky-back,.sticky-scan,.calendar-grid17 button)) {background:var(--v18-white-fill)}
+button:disabled {opacity:.48;cursor:not-allowed;box-shadow:none!important;transform:none!important;filter:none!important}
+.metric {background:var(--v18-panel-fill);border:1px solid var(--v18-line);box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim);border-radius:18px}
+.metric b {font-weight:700;letter-spacing:-.045em}
+.metric:active:not(:disabled) {transform:scale(.98);box-shadow:var(--v18-press-shadow)}
+.sticky-header {
+  background:var(--glass);border-color:var(--glass-edge);
+  box-shadow:0 6px 18px rgba(25,45,77,.075),inset 0 1px 0 var(--v18-rim);
+  -webkit-backdrop-filter:blur(26px) saturate(175%);backdrop-filter:blur(26px) saturate(175%);
+}
+.sticky-header .sticky-back,.sticky-header .sticky-scan,.v18-icon-btn {
+  background:var(--v18-white-fill);color:var(--v18-link-ink);border-color:var(--v18-line);
+  box-shadow:0 3px 8px rgba(20,35,55,.09),inset 0 1px 0 var(--v18-rim);
+  text-shadow:none;transition:transform .14s ease,box-shadow .18s ease;
+}
+.sticky-header .sticky-back:active:not(:disabled),.sticky-header .sticky-scan:active:not(:disabled),.v18-icon-btn:active:not(:disabled) {
+  transform:scale(.93);box-shadow:var(--v18-press-shadow);
+}
+.bottom-nav {
+  background:var(--glass);box-shadow:var(--v18-glass-lift),inset 0 1px 0 var(--v18-rim),inset 0 -1px 0 var(--v18-line);
+  -webkit-backdrop-filter:blur(30px) saturate(185%);backdrop-filter:blur(30px) saturate(185%);
+}
+.nav-item {border:1px solid transparent;transition:background .22s ease,color .18s ease,transform .15s ease}
+.nav-item.active {background:var(--v18-nav-active);color:var(--v18-link-ink);border-color:var(--v18-nav-line);box-shadow:0 2px 5px rgba(28,61,105,.07),inset 0 1px 0 var(--v18-rim);font-weight:650}
+.nav-item.active .icon {transform:translateY(-1px)}
+.nav-item:active {transform:scale(.95)}
+.room-arrow-circle {background:var(--v18-nav-active);color:var(--v18-link-ink);border:1px solid var(--v18-nav-line)}
+.v18-settings-list {
+  background:var(--v18-panel-fill);border-color:var(--v18-line);
+  box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim);border-radius:20px;
+}
+.v18-settings-list>button {font-weight:550;letter-spacing:-.012em;transition:background .18s ease}
+.v18-settings-list>button:active:not(:disabled) {transform:none;opacity:1;background:var(--v18-nav-active)!important}
+.v18-setting-icon {width:30px;height:30px;border-radius:9px;background:var(--v18-setting-blue);box-shadow:0 2px 5px rgba(25,45,77,.16),var(--v18-highlight)}
+.v18-settings-list>button:nth-of-type(4n+2) .v18-setting-icon {background:var(--v18-setting-purple)}
+.v18-settings-list>button:nth-of-type(4n+3) .v18-setting-icon {background:var(--v18-setting-teal)}
+.v18-settings-list>button:nth-of-type(4n+4) .v18-setting-icon {background:var(--v18-setting-amber)}
+.v18-settings-list>button.danger .v18-setting-icon {background:var(--v18-danger-fill)}
+.v18-settings-list>button.ok .v18-setting-icon {background:var(--v18-ok-fill)}
+.v18-section-label {letter-spacing:.045em;font-weight:650}
+.v18-icon {stroke-width:1.85}
+.search-wrapper input,.filters select,.filters input {border-color:var(--v18-line);box-shadow:0 2px 5px rgba(27,49,83,.05),inset 0 1px 0 var(--v18-rim)}
+.search-wrapper input:focus,.filters select:focus,.filters input:focus {border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,122,255,.13)}
+.v18-link,.v18-table td button {color:var(--v18-link-ink);text-shadow:none}
+.v18-accent {box-shadow:0 2px 6px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.4)}
+.v18-table th {font-weight:650}
+.modal-content {box-shadow:0 -8px 36px rgba(0,0,0,.18),inset 0 1px 0 var(--v18-rim)}
+#scroll-top-btn {background:var(--v18-white-fill);color:var(--v18-link-ink);box-shadow:var(--v18-lift),inset 0 1px 0 var(--v18-rim)}
+@media(hover:hover) and (pointer:fine) {
+  button:where(:not(.metric,.v18-link,.v18-accent,.v18-table button,.v18-settings-list>button,.calendar-grid17 button)):hover:not(:disabled) {filter:brightness(1.045)}
+  .v18-settings-list>button:hover:not(:disabled) {background:var(--v18-nav-active)!important}
+  .nav-item:not(.active):hover {background:var(--v18-panel-fill);color:var(--v18-link-ink)}
+  .item-card:hover,.room-card:hover {box-shadow:var(--v18-glass-lift)}
+}
+@media(min-width:900px) {
+  .web-mode .sticky-header {background:var(--bg);box-shadow:none;border:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .web-mode .nav-item {border-radius:13px}
+  .web-mode .nav-item.active .icon {transform:none}
+  .web-mode .v18-quick button {border-radius:16px}
+  .web-mode .v18-table-wrap {border-radius:19px}
+}
+@media(prefers-reduced-motion:reduce) {
+  button,.nav-item,.item-card,.room-card {transition:none!important}
+  button:active,.nav-item:active,.item-card:active,.room-card:active {transform:none!important}
+}
