@@ -73,6 +73,11 @@ def make_backup(path, target):
             if time.monotonic() > deadline:
                 raise HTTPException(503, 'База занята. Повторите позже.')
         source.backup(dest, pages=128, progress=progress, sleep=0.1)
+        for table in ('web_codes', 'web_sessions'):
+            if dest.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                dest.execute('DELETE FROM '+table)
+        dest.commit()
+        dest.execute('VACUUM')
         if dest.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
             raise HTTPException(500, 'Проверка копии не пройдена.')
     finally:
