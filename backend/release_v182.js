@@ -18,13 +18,13 @@ function installRelease182(){
   const addNoCategory=()=>{if(![...$('filter-category').options].some(o=>o.value==='__without_category__'))$('filter-category').add(new Option('Без категории','__without_category__'))};const oldCategories=loadCategories17;loadCategories17=async()=>{await oldCategories();addNoCategory()};addNoCategory();
   const filter=$('filter-status');filter.add(new Option('На складе','stock182'));filter.add(new Option('В работе','work182'));
   const prevMatches=matchesStatus17;matchesStatus17=(i,s)=>s==='stock182'?i.kind==='equipment'&&!i.needs_repair&&i.total>0:s==='work182'?i.kind==='equipment'&&!i.needs_repair&&i.holders.length>0:prevMatches(i,s);
-  function filterTo(category,status='',location=''){
+  function filterTo(category,status=''){
     const select=$('filter-category');
     if(![...select.options].some(option=>option.value===category))select.add(new Option(category,category));
     select.value=category;
     $('filter-status').value=status;
     $('filter-kind').value='equipment';
-    $('filter-location').value=location;
+    $('filter-location').value='';
     $('search-input').value='';
     filterItems();
     $('items-list').scrollIntoView({block:'start',behavior:'smooth'});
@@ -58,7 +58,7 @@ function installRelease182(){
   }
 
   function renderOverview(data){
-    const {categories,booked,daily:d,low:short,printer_locations:printerRooms=[],consumables=0}=data;
+    const {categories,booked,daily:d,low:short,consumables=0}=data;
     booked17=new Set(booked);
     const expanded=dashboard.querySelector('details')?.open??false;
     const byName=new Map(categories.map(category=>[category.name,category]));
@@ -73,18 +73,10 @@ function installRelease182(){
     const detailTitle=el('summary');
     detailTitle.append(el('span','','Ноутбуки и принтеры'),icon('right'));
     const other=el('div','r182-summary r182-featured');
-    const printers=categoryWidget('Принтеры','Принтеры',byName.get('Принтеры'));
-    const roomTiles=el('div','r182-printer-locations');
-    for(const [name,type] of [['Склад','storage'],['Офис','office']]){
-      const sameType=printerRooms.filter(room=>room.type===type);
-      const room=printerRooms.find(room=>room.name===name) || (sameType.length===1?sameType[0]:null);
-      const tile=button('',()=>filterTo('Принтеры','stock182',room.id),'r182-printer-location');
-      tile.disabled=!room;
-      tile.append(el('span','',room?.name||name),el('strong','',countNum(room?.count)));
-      roomTiles.append(tile);
-    }
-    printers.querySelector('.r182-featured-card').append(roomTiles);
-    other.append(categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),printers);
+    other.append(
+      categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),
+      categoryWidget('Принтеры','Принтеры',byName.get('Принтеры')),
+    );
     detail.append(detailTitle,other);
     dashboard.className='r182-overview card';
     dashboard.replaceChildren(primary,detail);
