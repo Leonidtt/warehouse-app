@@ -55,3 +55,22 @@
 .r1856-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:currentColor}
 .r1856-empty{padding:5px}
 @media(max-width:380px){.r1856-list .r1856-row{gap:3px;padding:5px 3px;font-size:11px;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 61px}.r1856-state{font-size:9.5px}}
+
+
+/* v18.5.7: two-line main catalog, scoped to this list only. */
+#items-list .r183-items{display:grid;grid-template-columns:minmax(0,1fr);gap:3px}
+#items-list .r1857-compact{padding:4px 6px!important;min-height:48px;margin:0!important;box-shadow:none!important;border-radius:9px!important;overflow:hidden;box-sizing:border-box}
+#items-list .r1857-compact .r184-item-main{align-items:center;gap:7px;min-width:0}
+#items-list .r1857-compact .r184-thumb{width:40px;height:40px;flex:0 0 40px;border-radius:7px;box-shadow:none}
+#items-list .r1857-compact .r184-item-info{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0}
+#items-list .r1857-top{display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0}
+#items-list .r1857-top .name{flex:1;min-width:0;margin:0!important;font-size:13px;line-height:17px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0}
+#items-list .r1857-summary{height:15px;min-width:0;color:var(--text-muted);font-size:11.5px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#items-list .r1857-state{display:flex;align-items:center;gap:3px;flex:0 1 auto;max-width:47%;min-width:0;color:var(--text-muted);font-size:10px;line-height:15px;font-weight:600}
+#items-list .r1857-state-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#items-list .r1857-dot{width:6px;height:6px;border-radius:50%;flex:0 0 6px;background:currentColor}
+#items-list .r1857-state.free{color:var(--r185-green,#188441)}
+#items-list .r1857-state.held,#items-list .r1857-state.repair{color:var(--r185-red,#c92c35)}
+#items-list .r1857-state.buyout{color:var(--r185-orange,#a96a00)}
+#items-list .r1857-state.booked{color:var(--r185-purple,#884ac5)}
+@media(min-width:900px){.web-mode #items-list .r183-items{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:5px}}
