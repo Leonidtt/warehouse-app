@@ -25,9 +25,6 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
 .r182-place-meta{display:flex;align-items:center;gap:4px}.r182-place-meta .r182-icon{width:13px;height:13px;color:var(--text-muted)}.search-icon .r182-icon{width:19px;height:19px;color:var(--text-muted)}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#11151d;--card-bg:#202733;--text:#f4f6fb;--text-muted:#aab6c5;--skeleton-bg:#2b3543;--border:rgba(180,195,220,.14)}}
 
-.r182-no-repair .r182-summary-main>.r182-numbers {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 .r182-no-repair .r182-cat-row {
   grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
 }
@@ -118,7 +115,12 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
   background: var(--overview-tile);
   color: var(--r185-muted);
 }
-.r182-overview .r182-numbers { gap: 8px; }
+.r182-overview .r182-numbers {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+}
 .r182-overview .r182-stat {
   display: grid;
   place-content: center start;
@@ -174,13 +176,4 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
 .r182-overview :is(button, summary):focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
-}
-@media(min-width: 900px) {
-  .web-mode .r182-summary-main {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    align-items: stretch;
-    gap: 10px;
-  }
-  .web-mode .r182-overview .r182-stat { align-content: center; }
-  .web-mode .r182-overview .r182-booked { grid-column: 1 / -1; }
 }
