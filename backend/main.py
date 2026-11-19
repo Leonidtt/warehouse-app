@@ -34,6 +34,7 @@ from release_v184 import effective_user, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
+from snapshot_export import register_snapshot_export
 
 import urllib3
 urllib3.disable_warnings()
@@ -1416,6 +1417,7 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
+register_snapshot_export(app, DB_PATH)
 register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
