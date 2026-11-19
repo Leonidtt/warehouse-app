@@ -29,7 +29,7 @@ function installV18(){
   copySnapshot.classList.add('beta-copy-snapshot','owner-only','hidden');
   userInfo.before(profileHeader);
   profileHeader.append(copySnapshot,userInfo);
-  const mainHeading=document.createElement('div');mainHeading.className='v18-desktop-heading';mainHeading.textContent='Обзор склада';main.querySelector('.v18-header-left').append(mainHeading);
+  const mainHeading=document.createElement('div');mainHeading.className='v18-desktop-heading';mainHeading.textContent='Склад';main.querySelector('.v18-header-left').append(mainHeading);
   const workspace=document.createElement('div');workspace.className='v18-workspace';const inventory=document.createElement('section');inventory.className='v18-inventory';const aside=document.createElement('aside');aside.className='v18-overview';
   const tableHead=document.createElement('div');tableHead.className='v18-title-row';const tableTitle=document.createElement('h2');tableTitle.textContent='Товары';tableHead.append(tableTitle);const addDesktop=btn('Добавить товар',()=>openAddItemModal(),'plus','v18-admin hidden v18-desktop-only');addDesktop.style.cssText='width:auto;margin:0;min-height:38px;font-size:13px';tableHead.append(addDesktop);
   inventory.append(tableHead,main.querySelector('.search-wrapper'),main.querySelector('.filters'),$('items-list'));

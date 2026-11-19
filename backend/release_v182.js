@@ -28,19 +28,61 @@ function installRelease182(){
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
   function renderOverview(data){
     const {counts:c,categories,booked,daily:d,low:short}=data;booked17=new Set(booked);
-    const expanded=dashboard.querySelector('details')?.open??true;dashboard.className='r182-overview card';dashboard.replaceChildren();
-    const header=el('div','r182-overview-heading','Обзор склада'),summary=el('div','r182-summary');dashboard.append(header,summary);
-    const left=el('div','r182-summary-main'),right=el('div','r182-summary-cats');summary.append(left,right);
-    const total=button('',()=>filterTo(),'r182-total');total.append(el('span','r182-muted','Всего оборудования'),el('strong','',countNum(c.total)));left.append(total);
-    const bar=el('div','r182-meter');bar.setAttribute('aria-hidden','true');
+    const expanded=dashboard.querySelector('details')?.open??false;
+    dashboard.className='r182-overview card';
+    dashboard.replaceChildren();
+    const header=el('h2','r182-overview-heading','Обзор склада');
+    const summary=el('div','r182-summary');
+    const left=el('div','r182-summary-main');
+    const right=el('div','r182-summary-cats');
+    dashboard.append(header,summary);
+    summary.append(left,right);
+
     const hasRepairs=Number(c.repair)>0;
     const states=[['stock','На складе','stock182'],['working','В работе','work182']];
     if(hasRepairs)states.push(['repair','В ремонте','repair']);
     dashboard.classList.toggle('r182-no-repair',!hasRepairs);
-    states.forEach(([key])=>{const part=el('span','r182-'+key);part.style.flex=String(Math.max(0,c[key]));bar.append(part)});left.append(bar);
-    const numbers=el('div','r182-numbers');for(const [key,label,status]of states){const b=button('',()=>filterTo(status),'r182-stat');b.append(el('strong','r182-color-'+key,countNum(c[key])),el('span','',label));numbers.append(b)}left.append(numbers);
-    const reservations=button('',()=>filterTo('booked_today'),'r182-booked');reservations.append(el('span','','Забронировано сегодня'),el('b','',countNum(booked.length)),icon('right'));left.append(reservations);
-    const detail=el('details','r182-categories');detail.open=expanded;detail.append(el('summary','','По категориям'));right.append(detail);
+
+    const total=button('',()=>filterTo(),'r182-total');
+    const totalCopy=el('span','r182-total-copy');
+    totalCopy.append(el('span','r182-muted','Всего оборудования'),el('strong','',countNum(c.total)));
+    const ring=el('span','r182-ring');
+    ring.setAttribute('aria-hidden','true');
+    ring.append(icon('box'));
+    if(c.total>0){
+      const segments=[];
+      let shown=0;
+      for(const [key] of states){
+        const count=Number(c[key]);
+        if(count<=0)continue;
+        const start=shown/c.total*100;
+        shown+=count;
+        segments.push('var(--overview-'+key+') '+start+'% '+(shown/c.total*100)+'%');
+      }
+      if(segments.length)ring.style.setProperty('--overview-ring-fill','conic-gradient('+segments.join(',')+')');
+    }
+    total.append(totalCopy,ring);
+    left.append(total);
+
+    const numbers=el('div','r182-numbers');
+    for(const [key,label,status] of states){
+      const tile=button('',()=>filterTo(status),'r182-stat');
+      const dot=el('span','r182-overview-dot '+key);
+      dot.setAttribute('aria-hidden','true');
+      tile.append(dot,el('strong','r182-color-'+key,countNum(c[key])),el('span','',label));
+      numbers.append(tile);
+    }
+    left.append(numbers);
+    const reservations=button('',()=>filterTo('booked_today'),'r182-booked');
+    reservations.append(el('span','r182-booked-label','Забронировано сегодня'),el('b','',countNum(booked.length)),icon('right'));
+    left.append(reservations);
+
+    const detail=el('details','r182-categories');
+    detail.open=expanded;
+    const detailTitle=el('summary');
+    detailTitle.append(el('span','','По категориям'),icon('right'));
+    detail.append(detailTitle);
+    right.append(detail);
     const table=el('div','r182-category-table'), row=el('div','r182-cat-row r182-cat-head');
     const headings=['Категория','Всего','Склад','Работа'];
     if(hasRepairs)headings.push('Рем.');
