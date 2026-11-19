@@ -887,7 +887,7 @@ async function betaCopyMainData(button) {
                 }
                 
                 const userInfoEl = document.getElementById("user-info");
-                if (userInfoEl) userInfoEl.innerHTML = `${escapeOwnerText(currentUser.full_name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : ''}</span>`;
+                if (userInfoEl) userInfoEl.innerHTML = `${escapeOwnerText(currentUser.full_name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Кладовщик' : ''}</span>`;
 
                 if (currentUser.role === "admin") { 
                     document.getElementById("nav-settings").classList.remove("hidden");
@@ -968,7 +968,7 @@ async function betaCopyMainData(button) {
             try {
                 await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
                 currentUser.full_name = name;
-                document.getElementById("user-info").innerHTML = `${escapeOwnerText(name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : ''}</span>`;
+                document.getElementById("user-info").innerHTML = `${escapeOwnerText(name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Кладовщик' : ''}</span>`;
                 document.getElementById(overlayId).remove();
                 showToast("Имя сохранено");
             } catch (e) { notify(e.message); setLoading(btn, false); }
