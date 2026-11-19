@@ -44,7 +44,7 @@ function installRelease182(){
 
     const total=button('',()=>filterTo(),'r182-total');
     const totalCopy=el('span','r182-total-copy');
-    totalCopy.append(el('span','r182-muted','Всего оборудования'),el('strong','',countNum(c.total)));
+    totalCopy.append(el('span','r182-muted','Всего фототехники'),el('strong','',countNum(c.total)));
     const ring=el('span','r182-ring');
     ring.setAttribute('aria-hidden','true');
     ring.append(el('span','r182-overview-photo'));
