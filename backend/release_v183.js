@@ -16,13 +16,32 @@ function installRelease183(){
   renderActions=()=>{
     oldActions();if(currentItem?.kind!=='consumable')return;
     const code=currentItem.code,box=$('actions'),write=box.querySelector('button[onclick="doWriteoff()"]');
-    if(write){write.textContent='Взять / списать';const title=box.querySelector('h2');if(title)title.textContent='Взять расходники';if(!currentItem.stocks.some(s=>s.quantity>0))write.disabled=true}
-    const area=document.createElement('section');area.className='r183-return';const h=document.createElement('h3');h.textContent='Вернуть / добавить на склад';const loc=document.createElement('select');loc.add(new Option('Выберите помещение',''));for(const l of locations)loc.add(new Option(l.name,l.id));if(locations.length===1)loc.value=locations[0].id;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max='1000000';qty.step='1';qty.value='1';qty.setAttribute('aria-label','Количество для возврата');area.append(h,loc,qty);
-    btn17(area,'Вернуть / добавить',async()=>{
+    if(write)write.disabled=!currentItem.stocks.some(stock=>stock.quantity>0);
+    const area=document.createElement('details');
+    area.className='beta-consumable-action';
+    const title=document.createElement('summary');
+    title.textContent='Вернуть / добавить';
+    const form=document.createElement('div');
+    form.className='beta-consumable-form';
+    const loc=document.createElement('select');
+    loc.setAttribute('aria-label','Помещение для возврата');
+    loc.add(new Option('Выберите помещение',''));
+    for(const l of locations)loc.add(new Option(l.name,l.id));
+    if(locations.length===1)loc.value=locations[0].id;
+    const qty=document.createElement('input');
+    qty.type='number';
+    qty.min='1';
+    qty.max='1000000';
+    qty.step='1';
+    qty.value='1';
+    qty.setAttribute('aria-label','Количество для возврата');
+    form.append(loc,qty);
+    area.append(title,form);
+    btn17(form,'Вернуть / добавить',async()=>{
       const n=Number(qty.value);if(!loc.value||!Number.isInteger(n)||n<1||n>1000000)throw Error('Выберите помещение и укажите количество');
       if(!confirm('Добавить '+n+' '+(currentItem.unit||'шт.')+' на склад?'))return;
       await api('/api/items/'+encodeURIComponent(code)+'/return-consumable',{method:'POST',body:JSON.stringify({location_id:Number(loc.value),quantity:n})},0);showToast('Расходники возвращены');await loadItems();loadDashboard17();if(currentItem?.code===code)await openItem(code);
-    },'ok');box.append(area);
+    },'ok');(box.querySelector('.beta-consumable-actions')||box).append(area);
   };
 }
 function showBulk183(){

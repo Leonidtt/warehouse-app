@@ -12,40 +12,104 @@ function installRelease182(){
   const icons={pin:'<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',music:'<path d="M9 18V5l12-2v13M9 9l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>',ship:'<path d="M3 13 12 9l9 4-3 6H6zM7 11V5h10v6M12 5V2M2 22q2-3 5 0 3-3 5 0 3-3 5 0 3-3 5 0"/>',check:'<path d="m5 12 4 4L19 6"/>',alert:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3h.01"/>',box:'<path d="m3 7 9-4 9 4v13H3zM3 7l9 5 9-5M12 12v8"/>',camera:'<rect x="2" y="6" width="20" height="15" rx="3"/><path d="M7 6l2-3h6l2 3"/><circle cx="12" cy="13" r="4"/>',right:'<path d="m9 18 6-6-6-6"/>',refresh:'<path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/>',user:'<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>'};
   const icon=k=>{const e=el('span','r182-icon');e.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(icons[k]||icons.box)+'</svg>';return e};
   document.querySelectorAll('.search-icon').forEach(e=>e.replaceChildren(icon('search')));
-  const main=$('screen-main'),quick=main.querySelector('.v18-quick'),overview=main.querySelector('.v18-overview');
-  quick.prepend(quick.querySelector('.take-btn'));quick.before($('dashboard-v17'));quick.querySelector('.qr-btn-main').lastChild.textContent=' Сканировать QR';overview.prepend($('low-stock-banner'));
-  overview.querySelector('.v18-overview-details')?.remove();
+  const main=$('screen-main'),quick=main.querySelector('.v18-quick');
+  quick.prepend(quick.querySelector('.take-btn'));quick.before($('dashboard-v17'));quick.querySelector('.qr-btn-main').lastChild.textContent=' Сканировать QR';
+  quick.before($('daily-report-box'));
   const addNoCategory=()=>{if(![...$('filter-category').options].some(o=>o.value==='__without_category__'))$('filter-category').add(new Option('Без категории','__without_category__'))};const oldCategories=loadCategories17;loadCategories17=async()=>{await oldCategories();addNoCategory()};addNoCategory();
   const filter=$('filter-status');filter.add(new Option('На складе','stock182'));filter.add(new Option('В работе','work182'));
   const prevMatches=matchesStatus17;matchesStatus17=(i,s)=>s==='stock182'?i.kind==='equipment'&&!i.needs_repair&&i.total>0:s==='work182'?i.kind==='equipment'&&!i.needs_repair&&i.holders.length>0:prevMatches(i,s);
-  function filterTo(status='',category='',equipment=true){
-    $('filter-status').value=status;$('filter-kind').value=equipment?'equipment':'';$('filter-category').value=category==='Без категории'?'__without_category__':category;$('filter-location').value='';$('search-input').value='';filterItems();
+  function filterTo(category,status=''){
+    const select=$('filter-category');
+    if(![...select.options].some(option=>option.value===category))select.add(new Option(category,category));
+    select.value=category;
+    $('filter-status').value=status;
+    $('filter-kind').value='equipment';
+    $('filter-location').value='';
+    $('search-input').value='';
+    filterItems();
     $('items-list').scrollIntoView({block:'start',behavior:'smooth'});
   }
   const historyType=el('select');historyType.id='history-type182';[['','Все действия'],['checkout','Выдача'],['return','Возврат'],['writeoff','Списание'],['move','Перемещение']].forEach(([v,t])=>historyType.add(new Option(t,v)));$('history-date').after(historyType);historyType.onchange=()=>renderHistory17();
   async function openDailyHistory(date,key){$('history-query').value='';$('history-date').value=date;historyType.value={taken:'checkout',returned:'return',written_off:'writeoff'}[key]||'';await showHistory()}
   const dashboard=$('dashboard-v17'),daily=$('daily-report-box'),low=$('low-stock-banner');
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
-  function renderOverview(data){
-    const {counts:c,categories,booked,daily:d,low:short}=data;booked17=new Set(booked);
-    const expanded=dashboard.querySelector('details')?.open??true;dashboard.className='r182-overview card';dashboard.replaceChildren();
-    const header=el('div','r182-overview-heading','Обзор склада'),summary=el('div','r182-summary');dashboard.append(header,summary);
-    const left=el('div','r182-summary-main'),right=el('div','r182-summary-cats');summary.append(left,right);
-    const total=button('',()=>filterTo(),'r182-total');total.append(el('span','r182-muted','Всего оборудования'),el('strong','',countNum(c.total)));left.append(total);
-    const bar=el('div','r182-meter');bar.setAttribute('aria-hidden','true');
-    const states=[['stock','На складе','stock182'],['working','В работе','work182'],['repair','В ремонте','repair']];
-    states.forEach(([key])=>{const part=el('span','r182-'+key);part.style.flex=String(Math.max(0,c[key]));bar.append(part)});left.append(bar);
-    const numbers=el('div','r182-numbers');for(const [key,label,status]of states){const b=button('',()=>filterTo(status),'r182-stat');b.append(el('strong','r182-color-'+key,countNum(c[key])),el('span','',label));numbers.append(b)}left.append(numbers);
-    const reservations=button('',()=>filterTo('booked_today'),'r182-booked');reservations.append(el('span','','Забронировано сегодня'),el('b','',countNum(booked.length)),icon('right'));left.append(reservations);
-    const detail=el('details','r182-categories');detail.open=expanded;detail.append(el('summary','','По категориям'));right.append(detail);
-    const table=el('div','r182-category-table');const row=el('div','r182-cat-row r182-cat-head');['Категория','Всего','Склад','Работа','Рем.'].forEach(t=>row.append(el('span','',t)));table.append(row);
-    for(const cat of categories.filter(x=>x.total>0)){
-      const line=el('div','r182-cat-row');line.append(button(cat.name,()=>openCategoryStats(cat.name),'r182-cat-name'));
-      for(const [key,status]of [['total',''],['stock','stock182'],['working','work182'],['repair','repair']]){const b=button(countNum(cat[key]),()=>filterTo(status,cat.name),'r182-cat-num r182-color-'+key);b.setAttribute('aria-label',cat.name+': '+key+' '+cat[key]);line.append(b)}table.append(line);
+  function categoryWidget(category,label,counts={}){
+    const widget=el('section','r182-summary-main');
+    widget.setAttribute('aria-label',label);
+    const content=el('div','r182-featured-card');
+    widget.append(el('h2','r182-featured-title',label),content);
+
+    const total=button('',()=>filterTo(category),'r182-total');
+    const totalCopy=el('span','r182-total-copy');
+    totalCopy.append(el('strong','',countNum(counts.total)),el('span','r182-muted','Всего'));
+    total.append(totalCopy);
+    content.append(total);
+
+    const states=[['stock','Склад','stock182'],['working','Работа','work182']];
+    if(Number(counts.repair)>0)states.push(['repair','Ремонт','repair']);
+    const numbers=el('div','r182-numbers');
+    for(const [key,statusLabel,status] of states){
+      const tile=button('',()=>filterTo(category,status),'r182-stat');
+      tile.append(el('strong','r182-color-'+key,countNum(counts[key])),el('span','',statusLabel));
+      numbers.append(tile);
     }
-    if(!categories.some(x=>x.total>0))table.append(el('p','r182-muted','Нет оборудования'));detail.append(table);
-    if(d){daily.className='card r182-daily';daily.replaceChildren(el('div','r182-overview-heading','Сводка за '+d.date.split('-').reverse().join('.')));const metrics=el('div','r182-numbers');for(const [key,label,color]of [['taken','Выдано','working'],['returned','Возвращено','stock'],['written_off','Списано','repair']]){const b=button('',()=>openDailyHistory(d.date,key),'r182-stat');b.append(el('strong','r182-color-'+color,countNum(d[key])),el('span','',label));metrics.append(b)}daily.append(metrics);}else{daily.replaceChildren();daily.className="hidden";}
-    low.className='card r182-low'+(short.length?'':' hidden');low.removeAttribute('style');low.replaceChildren();if(short.length){const h=el('div','r182-overview-heading');h.append(icon('alert'),el('span','','Заканчиваются расходники'));low.append(h);for(const item of short){const b=button('',()=>openItem(item.code),'r182-low-row');b.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));low.append(b)}}
+    content.append(numbers);
+    return widget;
+  }
+
+  function renderOverview(data){
+    const {categories,booked,daily:d,low:short,consumables=0}=data;
+    booked17=new Set(booked);
+    const expanded=dashboard.querySelector('details')?.open??false;
+    const byName=new Map(categories.map(category=>[category.name,category]));
+    const primary=el('div','r182-summary r182-featured');
+    primary.append(
+      categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
+      categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
+    );
+
+    const detail=el('details','r182-disclosure');
+    detail.open=expanded;
+    const detailTitle=el('summary');
+    detailTitle.append(el('span','','Ноутбуки и принтеры'),icon('right'));
+    const other=el('div','r182-summary r182-featured');
+    other.append(
+      categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),
+      categoryWidget('Принтеры','Принтеры',byName.get('Принтеры')),
+    );
+    detail.append(detailTitle,other);
+    dashboard.className='r182-overview card';
+    dashboard.replaceChildren(primary,detail);
+
+    daily.replaceChildren();
+    daily.className=d?'r182-daily':'hidden';
+    if(d){
+      const day=el('span','r182-report-day','Вчера');
+      day.title=d.date.split('-').reverse().join('.');
+      daily.append(day);
+      for(const [key,label,color] of [['taken','Выдано','working'],['returned','Возврат','stock'],['written_off','Списано','repair']]){
+        const metric=button('',()=>openDailyHistory(d.date,key),'r182-report-metric');
+        metric.append(el('span','',label),el('strong','r182-color-'+color,countNum(d[key])));
+        daily.append(metric);
+      }
+    }
+    low.className='card r182-consumables r182-disclosure';
+    const stockTitle=el('summary');
+    stockTitle.append(el('span','','Статистика расходников'),icon('right'));
+    const stockBody=el('div','r182-consumables-body');
+    low.replaceChildren(stockTitle,stockBody);
+    const metrics=el('div','r182-consumable-metrics');
+    for(const [label,value] of [['Позиций',consumables],['На исходе',short.length]]){
+      const metric=el('div','r182-consumable-metric');
+      metric.append(el('span','',label),el('strong','',countNum(value)));
+      metrics.append(metric);
+    }
+    stockBody.append(metrics);
+    for(const item of short){
+      const row=button('',()=>openItem(item.code),'r182-low-row');
+      row.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));
+      stockBody.append(row);
+    }
     filterItems();
   }
   let pendingOverview=null,lastOverview=0;
@@ -54,11 +118,12 @@ function installRelease182(){
   // Correct status classification, including negative phrases like «не хватает».
   const classify=value=>{const s=String(value??'').toLowerCase().trim().replace(/ё/g,'е');if(!s)return 'unknown';if(/не\s*хватает|недостат|не\s*доста|нет\s+|нужн|требу|не\s*ок/.test(s))return 'issue';if(/^(?:[✓✅\s]*)(?:всего\s+хватает|все\s+хватает|хватает|все\s+есть|ок|все\s+в\s+наличии)[.!\s]*$/.test(s))return 'ok';return 'issue'};
   const dateKey=s=>{const v=String(s||'');const m=v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);if(m)return Date.UTC(Number(m[3])+(m[3].length===2?2000:0),Number(m[2])-1,Number(m[1]));return /^\d{4}-\d{2}-\d{2}/.test(v)?Date.parse(v)||0:0};
-  const sections={site:{id:'screen-platforms',search:'platform-search',list:'platforms-list',sync:'sync-btn-plat',sheet:'кц',cache:'platforms',accent:'site',kind:'music'},vessel:{id:'screen-th',search:'th-search',list:'th-list',sync:'sync-btn-th',sheet:'тх мск',cache:'ships',accent:'vessel',kind:'ship'}};
+  const sections={site:{id:'screen-platforms',search:'platform-search',list:'platforms-list',sync:'sync-btn-plat',sheet:'кц',cache:'platforms'},vessel:{id:'screen-th',search:'th-search',list:'th-list',sync:'sync-btn-th',sheet:'тх мск',cache:'ships'}};
   const statusLabels={all:'Все',issue:'Не хватает',ok:'Всё есть',unknown:'Нет данных'};
   for(const config of Object.values(sections)){
-    config.filter='all';const root=$(config.id);root.classList.add('r182-event-screen','r182-'+config.accent);
+    config.filter='all';const root=$(config.id);root.classList.add('r182-event-screen');
     config.tabs=el('div','r182-event-tabs');$(config.list).before(config.tabs);
+    $(config.list).classList.add('r182-event-list');
     config.stamp=el('div','r182-sync-time');$(config.sync).after(config.stamp);
     const sync=$(config.sync);sync.replaceChildren(icon('refresh'),el('span','','Обновить данные'));sync.classList.add('r182-sync');
   }
@@ -67,14 +132,81 @@ function installRelease182(){
     const askKey=Object.keys(row).find(k=>/просят|нужно|статус|не хватает/i.test(k));const fallback=Object.entries(row).find(([k,v])=>/хватает|недостат/i.test(String(v)))?.[0];const statusKey=askKey||fallback;
     return {name:String(row['Название']||Object.values(row)[0]||'—'),date:String(row['Дата']||row['дата']||''),status:String(statusKey?row[statusKey]||'':''),fields:Object.entries(row).filter(([k,v])=>!['Название','Дата','дата',statusKey].includes(k)&&v!==''&&v!=null)};
   }).map(r=>({...r,state:classify(r.status)})).sort((a,b)=>({issue:0,unknown:1,ok:2}[a.state]-{issue:0,unknown:1,ok:2}[b.state])||dateKey(b.date)-dateKey(a.date));}
-  function statusNode(r){const e=el('div','r182-event-status r182-status-'+r.state);e.append(icon(r.state==='ok'?'check':'alert'),el('span','',r.state==='ok'?'Всего хватает':r.status||'Статус не указан'));return e}
-  function eventLink(key,r){const b=button('',()=>showLinked17(key,r.name),'r182-event-link');b.append(icon('box'),el('span','',key==='site'?'Оборудование площадки':'Оборудование теплохода'),icon('right'));return b}
-  function renderEvent(key){const cfg=sections[key],all=eventRows(key),query=$(cfg.search).value.trim().toLowerCase();const filtered=all.filter(r=>(cfg.filter==='all'||r.state===cfg.filter)&&r.name.toLowerCase().includes(query));
-    cfg.tabs.replaceChildren(...Object.entries(statusLabels).map(([status,label])=>{const b=button(label+' · '+all.filter(r=>status==='all'||r.state===status).length,()=>{cfg.filter=status;renderEvent(key)},'r182-event-tab'+(cfg.filter===status?' active':''));b.setAttribute('aria-pressed',String(cfg.filter===status));return b}));
+  function eventValue(key,label,value){
+    const node=el('b','r182-event-value',value);
+    if(key!=='vessel')return node;
+    const match=String(value).trim().match(/^(-?(?:\d{1,3}(?:\s\d{3})+|\d+)(?:[.,]\d+)?)(?:\s*(?:шт\.?|м\.?|метр(?:а|ов)?|рул\.?|рулон(?:а|ов)?|компл\.?|комплект(?:а|ов)?))?$/i);
+    if(!match)return node;
+    const minimum=/винил/i.test(label)?50:2;
+    const low=Number(match[1].replace(/\s/g,'').replace(',','.'))<minimum;
+    node.classList.add(low?'r182-value-low':'r182-value-ok');
+    node.title=low?'Ниже нормы: минимум '+minimum:'В норме: минимум '+minimum;
+    return node;
+  }
+  function eventCard(key,row){
+    const card=el('article','card r182-event-card');
+    const header=el('header','r182-event-head');
+    const title=el('div','r182-event-title');
+    title.append(el('h3','',row.name));
+    if(row.date)title.append(el('span','r182-event-date',row.date));
+    const bring=key==='site'&&row.state==='issue';
+    const label=bring?'Нужно привезти':statusLabels[row.state];
+    const status=el('span','r182-event-status r182-status-'+row.state,label);
+    header.append(title);
+    if(!bring)header.append(status);
+    card.append(header);
+
+    if(bring){
+      const shortage=el('div','r182-event-shortage');
+      shortage.append(status);
+      if(row.status.trim().toLowerCase()!==label.toLowerCase()){
+        shortage.append(el('p','r182-event-note',row.status));
+      }
+      card.append(shortage);
+    }
+
+    if(row.fields.length){
+      const fields=el('dl','r182-event-fields');
+      for(const [heading,value] of row.fields){
+        const field=el('div','r182-event-field');
+        const amount=el('dd');
+        amount.append(eventValue(key,heading,value));
+        field.append(el('dt','',heading),amount);
+        fields.append(field);
+      }
+      card.append(fields);
+    }
+    if(!bring && row.state==='issue' && row.status.trim().toLowerCase()!==label.toLowerCase()){
+      card.append(el('p','r182-event-note',row.status));
+    }
+    if(key==='vessel' && currentUser?.role!=='employee'){
+      const equipment=button('',()=>showLinked17(key,row.name),'r182-event-link');
+      equipment.append(el('span','','Оборудование теплохода'),icon('right'));
+      card.append(equipment);
+    }
+    return card;
+  }
+
+  function renderEvent(key){
+    const cfg=sections[key],all=eventRows(key),query=$(cfg.search).value.trim().toLowerCase();
+    const filtered=all.filter(r=>(cfg.filter==='all'||r.state===cfg.filter)&&r.name.toLowerCase().includes(query));
+    cfg.tabs.replaceChildren(...Object.entries(statusLabels).map(([status,label])=>{
+      const bring=key==='site'&&status==='issue';
+      const count=all.filter(r=>status==='all'||r.state===status).length;
+      const title=(bring?'Нужно привезти':label)+' · '+count;
+      const tab=button(title,()=>{cfg.filter=status;renderEvent(key)},'r182-event-tab');
+      tab.classList.toggle('r182-bring-tab',bring);
+      tab.classList.toggle('active',cfg.filter===status);
+      tab.setAttribute('aria-pressed',String(cfg.filter===status));
+      return tab;
+    }));
     const stamp=cacheGet17('sync182_'+cfg.cache);cfg.stamp.textContent=stamp?'Последняя синхронизация: '+new Date(Number(stamp)).toLocaleString('ru-RU'):'Данные не обновлялись в этом браузере';
-    const list=$(cfg.list);list.replaceChildren();if(!filtered.length){list.append(el('p','r182-muted',all.length?'Ничего не найдено':'Нет сохранённых данных. Ожидаем обновления.'));return}
-    if(document.body.classList.contains('web-mode')&&innerWidth>=900){const wrap=el('div','v18-table-wrap r182-event-table'),table=el('table','v18-table');const head=el('thead'),tr=el('tr');['Название','Дата','Сведения','Статус','Оборудование'].forEach(t=>tr.append(el('th','',t)));head.append(tr);table.append(head);const body=el('tbody');for(const r of filtered){const row=el('tr');row.append(el('td','',r.name),el('td','',r.date||'—'));const fields=el('td');r.fields.forEach(([k,v])=>fields.append(el('div','',k+': '+v)));const status=el('td'),link=el('td');status.append(statusNode(r));link.append(eventLink(key,r));row.append(fields,status,link);body.append(row)}table.append(body);wrap.append(table);list.append(wrap);return}
-    for(const r of filtered){const card=el('article','card platform-card'),header=el('div','platform-title');header.append(el('span','',r.name),el('span','platform-date',r.date));const fields=el('div','platform-info');for(const [k,v]of r.fields){const f=el('div','platform-info-row');f.append(el('span','',k+':'),el('b','',v));fields.append(f)}const status=el('div','platform-status '+(r.state==='ok'?'status-ok':r.state==='issue'?'status-bad':'r183-event-unknown'),r.state==='ok'?'ВСЕГО ХВАТАЕТ':r.status||'Нет данных');const link=button(key==='site'?'Оборудование площадки':'Оборудование теплохода',()=>showLinked17(key,r.name));card.append(header,fields,status,link);list.append(card)}
+    const list=$(cfg.list);
+    if(!filtered.length){
+      list.replaceChildren(el('p','r182-muted',all.length?'Ничего не найдено':'Нет сохранённых данных. Ожидаем обновления.'));
+      return;
+    }
+    list.replaceChildren(...filtered.map(row=>eventCard(key,row)));
   }
   renderPlatformsList=()=>renderEvent('site');renderTHList=()=>renderEvent('vessel');
   const syncJobs=new Map();syncGoogle=sheet=>{const key=sheet==='кц'?'site':'vessel',cfg=sections[key];if(syncJobs.has(key))return syncJobs.get(key);const b=$(cfg.sync);setLoading(b,true,'Обновляем…');const job=api('/api/sync_google?sheet_name='+encodeURIComponent(cfg.sheet)+'&t='+Date.now(),{cache:'no-store'},0).then(r=>{if(r.status==='error'||!Array.isArray(r.data))throw Error(r.message||'Не удалось обновить данные');if(key==='site')cachedPlatforms=r.data;else cachedTH=r.data;cacheSet17(cfg.cache,JSON.stringify(r.data));cacheSet17('sync182_'+cfg.cache,String(Date.now()));renderEvent(key);if(currentScreen===cfg.id)showToast('Данные обновлены')}).catch(e=>{if(currentScreen===cfg.id)notify('Не удалось обновить. Сохранены прежние данные: '+e.message)}).finally(()=>{setLoading(b,false);syncJobs.delete(key)});syncJobs.set(key,job);return job};

@@ -162,11 +162,6 @@
         .stats-filters { display: flex; gap: 8px; margin: 0 16px 16px; }
         .stats-filters input, .stats-filters select { padding: 12px; font-size: 14px; margin: 0; flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; font-weight: 600; color: var(--text); }
 
-        .price-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
-        .price-table th { text-align: left; padding: 10px; background: var(--skeleton-bg); color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .price-table td { padding: 10px; border-bottom: 1px solid var(--border); }
-        .price-table tr:last-child td { border-bottom: none; }
-        .price-table .total-row { background: rgba(0, 122, 255, 0.05); font-weight: 700; font-size: 16px; color: var(--primary); }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(5px); animation: fadeIn 0.2s ease; }
         .modal-content { background: var(--bg); width: 100%; max-width: 500px; height: 90%; border-radius: 20px 20px 0 0; padding: 20px; overflow-y: auto; animation: slideUpModal 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
@@ -179,17 +174,34 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css">
-    <script src="/warehouse-v18.js?v=1852"></script>
-    <link rel="stylesheet" href="/release-v182.css">
-    <script src="/release-v182.js"></script>
-    <link rel="stylesheet" href="/release-v183.css">
-    <script src="/release-v183.js"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1857">
-    <script src="/release-v184.js?v=1857"></script>
-    <link rel="stylesheet" href="/release-v185.css?v=1852">
-    <script src="/release-v185.js?v=1858"></script>
-</head>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1877">
+    <script src="/warehouse-v18.js?v=1877"></script>
+    <link rel="stylesheet" href="/release-v182.css?v=1877">
+    <script src="/release-v182.js?v=1877"></script>
+    <link rel="stylesheet" href="/release-v183.css?v=1877">
+    <script src="/release-v183.js?v=1877"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=1877">
+    <script src="/release-v184.js?v=1877"></script>
+    <link rel="stylesheet" href="/release-v185.css?v=1877">
+    <script src="/release-v185.js?v=1877"></script>
+<style>
+.screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
+#my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
+#my-items-list .my-item-btn{padding:8px 10px;font-size:12px;flex-shrink:0}
+#platforms-list .platform-card,#th-list .platform-card{padding:10px;gap:6px;margin-bottom:6px}
+.platform-info{gap:3px;font-size:12px}
+#items-list .r1857-state-label{white-space:normal!important;overflow-wrap:anywhere;overflow:visible!important}
+#items-list .r1857-top .name{white-space:normal}
+</style><style>
+#my-items-list .r184-thumb{width:40px;height:40px;flex:0 0 40px;border-radius:7px;overflow:hidden}
+#my-items-list .my-item-card{min-height:48px;padding:4px 6px;gap:7px}
+#my-items-list .my-item-card .meta{font-size:11.5px!important;line-height:15px}
+.beta-simple .v18-quick button{min-height:66px;font-size:17px}
+.beta-simple #items-list .r1857-compact{min-height:56px}
+.beta-simple #items-list .r1857-top .name{font-size:15px}
+.beta-simple #items-list .r1857-summary{display:none}
+.beta-simple #my-items-list .my-item-btn{min-height:44px}
+</style></head>
 <body>
 
     <div id="toast-container"></div>
@@ -292,12 +304,6 @@
             <div style="width: 80px;"></div>
         </div>
 
-        <!-- Блок "Заканчивается" -->
-        <div id="low-stock-banner" class="hidden" style="background: rgba(255, 59, 48, 0.1); border: 1px solid rgba(255, 59, 48, 0.3); padding: 16px; border-radius: 16px; margin-bottom: 16px; color: var(--danger); font-weight: 600;">
-            <div style="font-size: 14px; margin-bottom: 8px;">⚠️ Заканчивается:</div>
-            <div id="low-stock-list" style="font-size: 14px; line-height: 1.5;"></div>
-        </div>
-
         <button class="qr-btn-main" onclick="scanQr()">
             <span style="font-size: 24px;">📷</span> Сканировать QR-код
         </button>
@@ -311,15 +317,16 @@
             <div id="report-text" style="margin-top:5px;"></div>
         </div>
 
-        <button class="secondary" onclick="showExtra('bookings')">🗓 Календарь бронирований</button><button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
-
-        <div id="my-items-section" class="hidden" style="margin-bottom: 24px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h2 style="font-size: 18px; margin:0; font-weight: 700; letter-spacing: -0.5px;">🖐 Мои вещи</h2>
-                <button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="returnAllMyItems()">Вернуть всё</button>
+        <section class="beta-activity" id="main-activity">
+            <div class="beta-activity-bar">
+                <div class="beta-activity-title" aria-hidden="true"><h2>Мои вещи</h2></div>
+                <button type="button" class="secondary beta-history-shortcut" id="main-history-btn" onclick="showHistory()">История</button>
             </div>
-            <div id="my-items-list"></div>
-        </div>
+            <div id="my-items-section" class="hidden">
+                <div id="my-items-list"></div>
+                <button type="button" class="secondary beta-return-all" onclick="returnAllMyItems()">Вернуть всё</button>
+            </div>
+        </section>
 
         <div id="my-bookings-section" class="hidden" style="margin-bottom: 24px;">
             <h2 style="font-size: 18px; margin-bottom: 12px; font-weight: 700; letter-spacing: -0.5px;">🗓 Мои брони</h2>
@@ -473,6 +480,9 @@
         <div style="padding: 0 16px; margin-top: 16px;">
             <button class="ok" onclick="openAddItemModal()" id="add-item-btn">➕ Добавить товар</button>
         </div>
+        <details id="low-stock-banner" class="hidden">
+            <div id="low-stock-list"></div>
+        </details>
         <div id="rooms-list" style="margin-top: 16px; padding: 0 16px;"></div>
     </div>
 
@@ -488,61 +498,70 @@
     <div id="screen-item" class="screen hidden">
         <div class="sticky-header">
             <button class="sticky-back" onclick="goBack()">← Назад</button>
-            <div class="sticky-title" id="item-title">Товар</div>
-            <div style="width: 80px;"></div>
+            <div class="sticky-title">Карточка товара</div>
         </div>
-        
-        <div style="margin-top: 16px;">
-            <div id="item-status-box"></div>
-            
-            <div style="display:flex; gap:8px; margin-bottom:16px;">
-                <button class="ok" onclick="showEditForm()" id="edit-btn" style="margin:0;">✏️ Ред.</button>
-                <button class="secondary" onclick="showItemHistory()" style="margin:0;">🕒 История</button>
-                <button class="secondary" onclick="showQr()" style="margin:0;">🔲 QR</button>
-            </div>
-            
-            <div id="kit-box" class="kit-box hidden">
-                <b>Комплектация:</b>
-                <div id="kit-body-text"></div>
-                <div id="kit-lens-text"></div>
-                <div id="kit-flash-text"></div>
-                <div id="kit-acc-text"></div>
-                <div id="kit-add-text"></div>
-            </div>
 
-            <div id="admin-price-box" class="hidden" style="margin-top:20px; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-                <table class="price-table">
-                    <thead>
-                        <tr>
-                            <th>Компонент</th>
-                            <th style="text-align:right;">Цена</th>
-                        </tr>
-                    </thead>
-                    <tbody id="price-table-body"></tbody>
-                </table>
-            </div>
-            
-            <div id="passport-v17"></div><div id="actions"></div><div id="repairs-v17"></div>
-            
-            <div id="booking-section">
-                <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
-                <div id="bookings-list"></div>
-                <div class="date-row">
-                    <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
-                    <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+        <article class="beta-item-card" aria-labelledby="item-title">
+            <div class="beta-item-hero">
+                <div>
+                    <h2 id="item-title">Товар</h2>
+                    <div class="meta" id="item-code-category"></div>
                 </div>
-                <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
+                <span class="status-badge" id="item-status-box"></span>
             </div>
+            <div id="item-stock-rows" class="beta-item-tiles"></div>
+            <div id="actions"></div>
 
-            <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Комментарии</h2>
-            <div id="comments-list"></div>
-            <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
-            <button class="secondary" onclick="doComment()">Отправить</button>
+            <details class="beta-item-disclosure hidden" id="item-kit-section" open>
+                <summary>Комплектация</summary>
+                <div id="kit-box" class="beta-item-tiles"></div>
+            </details>
+            <details class="beta-item-disclosure" id="item-extra-section">
+                <summary>Дополнительно</summary>
+                <div id="item-facts" class="beta-item-tiles"></div>
+                <div id="beta-item-tools">
+                    <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
+                    <button type="button" class="secondary" onclick="showQr()">QR-этикетка</button>
+                </div>
+                <div id="item-additional-actions"></div>
+                <div id="passport-v17"></div>
+                <div id="repairs-v17"></div>
 
-            <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
-            <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
-        </div>
+                <div id="booking-section">
+                    <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
+                    <div id="bookings-list"></div>
+                    <div class="date-row">
+                        <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
+                        <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+                    </div>
+                    <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
+                </div>
+
+                <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Комментарии</h2>
+                <div id="comments-list"></div>
+                <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
+                <button class="secondary" onclick="doComment()">Отправить</button>
+
+                <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
+                <button class="secondary" onclick="markLost()" id="lost-btn">Не нашёл на месте</button>
+            </details>
+            <button type="button" class="beta-item-history" onclick="showItemHistory()">История</button>
+        </article>
     </div>
+
+    <dialog id="item-recipient-dialog" aria-labelledby="item-recipient-title">
+        <form method="dialog">
+            <h2 id="item-recipient-title">Для кого взять технику?</h2>
+            <div class="input-group">
+                <label for="item-recipient-name">Фамилия</label>
+                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" required>
+            </div>
+            <div class="beta-checkout-actions">
+                <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
+                <button type="submit" value="checkout">Выдать</button>
+            </div>
+        </form>
+    </dialog>
 
     <div id="screen-item-history" class="screen hidden">
         <div class="sticky-header">
@@ -830,7 +849,7 @@
                 }
                 
                 const userInfoEl = document.getElementById("user-info");
-                if (userInfoEl) userInfoEl.innerHTML = `${escapeOwnerText(currentUser.full_name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : ''}</span>`;
+                if (userInfoEl) userInfoEl.innerHTML = `${escapeOwnerText(currentUser.full_name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Кладовщик' : ''}</span>`;
 
                 if (currentUser.role === "admin") { 
                     document.getElementById("nav-settings").classList.remove("hidden");
@@ -911,7 +930,7 @@
             try {
                 await api("/api/register", { method: "POST", body: JSON.stringify({ full_name: name }) });
                 currentUser.full_name = name;
-                document.getElementById("user-info").innerHTML = `${escapeOwnerText(name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Главный администратор' : ''}</span>`;
+                document.getElementById("user-info").innerHTML = `${escapeOwnerText(name)}<br><span style="color:var(--primary); font-size:10px;">${currentUser.is_owner ? 'Кладовщик' : ''}</span>`;
                 document.getElementById(overlayId).remove();
                 showToast("Имя сохранено");
             } catch (e) { notify(e.message); setLoading(btn, false); }
@@ -1145,16 +1164,31 @@
 
         function showUsers() { if(currentUser?.role!=="admin")return; loadUsers(); showScreen("screen-users"); }
         
-        async function loadItems() { 
-            const list = document.getElementById("items-list"); 
-            if(list.innerHTML.includes("Ничего не найдено") || list.innerHTML.includes("Загрузка")) list.innerHTML = "<p>Загрузка...</p>"; 
-            try { allItems = await api("/api/items"); filterItems(); loadMyItems(); } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(e.message)}</p>`; } 
+        let inventoryRequest = 0, holdingsRequest = 0;
+        async function loadItems() {
+            const request = ++inventoryRequest;
+            const holdings = loadMyItems();
+            const list = $('items-list');
+            try {
+                const items = await api('/api/items');
+                if (request === inventoryRequest) {
+                    allItems = items;
+                    filterItems();
+                }
+            } catch (error) {
+                if (request === inventoryRequest) {
+                    list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(error.message)}</p>`;
+                }
+            }
+            await holdings;
         }
-        
-        async function loadMyItems() { 
-            try { 
-                let myItems = await api("/api/my_items"); 
-                
+
+        async function loadMyItems() {
+            const request = ++holdingsRequest;
+            try {
+                const myItems = await api('/api/my_items');
+                if (request !== holdingsRequest) return;
+
                 myItems.sort((a, b) => {
                     const aForOther = a.taken_for && a.taken_for.trim() !== "";
                     const bForOther = b.taken_for && b.taken_for.trim() !== "";
@@ -1163,17 +1197,22 @@
                     return a.name.localeCompare(b.name); 
                 });
 
-                const section = document.getElementById("my-items-section"); 
-                const list = document.getElementById("my-items-list"); 
-                if (!myItems.length) { section.classList.add("hidden"); return; } 
-                section.classList.remove("hidden"); 
-                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div style="flex:1; cursor:pointer;" onclick="openItem(${jsArg17(i.item_code)})"><div style="font-weight:bold;">${escapeOwnerText(i.name)}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${escapeOwnerText(i.item_code)} ${i.taken_for ? `(Кому: ${escapeOwnerText(i.taken_for)})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain(${jsArg17(i.item_code)})">Вернуть</div></div>`).join(""); 
+                const activity = $('main-activity');
+                const section = $('my-items-section');
+                const list = $('my-items-list');
+                const hasItems = myItems.length > 0;
+                activity.classList.toggle('has-items', hasItems);
+                activity.querySelector('.beta-activity-title').setAttribute('aria-hidden', String(!hasItems));
+                section.classList.toggle('hidden', !hasItems);
+                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div class="beta-my-thumb"></div><div style="flex:1; min-width:0; cursor:pointer;" onclick="openItem(${jsArg17(i.item_code)})"><div style="font-weight:bold;">${escapeOwnerText(i.name)}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${escapeOwnerText(i.item_code)} ${i.taken_for ? `(Кому: ${escapeOwnerText(i.taken_for.trim().split(/\s+/)[0])})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain(${jsArg17(i.item_code)})">Вернуть</div></div>`).join("");
+                if(window.betaMyPhoto) list.querySelectorAll('.beta-my-thumb').forEach((node,k)=>node.replaceWith(window.betaMyPhoto({...myItems[k],code:myItems[k].item_code})));
+
             } catch (e) { console.log(e); } 
         }
         
         async function doReturnFromMain(code) { 
             haptic('medium');
-            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); loadItems(); } catch (e) { notify(e.message); } 
+            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); await Promise.all([loadItems(), loadDashboard17()]); } catch (e) { notify(e.message); }
         }
 
         async function returnAllMyItems() {
@@ -1181,7 +1220,7 @@
             haptic('medium');
             const myItems = await api("/api/my_items");
             for (let item of myItems) { try { await api(`/api/return?code=${encodeURIComponent(item.item_code)}`, { method: "POST" }); } catch(e) {} }
-            showToast("Все вещи возвращены"); loadItems();
+            showToast("Все вещи возвращены"); await Promise.all([loadItems(), loadDashboard17()]);
         }
         
         function renderItemsGrid(itemsArray, containerId) {
@@ -1206,7 +1245,7 @@
             list.innerHTML = sorted.map(i => { 
                 let placesHtml = (i.stocks || []).map(s => `<div class="meta">📍 ${escapeOwnerText(s.location_name)}</div>`).join(""); 
                 let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
-                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
+                let priceBadge = currentUser.role === "admin" && i.price ? `<span class="badge price beta-admin-price" title="Только для администраторов">${i.price} ₽</span>` : "";
                 let budgetBadge = i.kind==="equipment" && i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.kind==="equipment" && i.buyout_status ? `<span class="badge buyout">💸 ${escapeOwnerText(i.buyout_status)}</span>` : ""; 
                 let lowBadge = i.is_low ? `<span class="badge low">⚠️ Мало</span>` : ""; 
@@ -1261,7 +1300,7 @@
                 let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="font-size:12px; color:var(--text-muted); margin-top:2px;">📍 ${escapeOwnerText(s.location_name)}</div>`).join(""); 
                 
                 let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
-                let priceBadge = i.price ? `<span class="badge price">${i.price} ₽</span>` : ""; 
+                let priceBadge = currentUser.role === "admin" && i.price ? `<span class="badge price beta-admin-price" title="Только для администраторов">${i.price} ₽</span>` : "";
                 let budgetBadge = i.kind==="equipment" && i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
                 let buyoutBadge = i.kind==="equipment" && i.buyout_status ? `<span class="badge buyout">💸 ${escapeOwnerText(i.buyout_status)}</span>` : ""; 
                 let catBadge = i.category ? `<span class="badge category">${escapeOwnerText(i.category)}</span>` : "";
@@ -1323,7 +1362,7 @@
                 if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
                 selectedTakeItems = [];
                 updateTakeBatchUI();
-                loadItems();
+                await Promise.all([loadItems(), loadDashboard17()]);
                 backToMain();
             } catch (e) { notify(e.message); }
         }
@@ -1482,7 +1521,7 @@
                     items.forEach(item => {
                         let badges = "";
                         if (item.category) badges += `<span class="badge category">${escapeOwnerText(item.category)}</span>`;
-                        if (item.price) badges += `<span class="badge price">${item.price} ₽</span>`;
+                        if (currentUser.role === "admin" && item.price) badges += `<span class="badge price beta-admin-price" title="Только для администраторов">${item.price} ₽</span>`;
                         if (item.budget_tag) badges += `<span class="badge ${item.budget_tag === 'КЦ' ? 'budget-kc' : 'budget-tx'}">${escapeOwnerText(item.budget_tag)}</span>`;
                         if (item.buyout_status) badges += `<span class="badge buyout">💸 ${escapeOwnerText(item.buyout_status)}</span>`;
                         if (item.serial_number) badges += `<span class="badge eq">S/N: ${escapeOwnerText(item.serial_number)}</span>`;
@@ -1523,6 +1562,28 @@
         
 
         let itemRequest184=0, screenEpoch184=0, mainScroll184=0;
+        function adminPrice(value) {
+            const amount = document.createElement('span');
+            amount.className = 'beta-admin-price';
+            amount.title = 'Только для администраторов';
+            amount.textContent = money17(value);
+            return amount;
+        }
+
+        function itemTile(label, value, price = false) {
+            const tile = document.createElement('div');
+            tile.className = 'beta-item-tile';
+            const caption = document.createElement('span');
+            caption.className = price ? 'beta-admin-price' : 'beta-item-tile-label';
+            if (price) caption.title = 'Только для администраторов';
+            caption.textContent = label;
+            const amount = document.createElement('strong');
+            amount.className = 'beta-item-tile-value';
+            amount.textContent = value;
+            tile.append(amount, caption);
+            return tile;
+        }
+
         async function openItem(code) {
             const requestId=++itemRequest184, epoch=screenEpoch184;
             try {
@@ -1534,66 +1595,70 @@
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
                 document.getElementById("edit-btn").style.display = currentUser.role === 'admin' ? 'block' : 'none'; 
                 
-                let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; 
-                let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; 
-                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${escapeOwnerText(currentItem.budget_tag)}</div>` : ""; 
-                let snText = currentItem.kind==="equipment" && currentItem.serial_number ? `<div class="meta">S/N: ${escapeOwnerText(currentItem.serial_number)}</div>` : ""; 
-                let buyoutText = currentItem.kind==="equipment" && currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${escapeOwnerText(currentItem.buyout_status)}</div>` : ""; 
-                let catText = currentItem.category ? `<div class="meta">Категория: ${escapeOwnerText(currentItem.category)}</div>` : "";
-                
-                if (currentItem.kind==="equipment" && (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash || currentItem.kit_acc || currentItem.kit_add)) { 
-                    document.getElementById("kit-box").classList.remove("hidden"); 
-                    document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${escapeOwnerText(currentItem.kit_body)}` : ""; 
-                    document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${escapeOwnerText(currentItem.kit_lens)}` : ""; 
-                    document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${escapeOwnerText(currentItem.kit_flash)}` : ""; 
-                    document.getElementById("kit-acc-text").innerHTML = currentItem.kit_acc ? `<b>Аксессуары:</b> ${escapeOwnerText(currentItem.kit_acc)}` : ""; 
-                    document.getElementById("kit-add-text").innerHTML = currentItem.kit_add ? `<b>Допы:</b> ${escapeOwnerText(currentItem.kit_add)}` : ""; 
-                } else { document.getElementById("kit-box").classList.add("hidden"); } 
-                
-                let statusHtml = ""; 
-                const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } 
-                else { 
-                    repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; 
-                    if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${escapeOwnerText(currentItem.holders[0].full_name)} ${currentItem.holders[0].taken_for ? `(Кому: ${escapeOwnerText(currentItem.holders[0].taken_for)})` : ""}</div>`; } 
-                    else { 
-                        let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); 
-                        let places = currentItem.stocks.map(s => s.location_name).filter((v,i,a)=>a.indexOf(v)===i).join(", "); 
-                        statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
-                    } 
-                } 
-                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${escapeOwnerText(currentItem.code)}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
-                
-                const bookingSection = document.getElementById("booking-section"); 
-                if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); $("book-from").min=$("book-to").min=localDay17(); $("book-from").value=""; $("book-to").value=""; loadBookings(currentItem.code); } 
-                
-                const priceBox = document.getElementById("admin-price-box");
-                if (['admin','boss'].includes(currentUser.role) && currentItem.kind === 'equipment') {
-                    priceBox.classList.remove("hidden");
-                    let totalSum = 0;
-                    let rowsHtml = "";
-                    
-                    const addRow = (label, name, price) => {
-                        if (name || price > 0) {
-                            totalSum += (price || 0);
-                            rowsHtml += `<tr><td>${label} ${name ? `(${escapeOwnerText(name)})` : ''}</td><td style="text-align:right;">${price ? price + ' ₽' : '—'}</td></tr>`;
-                        }
-                    };
-                    
-                    addRow("Тушка", currentItem.kit_body, currentItem.price_body);
-                    addRow("Объектив", currentItem.kit_lens, currentItem.price_lens);
-                    addRow("Вспышка", currentItem.kit_flash, currentItem.price_flash);
-                    addRow("Аксессуары", currentItem.kit_acc, currentItem.price_acc);
-                    addRow("Допы", currentItem.kit_add, currentItem.price_add);
-                    
-                    if (rowsHtml) {
-                        rowsHtml += `<tr class="total-row"><td>Общая стоимость</td><td style="text-align:right;">${totalSum} ₽</td></tr>`;
-                        document.getElementById("price-table-body").innerHTML = rowsHtml;
-                    } else {
-                        priceBox.classList.add("hidden");
+                const item = currentItem;
+                const isEquipment = item.kind === 'equipment';
+                const canSeePrices = currentUser.role === 'admin';
+                $('item-code-category').textContent = [item.code, item.category || (isEquipment ? 'Оборудование' : 'Расходники')].join(' · ');
+
+                const factTiles = $('item-facts');
+                factTiles.replaceChildren();
+                const facts = [
+                    ['Тип', isEquipment ? 'Оборудование' : 'Расходник'],
+                    ['Бюджет', item.budget_tag],
+                    ['Серийный номер', isEquipment && item.serial_number],
+                    ['На выкупе у', isEquipment && item.buyout_status],
+                ];
+                for (const [label, value] of facts) {
+                    if (value) factTiles.append(itemTile(label, value));
+                }
+
+                const kit = $('kit-box');
+                const kitSection = $('item-kit-section');
+                kit.replaceChildren();
+                let componentTotal = 0;
+                if (isEquipment) {
+                    for (const [key, label] of [['body','Тушка'],['lens','Объектив'],['flash','Вспышка'],['acc','Аксессуары'],['add','Допы']]) {
+                        const name = item['kit_' + key];
+                        const price = canSeePrices ? Number(item['price_' + key]) || 0 : 0;
+                        if (!name && !price) continue;
+                        const tile = name
+                            ? itemTile(label, name)
+                            : itemTile(label + ' · админы', money17(price), true);
+                        if (name && price > 0) tile.append(adminPrice(price));
+                        kit.append(tile);
+                        componentTotal += price;
                     }
+                    if (componentTotal > 0) kit.append(itemTile('Комплект · админы', money17(componentTotal), true));
+                }
+                kitSection.classList.toggle('hidden', !kit.childElementCount);
+                kitSection.open = true;
+
+                const status = $('item-status-box');
+                const holder = item.holders[0];
+                if (item.needs_repair) {
+                    status.textContent = 'В ремонте';
+                    status.className = 'status-badge status-broken';
+                } else if (holder) {
+                    status.textContent = 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
+                    status.className = 'status-badge status-taken';
                 } else {
-                    priceBox.classList.add("hidden");
+                    status.textContent = item.stocks.length ? (isEquipment ? 'Свободно' : 'В наличии') : 'Нет в наличии';
+                    status.className = 'status-badge ' + (item.stocks.length ? 'status-free' : 'status-broken');
+                }
+                $('repair-btn').textContent = item.needs_repair ? 'Вернуть в строй' : 'Отметить как «Требует ремонта»';
+                const stocks = $('item-stock-rows');
+                const unit = isEquipment ? 'шт.' : item.unit;
+                stocks.replaceChildren(...item.stocks.map(stock => itemTile(stock.location_name, stock.quantity + ' ' + unit)));
+                if (!isEquipment) stocks.append(itemTile('Минимальный остаток', item.min_stock + ' ' + unit));
+                if (holder?.return_plan) stocks.append(itemTile('Ответ о возврате', holder.return_plan));
+                if (canSeePrices && item.price) stocks.append(itemTile('Цена · админы', money17(item.price), true));
+
+                const bookingSection = $('booking-section');
+                bookingSection.classList.toggle('hidden', !isEquipment);
+                if (isEquipment) {
+                    $('book-from').min = $('book-to').min = localDay17();
+                    $('book-from').value = $('book-to').value = '';
+                    loadBookings(item.code);
                 }
 
                 renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
@@ -1718,7 +1783,10 @@
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
-                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
+                        html += `<div class="beta-checkout-actions">
+                            <button type="button" onclick="doCheckout()">Взять технику</button>
+                            <button type="button" class="secondary" onclick="doCheckoutFor()">Взять для…</button>
+                        </div>`;
                     } else {
                         html += `<div class="status-badge status-broken" style="margin-top:20px;">На складе: 0 шт.</div>`;
                         if (currentUser.role === 'admin') {
@@ -1727,14 +1795,31 @@
                     }
                 } 
             } else { 
-                html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${escapeOwnerText(s.location_name)} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
+                const unit = escapeOwnerText(currentItem.unit || 'шт.');
+                const places = currentItem.stocks.filter(s => s.quantity > 0).map(s =>
+                    `<option value="${s.location_id}">${escapeOwnerText(s.location_name)} (${s.quantity} ${unit})</option>`
+                ).join('');
+                html += `<div class="beta-consumable-actions">
+                    <details class="beta-consumable-action">
+                        <summary>Взять / списать</summary>
+                        <div class="beta-consumable-form">
+                            <select id="wo-loc" aria-label="Помещение для списания">${places}</select>
+                            <input id="wo-qty" type="number" min="1" step="1" value="1" aria-label="Количество для списания">
+                            <button type="button" class="danger" onclick="doWriteoff()">Взять / списать</button>
+                        </div>
+                    </details>
+                </div>`;
             } 
             
-            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${escapeOwnerText(s.location_name)} (${s.quantity} шт)</option>`).join(""); 
-            if (stockOpts) {
-                html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
+            $('item-additional-actions').innerHTML = currentItem.stocks.some(s => s.quantity > 0)
+                ? '<button type="button" class="secondary" onclick="showMoveItemScreen()">Переместить в другую комнату</button>'
+                : '';
+
+            box.innerHTML = html;
+            if (currentUser.role === 'admin' && !isEq) {
+                const area = box.querySelector('.beta-consumable-actions') || box;
+                btn17(area, 'Пополнить запас', () => replenish17(currentItem.code), 'secondary beta-consumable-replenish');
             }
-            box.innerHTML = html; if(currentUser.role==="admin"&&currentItem.kind==="consumable")btn17(box,"Пополнить запас",()=>replenish17(currentItem.code)); 
         }
         
         async function replenishItem(code) {
@@ -1750,9 +1835,66 @@
         
         
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
-        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doCheckoutFor() { const person = prompt("Для кого? (Введите Фамилию)"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        let checkoutPending = false;
+        async function doCheckout(takenFor = "") {
+            if (checkoutPending) return;
+            const {code} = currentItem;
+            const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
+            checkoutPending = true;
+            buttons.forEach(button => { button.disabled = true; });
+            try {
+                await api('/api/checkout', {
+                    method: 'POST',
+                    body: JSON.stringify({code, taken_for: takenFor}),
+                });
+                showToast('Выдано');
+                const refresh = Promise.all([loadItems(), loadDashboard17()]);
+                if (currentScreen === 'screen-item' && currentItem.code === code) await openItem(code);
+                await refresh;
+            } catch (e) {
+                notify(e.message);
+            } finally {
+                checkoutPending = false;
+                buttons.forEach(button => { button.disabled = false; });
+            }
+        }
+
+        const recipientDialog = document.getElementById('item-recipient-dialog');
+        const recipientName = document.getElementById('item-recipient-name');
+        function doCheckoutFor() {
+            if (checkoutPending || recipientDialog.open) return;
+            recipientDialog.returnValue = '';
+            recipientDialog.dataset.itemCode = currentItem.code;
+            recipientName.value = '';
+            recipientName.setCustomValidity('');
+            recipientDialog.showModal();
+            recipientName.focus();
+        }
+        recipientName.addEventListener('input', () => recipientName.setCustomValidity(''));
+        recipientDialog.querySelector('form').addEventListener('submit', event => {
+            if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
+            event.preventDefault();
+            recipientName.setCustomValidity('Введите фамилию.');
+            recipientName.reportValidity();
+        });
+        recipientDialog.addEventListener('close', () => {
+            if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
+                currentItem?.code === recipientDialog.dataset.itemCode) {
+                doCheckout(recipientName.value.trim());
+            }
+        });
+        async function doReturn() {
+            const {code} = currentItem;
+            try {
+                await api(`/api/return?code=${encodeURIComponent(code)}`, {method: 'POST'});
+                showToast('Возвращено');
+                const refresh = Promise.all([loadItems(), loadDashboard17()]);
+                if (currentScreen === 'screen-item' && currentItem.code === code) await openItem(code);
+                await refresh;
+            } catch (error) {
+                notify(error.message);
+            }
+        }
         
         function showMoveItemScreen() {
             document.getElementById("move-item-name").textContent = currentItem.name;
@@ -2044,12 +2186,49 @@
         function matchesStatus17(i,status){if(status==='free')return i.kind==='equipment'&&!i.needs_repair&&!i.holders.length&&i.total>0&&!booked17.has(i.code);if(status==='on_hand')return i.holders.length>0;if(status==='repair')return !!i.needs_repair;if(status==='booked_today')return booked17.has(i.code);if(status==='low_stock')return !!i.is_low;return true}
         async function loadDashboard17(){try{const [r,b]=await Promise.all([api('/api/dashboard'),api('/api/booking_calendar')]);const today=localDay17();booked17=new Set(b.filter(x=>x.date_from<=today&&x.date_to>=today).map(x=>x.item_code));const box=$('dashboard-v17');box.replaceChildren();box.className='dashboard-grid';for(const [key,label,color]of [['free','Свободно','var(--success)'],['on_hand','На руках','var(--primary)'],['repair','В ремонте','var(--danger)'],['booked_today','Бронь сегодня','var(--warning)'],['low_stock','Мало расходников','var(--warning)']]){const el=document.createElement('button');el.className='metric';el.innerHTML=safe(label)+'<b style="color:'+color+'">'+Number(r.counts[key]||0)+'</b>';el.onclick=()=>{$('filter-status').value=key;$('filter-kind').value='';$('filter-category').value='';$('filter-location').value='';$('search-input').value='';filterItems();$('items-list').scrollIntoView({behavior:'smooth'})};box.append(el)}filterItems()}catch(e){console.log(e)}}
         function card17(parent,title,body){const c=document.createElement('div');c.className='card extra-card';const t=document.createElement('strong');t.textContent=title;c.append(t);if(body){const x=document.createElement('p');x.className='meta';x.style.whiteSpace='pre-line';x.textContent=body;c.append(x)}parent.append(c);return c;}
-        async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await loadCategories17();box.replaceChildren();btn17(box,'Добавить категорию',async()=>{const name=prompt('Название категории');if(name?.trim()){await api('/api/categories',{method:'POST',body:JSON.stringify({name:name.trim()})});showExtra(section)}});for(const name of categories17){const c=card17(box,name);btn17(c,'Переименовать',async()=>{const n=prompt('Новое название',name);if(n?.trim()){await api('/api/categories/'+encodeURIComponent(name),{method:'PUT',body:JSON.stringify({name:n.trim()})});showExtra(section)}});btn17(c,'Удалить',async()=>{if(confirm('Удалить категорию?')){await api('/api/categories/'+encodeURIComponent(name),{method:'DELETE'});showExtra(section)}})}}else if(section==='finance'){const r=await api('/api/dashboard');box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Оплаченные ремонты за 30 дней','repair_cost_30_days'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label,money17(f[key]));renderFinanceBars17(box,f.by_category);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity} · ${money17(r.suggested_quantity*r.price)}\nПоставщик: ${r.supplier||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.code));btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
+        async function renderCategorySettings(box) {
+            await loadCategories17();
+            box.replaceChildren();
+            btn17(box, 'Добавить категорию', async () => {
+                const name = prompt('Название категории')?.trim();
+                if (!name) return;
+                await api('/api/categories', {method: 'POST', body: JSON.stringify({name})});
+                await renderCategorySettings(box);
+            });
+            const list = document.createElement('div');
+            list.className = 'beta-category-settings';
+            for (const name of categories17) {
+                const entry = document.createElement('details');
+                entry.className = 'beta-setting-details';
+                entry.name = 'warehouse-categories';
+                const title = document.createElement('summary');
+                title.textContent = name;
+                const actions = document.createElement('div');
+                actions.className = 'beta-category-actions';
+                btn17(actions, 'Переименовать', async () => {
+                    const next = prompt('Новое название', name)?.trim();
+                    if (!next) return;
+                    await api('/api/categories/' + encodeURIComponent(name), {
+                        method: 'PUT', body: JSON.stringify({name: next}),
+                    });
+                    await renderCategorySettings(box);
+                });
+                btn17(actions, 'Удалить', async () => {
+                    if (!confirm('Удалить категорию?')) return;
+                    await api('/api/categories/' + encodeURIComponent(name), {method: 'DELETE'});
+                    await renderCategorySettings(box);
+                });
+                entry.append(title, actions);
+                list.append(entry);
+            }
+            box.append(list);
+        }
+        async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await renderCategorySettings(box);}else if(section==='finance'){const r=await api('/api/dashboard');box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Оплаченные ремонты за 30 дней','repair_cost_30_days'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
         function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
         async function loadPassport17(code){const box=$('passport-v17');box.replaceChildren();try{const m=await api(itemPath17(code,'/passport'));if(currentItem?.code!==code)return;const c=card17(box,'Паспорт товара',[m.notes,m.site?'Площадка: '+m.site:'',m.vessel?'Теплоход: '+m.vessel:'',currentItem.kind==='consumable'?'Единица: '+m.unit:'',m.supplier?'Поставщик: '+m.supplier:''].filter(Boolean).join('\n'));if(m.has_photo){const im=document.createElement('img');im.style.cssText='max-width:100%;max-height:220px;object-fit:contain;border-radius:12px';im.alt='Фото товара';c.prepend(im);image17(im,itemPath17(code,'/photo')).catch(e=>im.remove())}btn17(c,'Копировать название',()=>copyText(currentItem.name));btn17(c,'Копировать код',()=>copyText(code));if(currentUser.role==='admin')btn17(c,'Редактировать паспорт',()=>editPassport17(code,m))}catch(e){box.textContent=e.message}}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}
         function editPassport17(code,m){const {b,o}=overlay17('Паспорт товара');const unit=field17(b,'Единица измерения',m.unit),supplier=field17(b,'Поставщик',m.supplier),site=field17(b,'Площадка',m.site),vessel=field17(b,'Теплоход',m.vessel);populateSuggestions17(b,site,'site',cachedPlatforms.map(r=>r['Площадка']));populateSuggestions17(b,vessel,'vessel',cachedTH.map(r=>r['Название']||Object.values(r)[0]));const notes=field17(b,'Описание и место хранения',m.notes,'textarea'),photo=field17(b,'Заменить фото','','file');photo.accept='image/*';btn17(b,'Сохранить',async()=>{await api(itemPath17(code,'/passport'),{method:'PUT',body:JSON.stringify({unit:unit.value,supplier:supplier.value,site:site.value,vessel:vessel.value,notes:notes.value})});if(photo.files[0]){let f=new FormData();f.append('photo',photo.files[0]);await api(itemPath17(code,'/photo'),{method:'PUT',body:f})}o.remove();loadPassport17(code);loadItems();showToast('Сохранено')},'ok')}
-        async function loadRepairs17(code){const box=$('repairs-v17');box.replaceChildren();if(currentItem?.kind!=='equipment')return;try{const rows=await api(itemPath17(code,'/repairs'));if(currentItem?.code!==code)return;for(const r of rows){const c=card17(box,r.finished_at?'Завершённый ремонт':'Ремонт',`${r.description}\n${r.started_at}${r.finished_at?' — '+r.finished_at:''}${r.cost!==undefined?'\n'+money17(r.cost):''}`);if(r.has_photo){const im=document.createElement('img');im.alt='Фото ремонта';im.style.cssText='max-width:100%;max-height:220px;object-fit:contain';c.append(im);image17(im,'/api/repairs/'+r.id+'/photo').catch(()=>im.remove())}if(currentUser.role==='admin'||currentUser.tg_id===r.user_id){const f=field17(c,'Фото поломки','','file');f.accept='image/*';btn17(c,'Сохранить фото',async()=>{if(!f.files[0])throw Error('Выберите фото');const data=new FormData();data.append('photo',f.files[0]);await api('/api/repairs/'+r.id+'/photo',{method:'PUT',body:data});loadRepairs17(code);showToast('Фото сохранено')})}}}catch(e){console.log(e)}}
+        async function loadRepairs17(code){const box=$('repairs-v17');box.replaceChildren();if(currentItem?.kind!=='equipment')return;try{const rows=await api(itemPath17(code,'/repairs'));if(currentItem?.code!==code)return;for(const r of rows){const c=card17(box,r.finished_at?'Завершённый ремонт':'Ремонт',`${r.description}\n${r.started_at}${r.finished_at?' — '+r.finished_at:''}`);if(currentUser.role==='admin'&&r.cost!==undefined)c.append(adminPrice(r.cost));if(r.has_photo){const im=document.createElement('img');im.alt='Фото ремонта';im.style.cssText='max-width:100%;max-height:220px;object-fit:contain';c.append(im);image17(im,'/api/repairs/'+r.id+'/photo').catch(()=>im.remove())}if(currentUser.role==='admin'||currentUser.tg_id===r.user_id){const f=field17(c,'Фото поломки','','file');f.accept='image/*';btn17(c,'Сохранить фото',async()=>{if(!f.files[0])throw Error('Выберите фото');const data=new FormData();data.append('photo',f.files[0]);await api('/api/repairs/'+r.id+'/photo',{method:'PUT',body:data});loadRepairs17(code);showToast('Фото сохранено')})}}}catch(e){console.log(e)}}
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
         async function showHistory(){showScreen('screen-history');$('history-list').textContent='Загрузка…';try{history17=await api('/api/history');renderHistory17()}catch(e){$('history-list').textContent=e.message}}
@@ -2069,7 +2248,7 @@
 
 
         function localDay17(d=new Date()){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
-        function renderFinanceBars17(box,values){const c=card17(box,'Стоимость по категориям');const max=Math.max(1,...Object.values(values));for(const [name,v]of Object.entries(values).sort((a,b)=>b[1]-a[1])){const p=document.createElement('div');p.className='meta';p.textContent=name+' · '+money17(v);const bar=document.createElement('div');bar.style.cssText='height:8px;border-radius:6px;background:var(--skeleton-bg);margin:6px 0 13px;overflow:hidden';const fill=document.createElement('div');fill.style.cssText=`height:100%;background:var(--primary);width:${Math.max(0,Math.min(100,v/max*100))}%`;bar.append(fill);c.append(p,bar)}}
+        function renderFinanceBars17(box,values){const c=card17(box,'Стоимость по категориям');const max=Math.max(1,...Object.values(values));for(const [name,v]of Object.entries(values).sort((a,b)=>b[1]-a[1])){const p=document.createElement('div');p.className='meta';p.append(document.createTextNode(name+' · '),adminPrice(v));const bar=document.createElement('div');bar.style.cssText='height:8px;border-radius:6px;background:var(--skeleton-bg);margin:6px 0 13px;overflow:hidden';const fill=document.createElement('div');fill.style.cssText=`height:100%;background:var(--primary);width:${Math.max(0,Math.min(100,v/max*100))}%`;bar.append(fill);c.append(p,bar)}}
         function renderCalendar17(box,rows){const c=card17(box,'Брони по дням');const month=document.createElement('input');month.type='month';month.value=localDay17().slice(0,7);const grid=document.createElement('div');grid.className='calendar-grid17';const detail=document.createElement('div');c.append(month,grid,detail);function draw(){grid.replaceChildren();detail.replaceChildren();const [y,m]=month.value.split('-').map(Number);if(!y||!m)return;for(const d of ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']){const el=document.createElement('span');el.textContent=d;grid.append(el)}const offset=(new Date(y,m-1,1).getDay()+6)%7;for(let j=0;j<offset;j++)grid.append(document.createElement('span'));for(let d=1;d<=new Date(y,m,0).getDate();d++){const dt=localDay17(new Date(y,m-1,d));const active=rows.filter(r=>r.date_from<=dt&&r.date_to>=dt);const el=document.createElement('button');el.className='secondary';el.textContent=d+(active.length?' · '+active.length:'');if(active.length)el.style.borderColor='var(--primary)';el.onclick=()=>{detail.replaceChildren();card17(detail,dt);if(!active.length)card17(detail,'Нет броней');for(const r of active){const item=card17(detail,r.name,r.full_name||'—');btn17(item,'Открыть',()=>openItem(r.item_code))}};grid.append(el)}}month.onchange=draw;draw()}
         function replenish17(code,suggestion=1,price='',after){const {o,b}=overlay17('Приход на склад');const sel=document.createElement('select');for(const loc of locations)sel.add(new Option(loc.name,loc.id));b.append(sel);const qty=field17(b,'Количество',suggestion,'number');qty.min=1;const unit=field17(b,'Фактическая цена за единицу, ₽ (необязательно)',price,'number');unit.min=0;unit.step='0.01';btn17(b,'Принять',async()=>{const n=Number(qty.value),p=unit.value===''?null:Number(unit.value);if(!Number.isInteger(n)||n<=0||p!==null&&(!Number.isFinite(p)||p<0))throw Error('Проверьте количество и цену');await api(itemPath17(code,'/replenish'),{method:'POST',body:JSON.stringify({location_id:Number(sel.value),quantity:n,unit_price:p})});o.remove();showToast('Пополнение сохранено');await loadItems();loadDashboard17();if(after)after();else if(currentItem?.code===code)openItem(code)},'ok')}
         function populateSuggestions17(b,field,key,values){const list=document.createElement('datalist');list.id='suggest-'+key+'-'+Date.now();for(const n of [...new Set(values.filter(Boolean))])list.append(new Option(n));b.append(list);field.setAttribute('list',list.id)}
@@ -2082,7 +2261,27 @@
         installRelease183();
         installRelease184();
         installRelease185();
-        (async () => { await init(); })();
+        async function openReturnReminder() {
+            if (!currentUser?.is_registered) return;
+            const url = new URL(location.href);
+            const token = url.searchParams.get('return_reminder');
+            const plan = url.searchParams.get('return_plan');
+            if (!token || !plan) return;
+            url.searchParams.delete('return_reminder');
+            url.searchParams.delete('return_plan');
+            history.replaceState(history.state, '', url);
+            try {
+                const response = await api('/api/checkout/return-plan', {
+                    method: 'POST',
+                    body: JSON.stringify({token, plan}),
+                });
+                showToast('Ответ сохранён');
+                await openItem(response.code);
+            } catch (error) {
+                notify(error.message);
+            }
+        }
+        (async () => { await init(); await openReturnReminder(); })();
     </script>
 </body>
 </html>

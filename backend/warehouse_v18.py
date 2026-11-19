@@ -85,16 +85,22 @@ def register_v18(app, get_user, check_admin, transaction, active_item, audit, we
         user = get_user(x_init_data)
         with transaction() as conn:
             row = conn.execute('SELECT data FROM v18_profiles WHERE user_id=?', (user['tg_id'],)).fetchone()
-        return json.loads(row[0]) if row else Profile().model_dump()
+        profile = json.loads(row[0]) if row else Profile().model_dump()
+        if user['role'] != 'admin':
+            profile['templates'] = {}
+        return profile
 
     @app.put('/api/v18/profile')
     def profile_save(req: Profile, x_init_data: Optional[str] = Header(None)):
         user = get_user(x_init_data)
         if len(req.kits)>40 or len(req.templates)>40 or any(len(k)>100 or len(v)>50 for k,v in req.kits.items()) or any(len(k)>100 or len(v)>40 for k,v in req.templates.items()):
             raise HTTPException(400,'Слишком много шаблонов или комплектов')
-        data = req.model_dump_json()
-        if len(data)>120000: raise HTTPException(400,'Слишком большой профиль')
         with transaction() as conn:
+            if user['role'] != 'admin':
+                existing = conn.execute('SELECT data FROM v18_profiles WHERE user_id=?', (user['tg_id'],)).fetchone()
+                req.templates = json.loads(existing[0]).get('templates', {}) if existing else {}
+            data = req.model_dump_json()
+            if len(data)>120000: raise HTTPException(400,'Слишком большой профиль')
             conn.execute('INSERT INTO v18_profiles VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data', (user['tg_id'],data))
         return {'status':'ok'}
 

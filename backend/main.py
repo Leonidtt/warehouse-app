@@ -35,6 +35,7 @@ from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_export import register_snapshot_export
+from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 
 import urllib3
 urllib3.disable_warnings()
@@ -53,7 +54,8 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.5.8")
+APP_VERSION = "18.5.9"
+app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -190,6 +192,7 @@ def init_db(db_path):
         c.execute("ALTER TABLE employee_preview ADD COLUMN preview_role TEXT NOT NULL DEFAULT 'employee'")
         c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
+    init_return_reminders(conn)
     conn.commit(); conn.close()
 
 # Создаем папку /data перед инициализацией баз
@@ -197,7 +200,7 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-prepare_migration(DB_PATH, "18.5.4")
+prepare_migration(DB_PATH, APP_VERSION)
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -705,7 +708,7 @@ def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Hea
 
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
-    is_admin = get_user(x_init_data)["role"] in ("admin","boss")
+    is_admin = get_user(x_init_data)["role"] == "admin"
     conn = get_conn(x_init_data); items = conn.execute("SELECT i.code,i.name,i.kind,i.min_stock,i.needs_repair,i.kit_body,i.kit_lens,i.kit_flash,i.kit_acc,i.kit_add,i.budget_tag,i.serial_number,i.buyout_status,i.category,i.created_at,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add,CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo,COALESCE(m.site,'') AS site,COALESCE(m.vessel,'') AS vessel,COALESCE(m.unit,'шт.') AS unit FROM items i LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 ORDER BY i.name").fetchall(); result = []
     stock_map={}; holder_map={}
     for row in conn.execute("SELECT s.item_code,s.location_id,l.name AS location_name,s.quantity FROM stock s JOIN locations l ON l.id=s.location_id WHERE s.quantity>0"):
@@ -734,22 +737,28 @@ def list_items(x_init_data: Optional[str] = Header(None)):
 
 @app.get("/api/items/{code}")
 def get_item(code: str, x_init_data: Optional[str] = Header(None)):
-    is_admin = get_user(x_init_data)["role"] in ("admin","boss")
-    conn = get_conn(x_init_data); item = conn.execute("SELECT * FROM items WHERE code = ? AND is_archived=0", (code,)).fetchone()
+    is_admin = get_user(x_init_data)["role"] == "admin"
+    conn = get_conn(x_init_data)
+    item = conn.execute("""
+        SELECT i.*, COALESCE(NULLIF(m.unit,''),'шт.') AS unit
+        FROM items i LEFT JOIN item_metadata m ON m.code=i.code
+        WHERE i.code=? AND i.is_archived=0
+    """, (code,)).fetchone()
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("""
-        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name
+        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan
         FROM checkouts c 
         LEFT JOIN users u ON u.tg_id = c.user_id
         LEFT JOIN users g ON g.tg_id = c.giver_id
+        LEFT JOIN checkout_return_reminders reminder ON reminder.checkout_id = c.id
         WHERE c.item_code = ? AND c.returned_at IS NULL
     """, (code,)).fetchall()
     conn.close()
     
     c_at = item["created_at"] if "created_at" in item.keys() else ""
     
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_acc": item["kit_acc"], "kit_add": item["kit_add"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_acc": item["kit_acc"], "kit_add": item["kit_add"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "unit": item["unit"], "stocks": [dict(s) for s in stocks], "holders": [dict(h, return_plan=PLANS.get(h["return_plan"])) for h in holders]}
     
     if is_admin: 
         result["price"] = item["price"]
@@ -897,7 +906,12 @@ def _checkout_one(conn,user,code,taken_for):
     booking=conn.execute("SELECT user_id FROM bookings WHERE item_code=? AND date('now') BETWEEN date_from AND date_to",(code,)).fetchall()
     if booking and not all(b['user_id']==target_for_booking for b in booking): raise HTTPException(409,"Сегодня оборудование забронировано другим сотрудником")
     target=find_or_create_guest(taken_for,conn) if taken_for else user["tg_id"]
-    conn.execute("INSERT INTO checkouts(item_code,user_id,giver_id,location_id,taken_for) VALUES(?,?,?,?,?)",(code,target,user["tg_id"],stock["location_id"],taken_for))
+    record = conn.execute("""
+        INSERT INTO checkouts(item_code,user_id,giver_id,location_id,taken_for)
+        VALUES(?,?,?,?,?) RETURNING id,taken_at
+    """, (code,target,user["tg_id"],stock["location_id"],taken_for)).fetchone()
+    if target > 0:
+        queue_return_reminder(conn,record["id"],record["taken_at"])
     conn.execute("UPDATE stock SET quantity=quantity-1 WHERE item_code=? AND location_id=?",(code,stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code=? AND quantity=0",(code,))
 
@@ -1127,7 +1141,7 @@ def dashboard(x_init_data: Optional[str] = Header(None)):
         value=price*(qty+held); money['total']+=value
         cat=r['category'] or 'Без категории'; by_cat[cat]=by_cat.get(cat,0)+value
     result={'counts':counts}
-    if user['role'] in ('admin','boss'):
+    if user['role'] == 'admin':
         with contextmanager_session() as conn:
             money['repair_cost_30_days']=conn.execute("SELECT COALESCE(SUM(cost),0) FROM repair_records WHERE finished_at>=datetime('now','-30 days')").fetchone()[0]
             money['receipt_cost_30_days']=conn.execute("SELECT COALESCE(SUM(quantity*unit_price),0) FROM receipts WHERE created_at>=datetime('now','-30 days')").fetchone()[0]
@@ -1235,7 +1249,7 @@ def repair_history(code: str,x_init_data: Optional[str]=Header(None)):
     with transaction() as conn:
         active_item(conn,code)
         rows=[dict(r) for r in conn.execute('SELECT r.*,EXISTS(SELECT 1 FROM repair_photos p WHERE p.repair_id=r.id) AS has_photo FROM repair_records r WHERE code=? ORDER BY r.id DESC',(code,))]
-    if user['role'] not in ('admin','boss'):
+    if user['role'] != 'admin':
         for r in rows: r.pop('cost',None)
     return rows
 
@@ -1265,9 +1279,14 @@ def finish_repair(code: str,req: RepairDetails,x_init_data: Optional[str]=Header
 
 @app.get('/api/purchases')
 def purchase_suggestions(x_init_data: Optional[str]=Header(None)):
-    if get_user(x_init_data)['role'] not in ('admin','boss'): raise HTTPException(403,'Нет доступа')
+    actor = get_user(x_init_data)
+    if actor['role'] not in ('admin','boss'): raise HTTPException(403,'Нет доступа')
     with transaction() as conn:
-        return [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.min_stock,i.price,COALESCE(s.qty,0) AS remaining,COALESCE(w.qty,0) AS used_30_days,COALESCE(m.unit,'шт.') AS unit,COALESCE(m.supplier,'') AS supplier, MAX(0,i.min_stock+1-COALESCE(s.qty,0)) AS suggested_quantity FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM writeoffs WHERE created_at>=datetime('now','-30 days') GROUP BY item_code) w ON w.item_code=i.code LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 AND i.kind='consumable' AND i.min_stock>0 AND COALESCE(s.qty,0)<=i.min_stock ORDER BY i.name""")]
+        rows = [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.min_stock,i.price,COALESCE(s.qty,0) AS remaining,COALESCE(w.qty,0) AS used_30_days,COALESCE(m.unit,'шт.') AS unit,COALESCE(m.supplier,'') AS supplier, MAX(0,i.min_stock+1-COALESCE(s.qty,0)) AS suggested_quantity FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM writeoffs WHERE created_at>=datetime('now','-30 days') GROUP BY item_code) w ON w.item_code=i.code LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 AND i.kind='consumable' AND i.min_stock>0 AND COALESCE(s.qty,0)<=i.min_stock ORDER BY i.name""")]
+    if actor['role'] != 'admin':
+        for row in rows:
+            row.pop('price')
+    return rows
 
 
 WEB_COOKIE = "warehouse_main_session"
@@ -1418,12 +1437,16 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
 register_snapshot_export(app, DB_PATH)
+register_return_reminders(
+    app, get_user, transaction, lambda _conn: None, BOT_TOKEN,
+    os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip(),
+)
 register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
-    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4')")
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4'), (?)", (APP_VERSION,))
 
 
 @app.get("/")
