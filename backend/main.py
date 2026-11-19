@@ -437,7 +437,7 @@ def my_bookings(x_init_data: Optional[str] = Header(None)):
 def my_items(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data)
     rows = conn.execute("""
-        SELECT c.item_code, i.name, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name
+        SELECT c.item_code, i.name, i.kind, i.category, i.kit_body, i.kit_lens, i.kit_flash, CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name
         FROM checkouts c 
         JOIN items i ON i.code = c.item_code 
         LEFT JOIN users u ON u.tg_id = c.user_id
