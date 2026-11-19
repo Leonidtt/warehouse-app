@@ -39,3 +39,19 @@
 .r184-preview{gap:5px;padding:6px 10px;min-height:44px;box-sizing:border-box}.r184-preview b{flex:1;min-width:0;font-size:12px;line-height:1.2}.r184-preview button{flex:0 0 auto;min-height:34px!important;padding:5px 8px;font-size:11px;white-space:nowrap}.r184-preview-active .sticky-header{top:44px}
 
 .r1855-panel{padding:10px!important}.r1855-line{grid-template-columns:minmax(64px,90px) 53px 53px minmax(34px,1fr) 10px}.r1855-date{font-size:11px;color:var(--r185-muted,var(--text-muted));font-variant-numeric:tabular-nums;white-space:nowrap}.r1855-period{display:flex;gap:5px;margin:0 0 6px}.r1855-period button{flex:1;min-height:28px!important;margin:0;padding:4px;font-size:11px;border-radius:8px}.r1855-period button.active{background:var(--r185-control);color:var(--r185-blue);box-shadow:inset 0 0 0 1px var(--primary)}.r1855-more{min-height:30px!important;font-size:11px;margin:6px 0 0;padding:5px}.r1855-panel .r1855-row{margin:0!important}@media(max-width:380px){.r1855-line{grid-template-columns:minmax(60px,78px) 46px 46px minmax(30px,1fr) 9px}}
+
+
+/* v18.5.6 — compact buyout directory for employee and admin. */
+.r1856-buyouts{padding:10px 8px!important;margin:8px 0 12px;border-radius:14px!important}
+.r1856-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 4px 6px}
+.r1856-heading h3{font-size:16px;margin:0;font-weight:700}
+.r1856-list{overflow:hidden;border-radius:8px}
+.r1856-list .r1856-row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) minmax(0,1.25fr) 66px;align-items:center;gap:5px;width:100%;margin:0;padding:5px 5px;min-height:30px!important;border:0;border-radius:0;box-shadow:none!important;text-align:left;font-size:11.5px;line-height:1.2;background:transparent;color:var(--text);font-weight:400}
+.r1856-list .r1856-row:nth-child(odd){background:var(--r185-control,#edf1f7)}
+.r1856-row>span{min-width:0;overflow-wrap:anywhere}
+.r1856-surname{font-weight:650}.r1856-model{color:var(--r185-muted,var(--text-muted))}
+.r1856-state{display:flex;align-items:center;gap:3px;white-space:nowrap;font-size:10px;color:var(--r185-muted,var(--text-muted))}
+.r1856-state.held{color:var(--r185-red,#c32c35)}.r1856-state.stock{color:var(--r185-green,#16803c)}
+.r1856-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:currentColor}
+.r1856-empty{padding:5px}
+@media(max-width:380px){.r1856-list .r1856-row{gap:3px;padding:5px 3px;font-size:11px;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 61px}.r1856-state{font-size:9.5px}}
