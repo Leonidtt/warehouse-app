@@ -5,17 +5,23 @@ from pathlib import Path
 from typing import Optional
 from fastapi import Header, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Literal
 from collections import defaultdict
 
 
+class PreviewRequest(BaseModel):
+    role: Literal["admin", "boss", "employee"]
+
+
 def effective_user(user, raw, digest, session):
-    if user['role'] != 'admin':
+    if user['role'] != 'admin' or not user.get('is_registered'):
         return user
+    user = {**user, 'can_preview': True}
     with session() as conn:
-        row = conn.execute('SELECT expires FROM employee_preview WHERE digest=? AND user_id=?', (digest(raw), user['tg_id'])).fetchone()
-    now = int(time.time())
-    if row and row[0] > now:
-        return {**user, 'role':'employee', 'is_owner':False, 'preview_until':row[0]}
+        row = conn.execute('SELECT preview_role FROM employee_preview WHERE digest=? AND user_id=?', (digest(raw), user['tg_id'])).fetchone()
+    if row and row[0] in ('employee', 'boss'):
+        return {**user, 'role': row[0], 'is_owner': False, 'preview_role': row[0]}
     return user
 
 
@@ -39,23 +45,37 @@ def register_184(app, get_user, real_user, session, transaction, digest, list_it
             return FileResponse(directory / ('release_v184.'+name), media_type=media, headers={'Cache-Control':'no-cache'})
         app.add_api_route('/release-v184.'+name,asset,methods=['GET'],include_in_schema=False)
 
+    def preview_admin(raw):
+        user = real_user(raw)
+        if user['role'] != 'admin' or not user.get('is_registered'):
+            raise HTTPException(403, 'Доступ только администраторам')
+        return user
+
+    def change_preview(raw, role):
+        user = preview_admin(raw)
+        with transaction() as conn:
+            # Recheck the actual database role in the write transaction.
+            actual = conn.execute('SELECT role, is_registered FROM users WHERE tg_id=?', (user['tg_id'],)).fetchone()
+            if not actual or actual[0] != 'admin' or not actual[1]:
+                raise HTTPException(403, 'Доступ только администраторам')
+            if role == 'admin':
+                conn.execute('DELETE FROM employee_preview WHERE digest=? AND user_id=?', (digest(raw), user['tg_id']))
+            else:
+                # Existing authorization expiry still applies; no preview countdown.
+                conn.execute('INSERT INTO employee_preview(digest,user_id,expires,preview_role) VALUES(?,?,0,?) ON CONFLICT(digest) DO UPDATE SET user_id=excluded.user_id,expires=0,preview_role=excluded.preview_role', (digest(raw),user['tg_id'],role))
+        return {'role': role, 'preview_role': role if role != 'admin' else None}
+
+    @app.post('/api/v184/preview/role')
+    def set_preview(req: PreviewRequest, x_init_data: Optional[str]=Header(None)):
+        return change_preview(x_init_data, req.role)
+
     @app.post('/api/v184/preview/start')
     def start(x_init_data: Optional[str]=Header(None)):
-        user=real_user(x_init_data)
-        if user['role']!='admin' or not user['is_registered']:
-            raise HTTPException(403,'Доступ только администраторам')
-        now=int(time.time())
-        with transaction() as conn:
-            conn.execute('DELETE FROM employee_preview WHERE expires<=?',(now,))
-            conn.execute('INSERT INTO employee_preview(digest,user_id,expires) VALUES(?,?,?) ON CONFLICT(digest) DO UPDATE SET user_id=excluded.user_id,expires=excluded.expires',(digest(x_init_data),user['tg_id'],now+180))
-        return {'preview_until':now+180}
+        return change_preview(x_init_data, 'employee')
 
     @app.post('/api/v184/preview/stop')
     def stop(x_init_data: Optional[str]=Header(None)):
-        user=real_user(x_init_data)
-        with transaction() as conn:
-            conn.execute('DELETE FROM employee_preview WHERE digest=? AND user_id=?',(digest(x_init_data),user['tg_id']))
-        return {'status':'ok'}
+        return change_preview(x_init_data, 'admin')
 
     @app.get('/api/v184/boss')
     def boss(x_init_data: Optional[str]=Header(None)):
