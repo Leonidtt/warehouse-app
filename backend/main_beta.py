@@ -31,7 +31,6 @@ from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import effective_user, register_184
-from release_v186 import init_kits, register_186
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
@@ -49,11 +48,11 @@ try:
     if not 0 < MAIN_ADMIN_ID < 2**52:
         raise ValueError
 except ValueError:
-    raise RuntimeError("Укажите корректный BETA_ADMIN_ID в Railway") from None
+    raise RuntimeError("Укажите корректный MAIN_ADMIN_ID в Railway") from None
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад — Бета", version="18.6.0")
+app = FastAPI(title="Склад", version="18.5.8")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -186,6 +185,9 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    if "preview_role" not in {row[1] for row in c.execute("PRAGMA table_info(employee_preview)")}:
+        c.execute("ALTER TABLE employee_preview ADD COLUMN preview_role TEXT NOT NULL DEFAULT 'employee'")
+        c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
     conn.commit(); conn.close()
 
@@ -194,9 +196,7 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-BETA_FRESH_DB = not os.path.isfile(DB_PATH)
-if not BETA_FRESH_DB:
-    prepare_migration(DB_PATH, "18.5")
+prepare_migration(DB_PATH, "18.5.4")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -1420,19 +1420,12 @@ register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
-register_186(app, get_user, check_admin, transaction, contextmanager_session, active_item, audit, _checkout_one)
 with transaction() as conn:
-    init_kits(conn)
-    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5')")
-    if BETA_FRESH_DB and not conn.execute("SELECT 1 FROM items LIMIT 1").fetchone():
-        loc=conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()[0]
-        for code,name,kind,category,qty,minimum,price,body,lens,flash in [("DEMO-CAM-1","Тестовый фотокомплект","equipment","Фотокомплекты",1,0,85000,"Canon EOS R6","Canon RF 24–70mm","Godox V1"),("DEMO-CAM-2","Тестовый фотокомплект 2","equipment","Фотокомплекты",1,0,110000,"Canon EOS R5","Canon RF 24–105mm","Godox V860 III"),("DEMO-PRT-1","Тестовый принтер","equipment","Принтеры",1,0,38000,"","",""),("DEMO-AA-1","Тестовые батарейки AA","consumable","Расходники",4,10,80,"","",""),("DEMO-PAP-1","Тестовая фотобумага","consumable","Расходники",20,5,300,"","","")]:
-            conn.execute("INSERT INTO items(code,name,kind,category,min_stock,price,kit_body,kit_lens,kit_flash) VALUES(?,?,?,?,?,?,?,?,?)",(code,name,kind,category,minimum,price,body,lens,flash))
-            conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?)",(code,loc,qty))
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4')")
+
 
 @app.get("/")
 @app.get("/index.html")
-@app.get("/beta")
 @app.get("/beta.html")
 def serve_main():
     return FileResponse(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), headers={"Cache-Control":"no-cache"})

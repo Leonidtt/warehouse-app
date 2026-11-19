@@ -180,17 +180,24 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
 <link rel="stylesheet" href="/warehouse-v18.css">
-    <script src="/warehouse-v18.js"></script>
+    <script src="/warehouse-v18.js?v=1852"></script>
     <link rel="stylesheet" href="/release-v182.css">
     <script src="/release-v182.js"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1860">
-    <script src="/release-v184.js"></script>
-    <link rel="stylesheet" href="/release-v185.css?v=1851">
-    <script src="/release-v185.js?v=1851"></script>
-    <script src="/release-v186.js?v=1860"></script>
-</head>
+    <link rel="stylesheet" href="/release-v184.css?v=1862">
+    <script src="/release-v184.js?v=1862"></script>
+    <link rel="stylesheet" href="/release-v185.css?v=1852">
+    <script src="/release-v185.js?v=1862"></script>
+<style>
+.screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
+#my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
+#my-items-list .my-item-btn{padding:8px 10px;font-size:12px;flex-shrink:0}
+#platforms-list .platform-card,#th-list .platform-card{padding:10px;gap:6px;margin-bottom:6px}
+.platform-info{gap:3px;font-size:12px}
+#items-list .r1857-state-label{white-space:normal!important;overflow-wrap:anywhere;overflow:visible!important}
+#items-list .r1857-top .name{white-space:normal}
+</style></head>
 <body>
 
     <div id="toast-container"></div>
@@ -432,7 +439,7 @@
             <div style="width: 80px;"></div>
         </div>
         
-        <div class="card settings-grid"><button class="secondary" onclick="showExtra('categories')">Категории</button><button class="secondary" onclick="showExtra('finance')">Финансы</button><button class="secondary" onclick="showExtra('purchases')">Закупки</button><button class="secondary" onclick="showExtra('archive')">Архив</button><button class="secondary owner-only hidden" onclick="showExtra('audit')">Журнал администратора</button><button class="secondary owner-only hidden" onclick="downloadFile('/api/backup','warehouse_beta_backup.db')">Резервная копия</button><button class="secondary" onclick="cycleTheme()">Тема оформления</button></div><h2 style="font-size: 20px; margin-top: 24px; font-weight: 700; letter-spacing: -0.5px;">Комнаты</h2>
+        <div class="card settings-grid"><button class="secondary" onclick="showExtra('categories')">Категории</button><button class="secondary" onclick="showExtra('finance')">Финансы</button><button class="secondary" onclick="showExtra('purchases')">Закупки</button><button class="secondary" onclick="showExtra('archive')">Архив</button><button class="secondary owner-only hidden" onclick="showExtra('audit')">Журнал администратора</button><button class="secondary owner-only hidden" onclick="downloadFile('/api/backup','warehouse_main_backup.db')">Резервная копия</button><button class="secondary" onclick="cycleTheme()">Тема оформления</button></div><h2 style="font-size: 20px; margin-top: 24px; font-weight: 700; letter-spacing: -0.5px;">Комнаты</h2>
         <div class="input-group"><input id="new-location-name" placeholder="Название новой комнаты"></div>
         <button onclick="createLocation()" class="secondary">Добавить комнату</button>
         <div id="locations-list"></div>
@@ -451,7 +458,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button><button class="secondary" onclick="showExtra('inventorylog')">История инвентаризаций</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.6.0 Beta</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.5.8</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -2022,11 +2029,11 @@
         if(!tg.initData)document.body.classList.add('web-mode');
         function net17(){ $('net-state').classList.toggle('hidden',navigator.onLine); }
         window.addEventListener('offline',net17);window.addEventListener('online',()=>{net17();if(currentUser)loadItems()});net17();
-        try{document.documentElement.dataset.theme=localStorage.getItem('warehouse_beta_theme')||''}catch(e){}
-        function cacheKey17(name){return 'warehouse_beta_'+name+'_'+(currentUser?.tg_id||'none')}
+        try{document.documentElement.dataset.theme=localStorage.getItem('warehouse_main_theme')||''}catch(e){}
+        function cacheKey17(name){return 'warehouse_main_'+name+'_'+(currentUser?.tg_id||'none')}
         function cacheGet17(name){try{return localStorage.getItem(cacheKey17(name))}catch(e){return null}}
         function cacheSet17(name,v){try{localStorage.setItem(cacheKey17(name),v)}catch(e){}}
-        function cycleTheme(){let old=document.documentElement.dataset.theme;let next=old==='light'?'dark':old==='dark'?'':'light';document.documentElement.dataset.theme=next;try{localStorage.setItem('warehouse_beta_theme',next)}catch(e){}showToast(next==='light'?'Светлая тема':next==='dark'?'Тёмная тема':'Тема системы');}
+        function cycleTheme(){let old=document.documentElement.dataset.theme;let next=old==='light'?'dark':old==='dark'?'':'light';document.documentElement.dataset.theme=next;try{localStorage.setItem('warehouse_main_theme',next)}catch(e){}showToast(next==='light'?'Светлая тема':next==='dark'?'Тёмная тема':'Тема системы');}
         async function copyText(text){if(!text)return notify('Нет текста');try{await navigator.clipboard.writeText(text);showToast('Скопировано');haptic()}catch(e){const el=document.createElement('textarea');el.value=text;document.body.append(el);el.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}el.remove();if(ok)showToast('Скопировано');else prompt('Скопируйте текст:',text)}}
         function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
@@ -2037,7 +2044,7 @@
         async function image17(img,url){const obj=URL.createObjectURL(await blob17(url));if(img.dataset.objecturl)URL.revokeObjectURL(img.dataset.objecturl);img.dataset.objecturl=obj;img.src=obj}
         async function showLabelPreview17(code,name,img){await image17(img,`/api/label/${encodeURIComponent(code)}?name=${encodeURIComponent(name)}`)}
         async function showQr(){const code=currentItem.code,name=currentItem.name;const {b}=overlay17('Этикетка · '+name);const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);btn17(b,'Копировать код: '+code,()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));try{if(currentUser.role==='admin'){const path='/api/label/'+encodeURIComponent(code);await image17(img,path);btn17(b,'Скачать PNG · 203 dpi',()=>downloadFile(path,code+'.png'));btn17(b,'Скачать PDF · 50 × 80 мм',()=>downloadFile(path+'?format=pdf',code+'.pdf'));btn17(b,'Скачать PDF · 300 dpi',()=>downloadFile(path+'?format=pdf&dpi=300',code+'.pdf'))}else{await image17(img,'/api/label/'+encodeURIComponent(code))}}catch(e){notify(e.message)}}
-        function draftKey17(){return 'warehouse_beta_draft_'+(currentUser?.tg_id||'none')}
+        function draftKey17(){return 'warehouse_main_draft_'+(currentUser?.tg_id||'none')}
         function clearDraft17(){try{localStorage.removeItem(draftKey17())}catch(e){}}
         function restoreDraft17(){try{const d=JSON.parse(localStorage.getItem(draftKey17())||'{}');for(const [id,v]of Object.entries(d)){const el=$(id);if(el&&el.type!=='file')el.value=v}}catch(e){}}
         $('create-item-modal').addEventListener('input',()=>{if(!currentUser)return;const data={};$('create-item-modal').querySelectorAll('input,select').forEach(e=>{if(e.type!=='file')data[e.id]=e.value});try{localStorage.setItem(draftKey17(),JSON.stringify(data))}catch(e){}});
@@ -2083,7 +2090,6 @@
         installRelease183();
         installRelease184();
         installRelease185();
-        installRelease186();
         (async () => { await init(); })();
     </script>
 </body>

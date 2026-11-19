@@ -19,7 +19,7 @@ MAX_BACKUP_BYTES = 49 * 1024 * 1024
 
 def owner_id():
     try:
-        value = int(os.environ.get('BETA_ADMIN_ID', '').strip())
+        value = int(os.environ.get('MAIN_ADMIN_ID', '').strip())
         return value if value > 0 else None
     except ValueError:
         return None
