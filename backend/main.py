@@ -52,7 +52,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.5.3")
+app = FastAPI(title="Склад", version="18.5.4")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -185,6 +185,9 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    if "preview_role" not in {row[1] for row in c.execute("PRAGMA table_info(employee_preview)")}:
+        c.execute("ALTER TABLE employee_preview ADD COLUMN preview_role TEXT NOT NULL DEFAULT 'employee'")
+        c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
     conn.commit(); conn.close()
 
@@ -193,7 +196,7 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-prepare_migration(DB_PATH, "18.5.2")
+prepare_migration(DB_PATH, "18.5.4")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -1418,7 +1421,7 @@ register_183(app, get_user, check_admin, transaction, active_item, valid_locatio
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
-    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.2')")
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4')")
 
 
 @app.get("/")
