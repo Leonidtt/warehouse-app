@@ -22,6 +22,13 @@ function installV18(){
   navExtra('Оборудование','take',()=>selectKind('equipment'));navExtra('Расходники','box',()=>selectKind('consumable'));navExtra('Календарь','calendar',()=>showExtra('bookings'));navExtra('История','clock',()=>showHistory());navExtra('Финансы','chart',()=>showExtra('finance'),true);
   const main=$('screen-main'),qr=main.querySelector('.qr-btn-main'),take=main.querySelector('.take-btn');const quick=document.createElement('div');quick.className='v18-quick';qr.before(quick);quick.append(qr,take);qr.innerHTML=ico('scan')+' Сканировать';take.innerHTML=ico('take')+' Взять технику';
   const shortcuts=document.createElement('div');shortcuts.className='v18-shortcuts';quick.after(shortcuts);shortcuts.append(btn('Избранное',()=>showCollection('favorites'),'star'),btn('Недавние',()=>showCollection('recent'),'clock'),btn('Комплекты',showKits,'grid'),btn('Уведомления',showNotifications,'bell'),btn('Обновить',()=>refresh(true),'refresh'));
+  const userInfo=$('user-info');
+  const profileHeader=document.createElement('div');
+  profileHeader.className='beta-profile-header';
+  const copySnapshot=iconButton('Скопировать данные из Основы',()=>betaCopyMainData(copySnapshot),'refresh');
+  copySnapshot.classList.add('beta-copy-snapshot','owner-only','hidden');
+  userInfo.before(profileHeader);
+  profileHeader.append(copySnapshot,userInfo);
   const mainHeading=document.createElement('div');mainHeading.className='v18-desktop-heading';mainHeading.textContent='Обзор склада';main.querySelector('.v18-header-left').append(mainHeading);
   const workspace=document.createElement('div');workspace.className='v18-workspace';const inventory=document.createElement('section');inventory.className='v18-inventory';const aside=document.createElement('aside');aside.className='v18-overview';
   const tableHead=document.createElement('div');tableHead.className='v18-title-row';const tableTitle=document.createElement('h2');tableTitle.textContent='Товары';tableHead.append(tableTitle);const addDesktop=btn('Добавить товар',()=>openAddItemModal(),'plus','v18-admin hidden v18-desktop-only');addDesktop.style.cssText='width:auto;margin:0;min-height:38px;font-size:13px';tableHead.append(addDesktop);
@@ -34,15 +41,36 @@ function installV18(){
   const settings=$('screen-settings'),settings_header=settings.querySelector('.sticky-header'),site=$('web-login-btn'),logout=$('web-logout-btn');site.textContent='Сайт';const oldAction=main.querySelector('.header-actions');oldAction.classList.add('hidden');
   const byAction=action=>[...settings.querySelectorAll('button')].find(b=>b.getAttribute('onclick')===action);
   const groups=document.createElement('div');groups.className='v18-settings-layout';
-  function group(title,entries,owner=false){const wrap=document.createElement('section');wrap.className='v18-settings-group'+(owner?' owner-only hidden':'');const h=document.createElement('h2');h.className='v18-section-label';h.textContent=title;const list=document.createElement('div');list.className='v18-settings-list';for(const entry of entries){if(!entry)continue;const [el,label,k]=entry;if(!el)continue;if(el.tagName==='BUTTON'){el.innerHTML='<span class="v18-setting-icon">'+ico(k)+'</span><span class="v18-setting-label">'+safe(label)+'</span>'+ico('right');el.lastElementChild.classList.add('v18-chevron')}list.append(el)}wrap.append(h,list);groups.append(wrap)}
+  function group(title,entries,owner=false){
+    const wrap=document.createElement('details');
+    wrap.name='warehouse-settings';
+    wrap.className='v18-settings-group'+(owner?' owner-only hidden':'');
+    const heading=document.createElement('summary');
+    heading.className='v18-section-label';
+    heading.append(document.createTextNode(title));
+    heading.insertAdjacentHTML('beforeend',ico('right'));
+    const list=document.createElement('div');
+    list.className='v18-settings-list';
+    for(const [control,label,k] of entries){
+      if(!control)continue;
+      if(control.tagName==='BUTTON'){
+        control.innerHTML='<span class="v18-setting-icon">'+ico(k)+'</span><span class="v18-setting-label">'+safe(label)+'</span>'+ico('right');
+        control.lastElementChild.classList.add('v18-chevron');
+      }
+      list.append(control);
+    }
+    wrap.append(heading,list);
+    groups.append(wrap);
+    return list;
+  }
   const action=(attr,label,k)=>[byAction(attr),label,k];
+  group('Приложение',[[site,'Сайт','web'],[logout,'Выйти из сайта','web'],[btn('',showSessions),'Активные сеансы сайта','user'],[btn('',showAccent),'Акцентный цвет','sun'],[btn('',showChangelog),'Что нового в v18.5.2','file']]);
   group('Управление',[action('showUsers()','Пользователи','user'),action("showExtra('categories')",'Категории','grid'),[btn('',showBulk),'Массовое редактирование','edit'],action("showExtra('archive')",'Архив и восстановление','archive'),[btn('',showTemplates),'Шаблоны товаров','file']]);
   const roomsInput=$('new-location-name').closest('.input-group');group('Помещения',[[roomsInput],[byAction('createLocation()'),'Добавить помещение','plus'],[$('locations-list')]]);
   group('Учёт и аналитика',[action("showExtra('finance')",'Финансы','chart'),action("showExtra('purchases')",'Закупки','take'),[btn('',showUsage),'Использование техники','chart'],action('showInventory()','Инвентаризация','scan'),action("showExtra('inventorylog')",'История инвентаризаций','clock')]);
-  group('Приложение',[[site,'Сайт','web'],[logout,'Выйти из сайта','web'],[btn('',showSessions),'Активные сеансы сайта','user'],[btn('',showAccent),'Акцентный цвет','sun'],[btn('',showChangelog),'Что нового в v18.5.2','file']]);
   group('Экспорт и печать',[[ $('export-stock-btn'),'Выгрузить склад в Excel','file'],[btn('',()=>downloadFile('/api/v18/history.xlsx','history.xlsx')),'История в Excel','file'],[$('export-qr-btn'),'Печать QR-этикеток','scan'],[btn('',configureLabels),'Размер этикетки','settings']]);
-  group('Разработка',[[$('owner-terminal-btn'),'Терминал','web'],action("showExtra('audit')",'Журнал администратора','clock'),[btn('',sendOwnerBackup182),'Скачать резервную копию базы','file'],[btn('',()=>{if(confirm('Очистить настройки этого браузера?')){Object.keys(localStorage).filter(k=>k.startsWith('warehouse_main_')).forEach(k=>localStorage.removeItem(k));location.reload()}}),'Сбросить настройки браузера','refresh']],true);
-  const appGroup=[...groups.children].find(x=>x.querySelector('.v18-section-label')?.textContent==='Приложение');if(appGroup)groups.prepend(appGroup);
+  const maintenance=group('Обслуживание',[[$('owner-terminal-btn'),'Терминал','web'],action("showExtra('audit')",'Журнал администратора','clock'),[btn('',sendOwnerBackup182),'Скачать резервную копию базы','file'],[btn('',()=>{if(confirm('Очистить настройки этого браузера?')){Object.keys(localStorage).filter(k=>k.startsWith('warehouse_main_')).forEach(k=>localStorage.removeItem(k));location.reload()}}),'Сбросить настройки браузера','refresh']],true);
+  maintenance.id='beta-maintenance-settings';
   const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад v18.5.2';settings.replaceChildren(settings_header,groups,footer);
   $('screen-login').querySelector('.login-card p').textContent='Открой склад в Telegram, выбери «Сайт» в настройках или профиле и введи одноразовый код.';$('screen-login').querySelector('.login-card h1').textContent='Склад · v18.4';
   $('user-info').onclick=()=>{const {o,b}=overlay17('Мой профиль');const p=document.createElement('p');p.textContent=currentUser?.full_name||'';b.append(p);btn17(b,'Изменить имя',()=>{o.remove();editMyName()});btn17(b,tg.initData?'Сайт':'Выйти из сайта',()=>{o.remove();return tg.initData?issueWebCode():webLogout()});btn17(b,'Активные сеансы сайта',()=>{o.remove();showSessions()});btn17(b,'Акцентный цвет',()=>{o.remove();showAccent()})};

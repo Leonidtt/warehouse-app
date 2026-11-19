@@ -65,7 +65,7 @@ function compactData1857(i,booked){
   source.onchange=()=>setSource(source.value);$('move-qty').oninput=updateRemain;showMoveItemScreen=()=>{oldMove();source.replaceChildren(...currentItem.stocks.filter(s=>s.quantity>0).map(s=>new Option(s.location_name+' · '+s.quantity,s.location_id)));source.classList.toggle('hidden',source.options.length<=1);allQty.classList.toggle('hidden',currentItem.kind!=='consumable');if(source.value)setSource(source.value)};
   const oldExecute=executeMoveItem;let moving=false;executeMoveItem=async()=>{const n=Number($('move-qty').value);if(moving||!Number.isInteger(n)||n<=0||n>Number($('move-qty').max))return notify('Некорректное количество');moving=true;try{await oldExecute()}finally{moving=false}};
   // Real permissions follow the selected role. Account role stays unchanged.
-  const setting=$('screen-settings').querySelector('.v18-settings-layout');
+  const setting=$('beta-maintenance-settings');
   const roleNames1854={admin:'Администратор',boss:'Босс',employee:'Сотрудник',simple:'Сотрудник — простой режим'};
   let switching1854=false;
   async function changePreview1854(role){

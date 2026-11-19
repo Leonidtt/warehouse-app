@@ -24,3 +24,18 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
 .v18-shortcuts{align-items:stretch}.v18-shortcuts button{margin:0!important;display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px;white-space:normal;line-height:1.25;text-align:center}
 .r182-place-meta{display:flex;align-items:center;gap:4px}.r182-place-meta .r182-icon{width:13px;height:13px;color:var(--text-muted)}.search-icon .r182-icon{width:19px;height:19px;color:var(--text-muted)}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#11151d;--card-bg:#202733;--text:#f4f6fb;--text-muted:#aab6c5;--skeleton-bg:#2b3543;--border:rgba(180,195,220,.14)}}
+
+.r182-no-repair .r182-summary-main>.r182-numbers {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.r182-no-repair .r182-cat-row {
+  grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
+}
+.r182-event-tab.r182-bring-tab, .r182-event-tab.r182-bring-tab.active {
+  background: #bc2637;
+  color: white;
+  border-color: transparent;
+}
+.r182-event-tab.r182-bring-tab.active { box-shadow: inset 0 0 0 2px white; }
+.r182-value-low { color: var(--r182-red); }
+.r182-value-ok { color: var(--r182-green); }

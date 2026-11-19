@@ -179,14 +179,14 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css">
-    <script src="/warehouse-v18.js?v=1852"></script>
-    <link rel="stylesheet" href="/release-v182.css">
-    <script src="/release-v182.js"></script>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1864">
+    <script src="/warehouse-v18.js?v=1864"></script>
+    <link rel="stylesheet" href="/release-v182.css?v=1864">
+    <script src="/release-v182.js?v=1864"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js"></script>
     <link rel="stylesheet" href="/release-v184.css?v=1863">
-    <script src="/release-v184.js?v=1863"></script>
+    <script src="/release-v184.js?v=1864"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1852">
     <script src="/release-v185.js?v=1863"></script>
 <style>
@@ -210,9 +210,8 @@
 async function betaCopyMainData(button) {
     if (!currentUser?.is_owner ||
         !confirm('Загрузить текущие данные Основы? Бета сохранит свою резервную копию, затем заменит складские данные.')) return;
-    const label = button.textContent;
     button.disabled = true;
-    button.textContent = 'Копирование…';
+    button.setAttribute('aria-busy', 'true');
     try {
         await api('/api/beta/copy-main-data', {method: 'POST'});
         alert('Данные из Основы скопированы.');
@@ -221,28 +220,8 @@ async function betaCopyMainData(button) {
         alert(error.message || 'Не удалось скопировать данные.');
     } finally {
         button.disabled = false;
-        button.textContent = label;
+        button.removeAttribute('aria-busy');
     }
-}
-
-function betaImportBackup() {
-    if (!currentUser?.is_owner) return;
-    const fileInput = document.getElementById('beta-import-file');
-    fileInput.value = '';
-    fileInput.onchange = async () => {
-        if (!fileInput.files.length ||
-            !confirm('Заменить складские данные Беты из выбранного файла?')) return;
-        const data = new FormData();
-        data.append('file', fileInput.files[0]);
-        try {
-            await api('/api/beta/import-backup', {method: 'POST', body: data});
-            alert('Данные из файла загружены.');
-            location.reload();
-        } catch (error) {
-            alert(error.message || 'Не удалось загрузить резервную копию.');
-        }
-    };
-    fileInput.click();
 }
 </script></head>
 <body>
@@ -368,7 +347,6 @@ function betaImportBackup() {
 
         <button class="secondary" onclick="showExtra('bookings')">🗓 Календарь бронирований</button><button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
 
-        <div class="owner-only hidden"><button class="secondary" style="width:100%;margin:6px 0" onclick="betaCopyMainData(this)">Скопировать данные из Основы</button><button class="secondary" style="width:100%;margin:6px 0" onclick="betaImportBackup()">Загрузить резервную копию</button><input type="file" id="beta-import-file" accept=".db,.sqlite,.sqlite3" hidden></div>
         <div id="my-items-section" class="hidden" style="margin-bottom: 24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <h2 style="font-size: 18px; margin:0; font-weight: 700; letter-spacing: -0.5px;">🖐 Мои вещи</h2>
