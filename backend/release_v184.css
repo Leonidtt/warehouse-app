@@ -35,3 +35,5 @@
 .r1853-detail-item .meta{font-size:11px;line-height:1.35;margin:2px 0}
 .r1853-legend,.r1853-no-people{font-size:10.5px;color:var(--r185-muted,var(--text-muted));margin:5px 4px 0}
 @media(max-width:380px){.r184-boss-panel.r1853-held{padding-inline:8px}.r1853-person-line{grid-template-columns:minmax(60px,78px) 46px 46px minmax(36px,1fr) 9px;gap:3px;padding-inline:5px}.r1853-cell{gap:2px}.r1853-cell .r1853-icon{width:12px;height:12px;flex-basis:12px}.r1853-labels{font-size:11px}.r1853-name{font-size:12px}}
+
+.r184-preview{gap:5px;padding:6px 10px;min-height:44px;box-sizing:border-box}.r184-preview b{flex:1;min-width:0;font-size:12px;line-height:1.2}.r184-preview button{flex:0 0 auto;min-height:34px!important;padding:5px 8px;font-size:11px;white-space:nowrap}.r184-preview-active .sticky-header{top:44px}
