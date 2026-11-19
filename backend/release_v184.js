@@ -105,6 +105,7 @@ function compactData1857(i,booked){
     }
   }
   const preview=button('Тестирование интерфейса',choosePreview1854,'secondary r184-admin-dot hidden');
+  preview.innerHTML='<span class="v18-setting-icon"><svg class="v18-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/><path d="m9 10 2 2 4-4"/></svg></span><span class="v18-setting-label">Тестирование интерфейса</span><svg class="v18-icon v18-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
   setting.prepend(preview);
   const previewBanner=el('div','r184-preview hidden'),previewLabel=el('b');
   const switchRole=button('Сменить',choosePreview1854);
