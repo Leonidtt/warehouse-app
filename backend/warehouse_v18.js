@@ -19,7 +19,7 @@ function installV18(){
   const brand=document.createElement('div');brand.className='v18-desktop-only v18-laptop-title';brand.textContent='Склад';nav.prepend(brand);
   function navExtra(label,k,fn,admin=false){const el=document.createElement('div');el.className='nav-item v18-desktop-only'+(admin?' v18-admin hidden':'');el.innerHTML='<span class="icon">'+ico(k)+'</span><span>'+safe(label)+'</span>';el.tabIndex=0;el.setAttribute('role','button');el.onclick=()=>{fn()};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};nav.append(el);return el}
   const selectKind=k=>{if(currentScreen!=='screen-main')backToMain();$('filter-kind').value=k;$('filter-status').value='';filterItems();$('items-list').scrollIntoView({block:'start',behavior:'smooth'})};
-  navExtra('Оборудование','take',()=>selectKind('equipment'));navExtra('Расходники','box',()=>selectKind('consumable'));navExtra('Календарь','calendar',()=>showExtra('bookings'));navExtra('История','clock',()=>showHistory());navExtra('Финансы','chart',()=>showExtra('finance'),true);
+  navExtra('Оборудование','take',()=>selectKind('equipment'));navExtra('Расходники','box',()=>selectKind('consumable'));navExtra('Финансы','chart',()=>showExtra('finance'),true);
   const main=$('screen-main'),qr=main.querySelector('.qr-btn-main'),take=main.querySelector('.take-btn');const quick=document.createElement('div');quick.className='v18-quick';qr.before(quick);quick.append(qr,take);qr.innerHTML=ico('scan')+' Сканировать';take.innerHTML=ico('take')+' Взять технику';
   const shortcuts=document.createElement('div');shortcuts.className='v18-shortcuts';quick.after(shortcuts);shortcuts.append(btn('Избранное',()=>showCollection('favorites'),'star'),btn('Недавние',()=>showCollection('recent'),'clock'),btn('Комплекты',showKits,'grid'),btn('Уведомления',showNotifications,'bell'),btn('Обновить',()=>refresh(true),'refresh'));
   const userInfo=$('user-info');
@@ -33,9 +33,9 @@ function installV18(){
   const workspace=document.createElement('div');workspace.className='v18-workspace';const inventory=document.createElement('section');inventory.className='v18-inventory';const aside=document.createElement('aside');aside.className='v18-overview';
   const tableHead=document.createElement('div');tableHead.className='v18-title-row';const tableTitle=document.createElement('h2');tableTitle.textContent='Товары';tableHead.append(tableTitle);const addDesktop=btn('Добавить товар',()=>openAddItemModal(),'plus','v18-admin hidden v18-desktop-only');addDesktop.style.cssText='width:auto;margin:0;min-height:38px;font-size:13px';tableHead.append(addDesktop);
   inventory.append(tableHead,main.querySelector('.search-wrapper'),main.querySelector('.filters'),$('items-list'));
-  aside.append($('my-items-section'),$('my-bookings-section'));
-  const statsDetails=document.createElement('details');statsDetails.className='v18-overview-details';const statsSummary=document.createElement('summary');statsSummary.textContent='По категориям';statsDetails.append(statsSummary,$('stats-box'));aside.append(statsDetails,$('daily-report-box'));
-  const secondaryActions=document.createElement('div');secondaryActions.className='v18-shortcuts';for(const action of ["showExtra('bookings')","showHistory()"]){const b=[...main.querySelectorAll('button')].find(x=>x.getAttribute('onclick')===action);if(b)secondaryActions.append(b)}aside.append(secondaryActions);
+  quick.after($('main-activity'));
+  $('main-history-btn').innerHTML=ico('clock')+'<span>История</span>';
+  aside.append($('my-bookings-section'));
   workspace.append(inventory,aside);main.append(workspace);
   // Retain both login controls; move the site button into Settings. Employees use their profile.
   const settings=$('screen-settings'),settings_header=settings.querySelector('.sticky-header'),site=$('web-login-btn'),logout=$('web-logout-btn');site.textContent='Сайт';const oldAction=main.querySelector('.header-actions');oldAction.classList.add('hidden');
@@ -44,7 +44,7 @@ function installV18(){
   function group(title,entries,owner=false){
     const wrap=document.createElement('details');
     wrap.name='warehouse-settings';
-    wrap.className='v18-settings-group'+(owner?' owner-only hidden':'');
+    wrap.className='v18-settings-group beta-setting-details'+(owner?' owner-only hidden':'');
     const heading=document.createElement('summary');
     heading.className='v18-section-label';
     heading.append(document.createTextNode(title));

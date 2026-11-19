@@ -174,10 +174,10 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css?v=1873">
-    <script src="/warehouse-v18.js?v=1873"></script>
-    <link rel="stylesheet" href="/release-v182.css?v=1873">
-    <script src="/release-v182.js?v=1873"></script>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1874">
+    <script src="/warehouse-v18.js?v=1874"></script>
+    <link rel="stylesheet" href="/release-v182.css?v=1874">
+    <script src="/release-v182.js?v=1874"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1873"></script>
     <link rel="stylesheet" href="/release-v184.css?v=1863">
@@ -334,15 +334,16 @@ async function betaCopyMainData(button) {
             <div id="report-text" style="margin-top:5px;"></div>
         </div>
 
-        <button class="secondary" onclick="showExtra('bookings')">🗓 Календарь бронирований</button><button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
-
-        <div id="my-items-section" class="hidden" style="margin-bottom: 24px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h2 style="font-size: 18px; margin:0; font-weight: 700; letter-spacing: -0.5px;">🖐 Мои вещи</h2>
-                <button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="returnAllMyItems()">Вернуть всё</button>
+        <section class="beta-activity" id="main-activity">
+            <div class="beta-activity-bar">
+                <div class="beta-activity-title" aria-hidden="true"><h2>Мои вещи</h2></div>
+                <button type="button" class="secondary beta-history-shortcut" id="main-history-btn" onclick="showHistory()">История</button>
             </div>
-            <div id="my-items-list"></div>
-        </div>
+            <div id="my-items-section" class="hidden">
+                <div id="my-items-list"></div>
+                <button type="button" class="secondary beta-return-all" onclick="returnAllMyItems()">Вернуть всё</button>
+            </div>
+        </section>
 
         <div id="my-bookings-section" class="hidden" style="margin-bottom: 24px;">
             <h2 style="font-size: 18px; margin-bottom: 12px; font-weight: 700; letter-spacing: -0.5px;">🗓 Мои брони</h2>
@@ -1180,16 +1181,31 @@ async function betaCopyMainData(button) {
 
         function showUsers() { if(currentUser?.role!=="admin")return; loadUsers(); showScreen("screen-users"); }
         
-        async function loadItems() { 
-            const list = document.getElementById("items-list"); 
-            if(list.innerHTML.includes("Ничего не найдено") || list.innerHTML.includes("Загрузка")) list.innerHTML = "<p>Загрузка...</p>"; 
-            try { allItems = await api("/api/items"); filterItems(); loadMyItems(); } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(e.message)}</p>`; } 
+        let inventoryRequest = 0, holdingsRequest = 0;
+        async function loadItems() {
+            const request = ++inventoryRequest;
+            const holdings = loadMyItems();
+            const list = $('items-list');
+            try {
+                const items = await api('/api/items');
+                if (request === inventoryRequest) {
+                    allItems = items;
+                    filterItems();
+                }
+            } catch (error) {
+                if (request === inventoryRequest) {
+                    list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(error.message)}</p>`;
+                }
+            }
+            await holdings;
         }
-        
-        async function loadMyItems() { 
-            try { 
-                let myItems = await api("/api/my_items"); 
-                
+
+        async function loadMyItems() {
+            const request = ++holdingsRequest;
+            try {
+                const myItems = await api('/api/my_items');
+                if (request !== holdingsRequest) return;
+
                 myItems.sort((a, b) => {
                     const aForOther = a.taken_for && a.taken_for.trim() !== "";
                     const bForOther = b.taken_for && b.taken_for.trim() !== "";
@@ -1198,10 +1214,13 @@ async function betaCopyMainData(button) {
                     return a.name.localeCompare(b.name); 
                 });
 
-                const section = document.getElementById("my-items-section"); 
-                const list = document.getElementById("my-items-list"); 
-                if (!myItems.length) { section.classList.add("hidden"); return; } 
-                section.classList.remove("hidden"); 
+                const activity = $('main-activity');
+                const section = $('my-items-section');
+                const list = $('my-items-list');
+                const hasItems = myItems.length > 0;
+                activity.classList.toggle('has-items', hasItems);
+                activity.querySelector('.beta-activity-title').setAttribute('aria-hidden', String(!hasItems));
+                section.classList.toggle('hidden', !hasItems);
                 list.innerHTML = myItems.map(i => `<div class="my-item-card"><div class="beta-my-thumb"></div><div style="flex:1; min-width:0; cursor:pointer;" onclick="openItem(${jsArg17(i.item_code)})"><div style="font-weight:bold;">${escapeOwnerText(i.name)}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${escapeOwnerText(i.item_code)} ${i.taken_for ? `(Кому: ${escapeOwnerText(i.taken_for.trim().split(/\s+/)[0])})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain(${jsArg17(i.item_code)})">Вернуть</div></div>`).join(""); 
                 if(window.betaMyPhoto) list.querySelectorAll('.beta-my-thumb').forEach((node,k)=>node.replaceWith(window.betaMyPhoto({...myItems[k],code:myItems[k].item_code})));
 
@@ -1210,7 +1229,7 @@ async function betaCopyMainData(button) {
         
         async function doReturnFromMain(code) { 
             haptic('medium');
-            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); loadItems(); } catch (e) { notify(e.message); } 
+            try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); await Promise.all([loadItems(), loadDashboard17()]); } catch (e) { notify(e.message); }
         }
 
         async function returnAllMyItems() {
@@ -1218,7 +1237,7 @@ async function betaCopyMainData(button) {
             haptic('medium');
             const myItems = await api("/api/my_items");
             for (let item of myItems) { try { await api(`/api/return?code=${encodeURIComponent(item.item_code)}`, { method: "POST" }); } catch(e) {} }
-            showToast("Все вещи возвращены"); loadItems();
+            showToast("Все вещи возвращены"); await Promise.all([loadItems(), loadDashboard17()]);
         }
         
         function renderItemsGrid(itemsArray, containerId) {
@@ -1360,7 +1379,7 @@ async function betaCopyMainData(button) {
                 if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
                 selectedTakeItems = [];
                 updateTakeBatchUI();
-                loadItems();
+                await Promise.all([loadItems(), loadDashboard17()]);
                 backToMain();
             } catch (e) { notify(e.message); }
         }
@@ -1846,7 +1865,9 @@ async function betaCopyMainData(button) {
                     body: JSON.stringify({code, taken_for: takenFor}),
                 });
                 showToast('Выдано');
+                const refresh = Promise.all([loadItems(), loadDashboard17()]);
                 if (currentScreen === 'screen-item' && currentItem.code === code) await openItem(code);
+                await refresh;
             } catch (e) {
                 notify(e.message);
             } finally {
@@ -1879,7 +1900,18 @@ async function betaCopyMainData(button) {
                 doCheckout(recipientName.value.trim());
             }
         });
-        async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        async function doReturn() {
+            const {code} = currentItem;
+            try {
+                await api(`/api/return?code=${encodeURIComponent(code)}`, {method: 'POST'});
+                showToast('Возвращено');
+                const refresh = Promise.all([loadItems(), loadDashboard17()]);
+                if (currentScreen === 'screen-item' && currentItem.code === code) await openItem(code);
+                await refresh;
+            } catch (error) {
+                notify(error.message);
+            }
+        }
         
         function showMoveItemScreen() {
             document.getElementById("move-item-name").textContent = currentItem.name;
@@ -2171,7 +2203,44 @@ async function betaCopyMainData(button) {
         function matchesStatus17(i,status){if(status==='free')return i.kind==='equipment'&&!i.needs_repair&&!i.holders.length&&i.total>0&&!booked17.has(i.code);if(status==='on_hand')return i.holders.length>0;if(status==='repair')return !!i.needs_repair;if(status==='booked_today')return booked17.has(i.code);if(status==='low_stock')return !!i.is_low;return true}
         async function loadDashboard17(){try{const [r,b]=await Promise.all([api('/api/dashboard'),api('/api/booking_calendar')]);const today=localDay17();booked17=new Set(b.filter(x=>x.date_from<=today&&x.date_to>=today).map(x=>x.item_code));const box=$('dashboard-v17');box.replaceChildren();box.className='dashboard-grid';for(const [key,label,color]of [['free','Свободно','var(--success)'],['on_hand','На руках','var(--primary)'],['repair','В ремонте','var(--danger)'],['booked_today','Бронь сегодня','var(--warning)'],['low_stock','Мало расходников','var(--warning)']]){const el=document.createElement('button');el.className='metric';el.innerHTML=safe(label)+'<b style="color:'+color+'">'+Number(r.counts[key]||0)+'</b>';el.onclick=()=>{$('filter-status').value=key;$('filter-kind').value='';$('filter-category').value='';$('filter-location').value='';$('search-input').value='';filterItems();$('items-list').scrollIntoView({behavior:'smooth'})};box.append(el)}filterItems()}catch(e){console.log(e)}}
         function card17(parent,title,body){const c=document.createElement('div');c.className='card extra-card';const t=document.createElement('strong');t.textContent=title;c.append(t);if(body){const x=document.createElement('p');x.className='meta';x.style.whiteSpace='pre-line';x.textContent=body;c.append(x)}parent.append(c);return c;}
-        async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await loadCategories17();box.replaceChildren();btn17(box,'Добавить категорию',async()=>{const name=prompt('Название категории');if(name?.trim()){await api('/api/categories',{method:'POST',body:JSON.stringify({name:name.trim()})});showExtra(section)}});for(const name of categories17){const c=card17(box,name);btn17(c,'Переименовать',async()=>{const n=prompt('Новое название',name);if(n?.trim()){await api('/api/categories/'+encodeURIComponent(name),{method:'PUT',body:JSON.stringify({name:n.trim()})});showExtra(section)}});btn17(c,'Удалить',async()=>{if(confirm('Удалить категорию?')){await api('/api/categories/'+encodeURIComponent(name),{method:'DELETE'});showExtra(section)}})}}else if(section==='finance'){const r=await api('/api/dashboard');box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Оплаченные ремонты за 30 дней','repair_cost_30_days'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
+        async function renderCategorySettings(box) {
+            await loadCategories17();
+            box.replaceChildren();
+            btn17(box, 'Добавить категорию', async () => {
+                const name = prompt('Название категории')?.trim();
+                if (!name) return;
+                await api('/api/categories', {method: 'POST', body: JSON.stringify({name})});
+                await renderCategorySettings(box);
+            });
+            const list = document.createElement('div');
+            list.className = 'beta-category-settings';
+            for (const name of categories17) {
+                const entry = document.createElement('details');
+                entry.className = 'beta-setting-details';
+                entry.name = 'warehouse-categories';
+                const title = document.createElement('summary');
+                title.textContent = name;
+                const actions = document.createElement('div');
+                actions.className = 'beta-category-actions';
+                btn17(actions, 'Переименовать', async () => {
+                    const next = prompt('Новое название', name)?.trim();
+                    if (!next) return;
+                    await api('/api/categories/' + encodeURIComponent(name), {
+                        method: 'PUT', body: JSON.stringify({name: next}),
+                    });
+                    await renderCategorySettings(box);
+                });
+                btn17(actions, 'Удалить', async () => {
+                    if (!confirm('Удалить категорию?')) return;
+                    await api('/api/categories/' + encodeURIComponent(name), {method: 'DELETE'});
+                    await renderCategorySettings(box);
+                });
+                entry.append(title, actions);
+                list.append(entry);
+            }
+            box.append(list);
+        }
+        async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await renderCategorySettings(box);}else if(section==='finance'){const r=await api('/api/dashboard');box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Оплаченные ремонты за 30 дней','repair_cost_30_days'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
         function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
         async function loadPassport17(code){const box=$('passport-v17');box.replaceChildren();try{const m=await api(itemPath17(code,'/passport'));if(currentItem?.code!==code)return;const c=card17(box,'Паспорт товара',[m.notes,m.site?'Площадка: '+m.site:'',m.vessel?'Теплоход: '+m.vessel:'',currentItem.kind==='consumable'?'Единица: '+m.unit:'',m.supplier?'Поставщик: '+m.supplier:''].filter(Boolean).join('\n'));if(m.has_photo){const im=document.createElement('img');im.style.cssText='max-width:100%;max-height:220px;object-fit:contain;border-radius:12px';im.alt='Фото товара';c.prepend(im);image17(im,itemPath17(code,'/photo')).catch(e=>im.remove())}btn17(c,'Копировать название',()=>copyText(currentItem.name));btn17(c,'Копировать код',()=>copyText(code));if(currentUser.role==='admin')btn17(c,'Редактировать паспорт',()=>editPassport17(code,m))}catch(e){box.textContent=e.message}}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}

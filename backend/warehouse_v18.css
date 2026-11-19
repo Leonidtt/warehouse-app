@@ -44,20 +44,25 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   .web-mode #screen-main .r1851-balanced .beta-profile-header { justify-content: flex-end; }
 }
 
+#screen-settings .v18-settings-layout, .beta-category-settings {
+  max-width: 620px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
 #screen-settings .v18-settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-  max-width: 620px;
-  margin: 0 auto;
+  gap: 0;
 }
-#screen-settings .v18-settings-group {
+#screen-settings .v18-settings-group, .beta-category-settings details {
   margin: 0;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
+  min-width: 0;
 }
+#screen-settings .v18-settings-group + .v18-settings-group,
+.beta-category-settings details + details { border-top: 1px solid var(--border); }
 #screen-settings .v18-settings-group>summary {
   cursor: pointer;
   display: flex;
@@ -75,7 +80,10 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   list-style: none;
 }
 #screen-settings .v18-settings-group>summary::-webkit-details-marker { display: none; }
-#screen-settings .v18-settings-group>summary .v18-icon { color: var(--text-muted); }
+#screen-settings .v18-settings-group>summary .v18-icon {
+  color: var(--text-muted);
+  transition: transform 220ms ease;
+}
 #screen-settings .v18-settings-group[open]>summary .v18-icon { transform: rotate(90deg); }
 #screen-settings .v18-settings-group>summary:focus-visible {
   outline: 2px solid var(--primary);
@@ -94,6 +102,94 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   box-shadow: none;
 }
 #screen-settings .v18-settings-list .r184-admin-dot::after { display: none; }
+
+.beta-category-settings summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 12px;
+  list-style: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+.beta-category-settings summary::-webkit-details-marker { display: none; }
+.beta-category-settings summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex: none;
+  margin-right: 4px;
+  border: solid var(--text-muted);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+  transition: transform 220ms ease;
+}
+.beta-category-settings details[open]>summary::after { transform: rotate(45deg); }
+.beta-category-settings summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.beta-category-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 12px 9px;
+}
+.beta-category-actions button { margin: 0; padding: 5px; min-height: 40px; font-size: 12px; }
+@supports selector(details::details-content) and (interpolate-size: allow-keywords) {
+  .beta-setting-details::details-content {
+    height: 0;
+    overflow: clip;
+    content-visibility: hidden;
+    interpolate-size: allow-keywords;
+    transition: height 220ms ease, content-visibility 220ms allow-discrete;
+  }
+  .beta-setting-details[open]::details-content {
+    height: auto;
+    content-visibility: visible;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .beta-setting-details::details-content { transition: none; }
+  }
+}
+.beta-activity { margin-bottom: 14px; }
+.beta-activity-bar { display: flex; align-items: stretch; min-width: 0; margin: 0 0 7px; }
+.beta-activity-title {
+  display: flex;
+  flex: 0 0 0%;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: flex-basis 240ms ease, opacity 160ms ease;
+}
+.beta-activity-title h2 { margin: 0; font-size: 17px; white-space: nowrap; }
+.beta-activity.has-items .beta-activity-title { flex-basis: 50%; opacity: 1; }
+#screen-main button.beta-history-shortcut {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  width: auto;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: var(--warehouse-panel);
+  color: var(--text);
+  font-size: 13px;
+  box-shadow: none;
+}
+.beta-history-shortcut .v18-icon { width: 18px; height: 18px; flex: none; }
+#screen-main button.beta-return-all {
+  width: auto;
+  min-height: 40px;
+  margin: 0 0 0 auto;
+  display: block;
+  padding: 5px 10px;
+  font-size: 12px;
+}
 
 .beta-item-card, #item-recipient-dialog {
   background: var(--card-bg);
