@@ -136,16 +136,16 @@ def register_184(app, get_user, real_user, session, transaction, digest, list_it
             raise HTTPException(403,'Сводка доступна руководителю')
         # In office = all physical storage rooms; checkout quantities are separate.
         rows=list_items(x_init_data)
-        office={'cameras':0,'flashes':0}; held={'cameras':0,'flashes':0}; people={}; rooms={}
+        office={'cameras':0,'flashes':0,'standalone_flashes':0}; held={'cameras':0,'flashes':0,'standalone_flashes':0}; people={}; rooms={}
         for row in rows:
             if row['kind']!='equipment':continue
             cam,flash=component_counts(row)
             if not cam and not flash:continue
             for s in row['stocks']:
-                q=s['quantity']; office['cameras']+=cam*q;office['flashes']+=flash*q
+                q=s['quantity']; office['cameras']+=cam*q;office['flashes']+=flash*q;office['standalone_flashes']+=(flash if not cam else 0)*q
                 r=rooms.setdefault(s['location_id'],{'name':s['location_name'],'cameras':0,'flashes':0});r['cameras']+=cam*q;r['flashes']+=flash*q
             for h in row['holders']:
-                held['cameras']+=cam;held['flashes']+=flash
+                held['cameras']+=cam;held['flashes']+=flash;held['standalone_flashes']+=flash if not cam else 0
                 name=h.get('taken_for') or h.get('full_name') or 'Не указан'
                 key=(h['user_id'],name)
                 p=people.setdefault(key,{'name':name,'cameras':0,'flashes':0,'items':[]})

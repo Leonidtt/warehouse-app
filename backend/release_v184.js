@@ -120,7 +120,7 @@ function compactData1857(i,booked){
   }
   // Boss view, with explicit stock-room interpretation and separate holder detail.
   const bossBox=el('section','r184-boss hidden');main.querySelector('.v18-quick').before(bossBox);let bossJob=null;
-  function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
+  function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Отдельные вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
 function bossBrand1853(value,kind){
   const s=String(value||'').normalize('NFKC').toLowerCase().replace(/[‐‑–—]/g,'-');
   const canon=/(?:^|[^\p{L}\p{N}])(?:canon|к[еэ]нон|канон)(?=$|[^\p{L}\p{N}])/u.test(s);
@@ -172,7 +172,7 @@ function bossSurname1853(name){
     n.append(labels);n.title=type+': '+full.join(', ');n.setAttribute('aria-label',n.title);return n
   }
   function bossTotal1853(kind,n){
-    const cell=el('span','r1853-total '+kind);cell.append(bossIcon1853(kind),el('strong','',String(n||0)));cell.title=(kind==='camera'?'Фотоаппараты':'Вспышки')+': '+(n||0);cell.setAttribute('aria-label',cell.title);return cell
+    const cell=el('span','r1853-total '+kind);cell.append(bossIcon1853(kind),el('strong','',String(n||0)));cell.title=(kind==='camera'?'Фотоаппараты':'Отдельные вспышки')+': '+(n||0);cell.setAttribute('aria-label',cell.title);return cell
   }
   function bossPerson1853(p,key,expanded,duplicates){
     const d=el('details','r1853-person');d.dataset.personKey=key;d.open=expanded;
@@ -217,7 +217,7 @@ function bossSurname1853(name){
     d.append(detail);return d
   }
   function bossExtraPanel1855(title,groups,type,expanded,open=false){
-    const collapsible=type==='buyout';
+    const collapsible=false;
     const card=el(collapsible?'details':'div','card r184-boss-panel r1855-panel'+(collapsible?' beta-setting-details r1856-boss-buyouts':''));
     const head=el(collapsible?'summary':'div',collapsible?'r1856-heading':'r1853-held-head');
     head.append(el(collapsible?'span':'h3',collapsible?'r1856-title':'',title),el('span','meta',String(groups.length)));
@@ -267,16 +267,16 @@ function bossSurname1853(name){
     bossJob=api('/api/v184/boss').then(r=>{
       if(currentUser?.role!=='boss')return;
       const expanded=new Set([...bossBox.querySelectorAll('.r1853-person[open]')].map(d=>d.dataset.personKey));
-      const office=bossPanel('В офисе','office',r.office);office.append(el('small','meta','Все помещения склада'));
+      const office=bossPanel('В офисе','office',{...r.office,flashes:r.office.standalone_flashes??r.office.flashes});office.append(el('small','meta','Все помещения склада'));
       const held=el('div','card r184-boss-panel held r1853-held'),header=el('div','r1853-held-head');
-      header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.flashes));held.append(header);
+      header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.standalone_flashes??r.held.flashes));held.append(header);
       const list=el('div','r1853-people'),seen=new Set(),duplicates=new Set();
       for(const p of r.people){const s=bossSurname1853(p.name);if(seen.has(s))duplicates.add(s);seen.add(s)}
       let unknown=false;
       for(const p of r.people){const key=JSON.stringify([p.person_id??null,p.name]);list.append(bossPerson1853(p,key,expanded.has(key),duplicates));unknown=unknown||!!(bossCounts1853(p.items,'camera')['?']+bossCounts1853(p.items,'flash',true)['?'])}
       if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
-      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded,$('boss-buyouts1856')?.open);
+      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
       bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,buyouts);bossBox.classList.remove('hidden');
     }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
     return bossJob
