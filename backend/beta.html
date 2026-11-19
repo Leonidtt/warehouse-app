@@ -185,10 +185,11 @@
     <script src="/release-v182.js"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js"></script>
-    <link rel="stylesheet" href="/release-v184.css">
+    <link rel="stylesheet" href="/release-v184.css?v=1860">
     <script src="/release-v184.js"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1851">
     <script src="/release-v185.js?v=1851"></script>
+    <script src="/release-v186.js?v=1860"></script>
 </head>
 <body>
 
@@ -450,7 +451,7 @@
         <h2 style="font-size: 20px; margin-top: 32px; color: var(--warning); font-weight: 700; letter-spacing: -0.5px;">Проверка</h2>
         <button class="secondary" onclick="showInventory()">📋 Инвентаризация</button><button class="secondary" onclick="showExtra('inventorylog')">История инвентаризаций</button>
         
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.3</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 40px; margin-bottom: 20px;">Версия интерфейса: v18.6.0 Beta</div>
     </div>
 
     <div id="screen-users" class="screen hidden">
@@ -2082,6 +2083,7 @@
         installRelease183();
         installRelease184();
         installRelease185();
+        installRelease186();
         (async () => { await init(); })();
     </script>
 </body>
