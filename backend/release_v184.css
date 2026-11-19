@@ -26,3 +26,18 @@
 .r186-detail .r186-item-link{margin:4px 0 0;min-height:38px;text-align:left;padding:7px 9px;font-size:12px}
 .r186-detail .r186-item-meta{margin:3px 1px 6px;font-size:11px;line-height:1.35}
 @media(max-width:360px){.r186-row{gap:3px;padding-inline:5px}.r186-name{flex-basis:70px}.r186-codes{min-width:34px;gap:2px}.r186-symbol{width:12px;height:12px;flex-basis:12px}.r186-code{font-size:10px}.r186-buyout{font-size:9px}}
+
+/* v18.6 Beta physical kit links */
+.r186-kit{padding:12px!important;margin:12px 0}
+.r186-kit h3{margin:0 0 5px;font-size:16px}
+.r186-kit p.meta{margin:7px 0;line-height:1.4}
+.r186-kit-parts{margin:8px 0;border-radius:10px;overflow:hidden}
+.r186-kit .r186-kit-row{width:100%;display:flex;gap:10px;align-items:center;justify-content:space-between;text-align:left;border:0;border-radius:0;box-shadow:none;margin:0;padding:8px;color:var(--text);background:transparent;font-weight:400}
+.r186-kit .r186-kit-row:nth-child(odd){background:var(--r185-control,var(--skeleton-bg))}
+.r186-kit .r186-kit-row:disabled{opacity:1;cursor:default}
+.r186-kit-info{display:grid;gap:2px;min-width:0}
+.r186-kit-model{font-size:12px;overflow-wrap:anywhere}
+.r186-kit-info small{font-size:10px}
+.r186-kit-status{font-size:11px;text-align:right;max-width:40%;overflow-wrap:anywhere;color:var(--text-muted)}
+.r186-kit-status.free{color:var(--success)}.r186-kit-status.held{color:var(--danger)}
+.r186-kit button:not(.r186-kit-row){min-height:38px;margin:5px 0}
