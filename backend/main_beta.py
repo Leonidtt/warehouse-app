@@ -31,6 +31,7 @@ from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import effective_user, register_184
+from release_v186 import init_kits, register_186
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
@@ -52,7 +53,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад — Бета", version="18.5.3")
+app = FastAPI(title="Склад — Бета", version="18.6.0")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -1419,7 +1420,9 @@ register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
+register_186(app, get_user, check_admin, transaction, contextmanager_session, active_item, audit, _checkout_one)
 with transaction() as conn:
+    init_kits(conn)
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5')")
     if BETA_FRESH_DB and not conn.execute("SELECT 1 FROM items LIMIT 1").fetchone():
         loc=conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()[0]
