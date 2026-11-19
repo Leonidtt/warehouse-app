@@ -38,6 +38,58 @@ def component_counts(row):
     return body, flash
 
 
+def buyout_name(value):
+    return str(value or '').strip()
+
+
+def boss_buyouts(rows):
+    groups = {}
+    for row in rows:
+        if row['kind'] != 'equipment':
+            continue
+        name = buyout_name(row.get('buyout_status'))
+        if not name:
+            continue
+        cam, flash = component_counts(row)
+        group = groups.setdefault(name.casefold(), {'name': name, 'items': []})
+        group['items'].append({'code': row['code'], 'name': row['name'],
+            'camera': row['kit_body'], 'flash': row['kit_flash'], 'lens': row.get('kit_lens',''),
+            'camera_count': cam, 'flash_count': flash,
+            'holders': [h.get('taken_for') or h.get('full_name') or 'Не указан' for h in row['holders']]})
+    return sorted(groups.values(), key=lambda g: g['name'].casefold())
+
+
+def boss_rentals(conn):
+    # SQLite checkout timestamps are UTC; business calendar is Moscow.
+    rows = conn.execute("""
+        SELECT c.id, c.item_code AS code, i.name, i.kind, i.category, i.kit_body,
+               i.kit_flash, i.kit_lens, i.is_archived, c.taken_for,
+               COALESCE(g.full_name, '') AS giver, c.taken_at, c.returned_at,
+               date(c.taken_at, '+3 hours') AS day
+        FROM checkouts c JOIN items i ON i.code=c.item_code
+        LEFT JOIN users g ON g.tg_id=c.giver_id
+        WHERE i.kind='equipment' AND trim(COALESCE(i.buyout_status,''))=''
+          AND trim(COALESCE(c.taken_for,''))<>''
+          AND date(c.taken_at, '+3 hours') >= date('now','+3 hours','-89 days')
+        ORDER BY c.taken_at DESC, c.id DESC
+    """).fetchall()
+    groups = {}
+    for raw in rows:
+        row = dict(raw)
+        cam, flash = component_counts(row)
+        if not cam and not flash:
+            continue
+        name = row['taken_for'].strip()
+        key = (row['day'], name.casefold())
+        group = groups.setdefault(key, {'name':name, 'day':row['day'], 'items':[]})
+        group['items'].append({'code':row['code'], 'name':row['name'], 'camera':row['kit_body'],
+            'flash':row['kit_flash'], 'lens':row['kit_lens'], 'camera_count':cam, 'flash_count':flash,
+            'giver':row['giver'], 'taken_at':row['taken_at'], 'returned_at':row['returned_at'],
+            'archived':bool(row['is_archived'])})
+    return {'today':conn.execute("SELECT date('now','+3 hours')").fetchone()[0],
+            'groups':list(groups.values())}
+
+
 def register_184(app, get_user, real_user, session, transaction, digest, list_items):
     directory = Path(__file__).resolve().parent
     for name, media in [('js','text/javascript'),('css','text/css')]:
@@ -99,4 +151,12 @@ def register_184(app, get_user, real_user, session, transaction, digest, list_it
                 p=people.setdefault(key,{'name':name,'cameras':0,'flashes':0,'items':[]})
                 p['person_id']=h['user_id']; p['cameras']+=cam; p['flashes']+=flash
                 p['items'].append({'code':row['code'],'name':row['name'],'camera':row['kit_body'],'flash':row['kit_flash'],'lens':row.get('kit_lens',''),'camera_count':cam,'flash_count':flash,'buyout_status':row.get('buyout_status',''),'taken_at':h.get('taken_at','')})
-        return {'office':office,'held':held,'people':sorted(people.values(),key=lambda p:p['name'].casefold()),'rooms':sorted(rooms.values(),key=lambda r:r['name'].casefold())}
+        return {'office':office,'held':held,'people':sorted(people.values(),key=lambda p:p['name'].casefold()),'rooms':sorted(rooms.values(),key=lambda r:r['name'].casefold()),'buyouts':boss_buyouts(rows)}
+
+    @app.get('/api/v1855/boss/rentals')
+    def rentals(x_init_data: Optional[str]=Header(None)):
+        user=get_user(x_init_data)
+        if user['role'] not in ('admin','boss') or not user['is_registered']:
+            raise HTTPException(403,'Сводка доступна руководителю')
+        with session() as conn:
+            return boss_rentals(conn)
