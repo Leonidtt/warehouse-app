@@ -219,8 +219,41 @@ function bossSurname1853(name){
     }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
     return bossJob
   }
-  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();refreshBoss()};
+function buyoutRows1856(items){
+  return (items||[]).filter(i=>i.kind==='equipment'&&!i.is_archived&&String(i.buyout_status||'').trim()).map(i=>{
+    const model=String(i.kit_body||'').trim();
+    const hasModel=!['','-','—','нет','none','0','n/a','без','не указан'].includes(model.toLowerCase());
+    const held=Array.isArray(i.holders)&&i.holders.length>0;
+    const stock=Array.isArray(i.stocks)&&i.stocks.some(x=>Number(x.quantity)>0);
+    return {code:i.code,person:String(i.buyout_status).trim(),name:i.name,model:hasModel?model:'Не указана',state:held?'held':stock?'stock':'unknown'};
+  }).sort((a,b)=>a.person.localeCompare(b.person,'ru')||a.name.localeCompare(b.name,'ru'));
+}
+  const buyoutBox1856=el('section','card r1856-buyouts hidden');
+  buyoutBox1856.id='buyout-list1856';
+  toolbar.before(buyoutBox1856);
+  let buyoutSignature1856=null;
+  function renderBuyout1856(){
+    const allowed=['admin','employee'].includes(currentUser?.role)&&!!currentUser?.is_registered;
+    buyoutBox1856.classList.toggle('hidden',!allowed);
+    if(!allowed){buyoutBox1856.replaceChildren();buyoutSignature1856=null;return}
+    const rows=buyoutRows1856(allItems),signature=JSON.stringify(rows);
+    if(signature===buyoutSignature1856)return;
+    buyoutSignature1856=signature;
+    const header=el('div','r1856-heading');header.append(el('h3','','На выкупе'),el('span','meta',String(rows.length)));
+    const list=el('div','r1856-list');
+    for(const i of rows){
+      const row=button('',()=>openItem(i.code),'r1856-row');
+      const person=el('span','r1856-surname',i.person),name=el('span','r1856-name',i.name),model=el('span','r1856-model',i.model);
+      const state=el('span','r1856-state '+i.state),status=i.state==='held'?'На руках':i.state==='stock'?'Склад':'Не найдено';
+      state.append(el('span','r1856-dot'),el('span','',status));
+      row.append(person,name,model,state);row.title=[i.person,i.name,i.model,status].join(' · ');list.append(row);
+    }
+    if(!rows.length)list.append(el('div','meta r1856-empty','Нет техники на выкупе'));
+    buyoutBox1856.replaceChildren(header,list);
+  }
+
+  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();refreshBoss()};
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
-  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',finance());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();filterItems();refreshBoss()};
+  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',finance());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();filterItems();renderBuyout1856();refreshBoss()};
 }
