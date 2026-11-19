@@ -200,6 +200,45 @@ if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
 init_db(DB_PATH)
 
+def seed_beta_demo_items(db_path):
+    # One-time demo fixture for the isolated Beta database only.
+    if os.path.abspath(db_path) != "/data/warehouse_beta.db":
+        raise RuntimeError("Demo fixtures are restricted to Beta")
+    with sqlite3.connect(db_path, timeout=15) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("CREATE TABLE IF NOT EXISTS beta_fixture_versions (version TEXT PRIMARY KEY)")
+        if conn.execute("SELECT 1 FROM beta_fixture_versions WHERE version='demo-items-2026-11-19'").fetchone():
+            return
+        locations = dict(conn.execute("SELECT type, MIN(id) FROM locations GROUP BY type").fetchall())
+        default_loc = conn.execute("SELECT MIN(id) FROM locations").fetchone()[0]
+        fixtures = [
+            # code, name, kind, category, location, count, minimum, price, kit body, lens, flash, repair
+            ("TEST-CAM-01", "Тест · Canon EOS R6", "equipment", "Фотокомплекты", "storage", 1, 0, 195000, "Canon EOS R6", "RF 24-105mm", "Godox V1-C", 0),
+            ("TEST-CAM-02", "Тест · Sony A7 III", "equipment", "Фотокомплекты", "office", 1, 0, 160000, "Sony A7 III", "FE 28-70mm", "Godox V860III-S", 0),
+            ("TEST-CAM-03", "Тест · Canon EOS 6D", "equipment", "Фотокомплекты", "workshop", 1, 0, 85000, "Canon EOS 6D", "EF 24-70mm", "Canon 600EX-RT", 1),
+            ("TEST-LENS-01", "Тест · Объектив Sigma 35mm", "equipment", "Объективы", "storage", 1, 0, 45000, "", "Sigma 35mm f/1.4", "", 0),
+            ("TEST-FLASH-01", "Тест · Вспышка Godox V1", "equipment", "Вспышки", "office", 1, 0, 19000, "", "", "Godox V1", 0),
+            ("TEST-LAP-01", "Тест · Ноутбук Lenovo ThinkPad", "equipment", "Ноутбуки", "storage", 1, 0, 65000, "", "", "", 0),
+            ("TEST-PAPER-01", "Тест · Фотобумага 10×15", "consumable", "Расходники", "storage", 120, 20, 15, "", "", "", 0),
+            ("TEST-BAT-01", "Тест · Батарейки AA", "consumable", "Расходники", "office", 4, 12, 75, "", "", "", 0),
+            ("TEST-TAPE-01", "Тест · Скотч прозрачный", "consumable", "Расходники", "storage", 0, 5, 120, "", "", "", 0),
+            ("TEST-BAG-01", "Тест · Пакеты для фотографий", "consumable", "Расходники", "storage", 50, 10, 12, "", "", "", 0),
+        ]
+        created = 0
+        for code,name,kind,category,loc,qty,minimum,price,body,lens,flash,repair in fixtures:
+            if conn.execute("SELECT 1 FROM items WHERE code=?", (code,)).fetchone():
+                continue
+            conn.execute("INSERT OR IGNORE INTO categories(name) VALUES (?)", (category,))
+            conn.execute("""INSERT INTO items (code,name,kind,category,min_stock,price,kit_body,kit_lens,kit_flash,needs_repair)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)""", (code,name,kind,category,minimum,price,body,lens,flash,repair))
+            conn.execute("INSERT INTO stock (item_code,location_id,quantity) VALUES (?,?,?)", (code,locations.get(loc,default_loc),qty))
+            conn.execute("INSERT INTO item_metadata (code,unit,notes) VALUES (?,?,?)", (code,"шт.","Тестовые данные Беты"))
+            created += 1
+        conn.execute("INSERT INTO beta_fixture_versions(version) VALUES ('demo-items-2026-11-19')")
+    print(f"Beta demo fixtures: created {created} test items", flush=True)
+
+seed_beta_demo_items(DB_PATH)
+
 def verify_init_data(init_data: str, token: str) -> dict:
     try:
         if len(init_data)>24000: raise ValueError()
