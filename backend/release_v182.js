@@ -31,11 +31,10 @@ function installRelease182(){
     const expanded=dashboard.querySelector('details')?.open??false;
     dashboard.className='r182-overview card';
     dashboard.replaceChildren();
-    const header=el('h2','r182-overview-heading','Обзор склада');
     const summary=el('div','r182-summary');
     const left=el('div','r182-summary-main');
     const right=el('div','r182-summary-cats');
-    dashboard.append(header,summary);
+    dashboard.append(summary);
     summary.append(left,right);
 
     const hasRepairs=Number(c.repair)>0;
@@ -48,7 +47,7 @@ function installRelease182(){
     totalCopy.append(el('span','r182-muted','Всего оборудования'),el('strong','',countNum(c.total)));
     const ring=el('span','r182-ring');
     ring.setAttribute('aria-hidden','true');
-    ring.append(icon('box'));
+    ring.append(el('span','r182-overview-photo'));
     if(c.total>0){
       const segments=[];
       let shown=0;

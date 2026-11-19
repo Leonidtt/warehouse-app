@@ -57,10 +57,6 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
     --overview-ring-track: #334050;
   }
 }
-.r182-overview .r182-overview-heading {
-  margin: 0 0 12px;
-  font-size: 18px;
-}
 .r182-overview .r182-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -102,18 +98,17 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
   flex: none;
   display: grid;
   place-items: center;
-  width: 70px;
+  width: 92px;
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--overview-ring-fill);
 }
-.r182-ring .r182-icon {
-  width: 52px;
-  height: 52px;
-  padding: 13px;
+.r182-overview-photo {
+  width: calc(100% - 16px);
+  aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--overview-tile);
-  color: var(--r185-muted);
+  /* The camera occupies the first cell of the 4×4 catalog image. */
+  background: #d9dee5 url('/catalog-v185.webp') 0 0 / 400% 400%;
 }
 .r182-overview .r182-numbers {
   grid-template-columns: none;
