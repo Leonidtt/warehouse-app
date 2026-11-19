@@ -179,7 +179,7 @@ function installRelease182(){
     if(!bring && row.state==='issue' && row.status.trim().toLowerCase()!==label.toLowerCase()){
       card.append(el('p','r182-event-note',row.status));
     }
-    if(key==='vessel'){
+    if(key==='vessel' && currentUser?.role!=='employee'){
       const equipment=button('',()=>showLinked17(key,row.name),'r182-event-link');
       equipment.append(el('span','','Оборудование теплохода'),icon('right'));
       card.append(equipment);

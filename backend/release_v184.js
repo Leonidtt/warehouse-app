@@ -215,9 +215,19 @@ function bossSurname1853(name){
     }
     d.append(detail);return d
   }
-  function bossExtraPanel1855(title,groups,type,expanded){
-    const card=el('div','card r184-boss-panel r1855-panel'),head=el('div','r1853-held-head');
-    head.append(el('h3','',title),el('span','meta',String(groups.length)));card.append(head);
+  function bossExtraPanel1855(title,groups,type,expanded,open=false){
+    const collapsible=type==='buyout';
+    const card=el(collapsible?'details':'div','card r184-boss-panel r1855-panel'+(collapsible?' beta-setting-details r1856-boss-buyouts':''));
+    const head=el(collapsible?'summary':'div',collapsible?'r1856-heading':'r1853-held-head');
+    head.append(el(collapsible?'span':'h3',collapsible?'r1856-title':'',title),el('span','meta',String(groups.length)));
+    card.append(head);
+    const panel=collapsible?el('div','r1856-boss-list'):card;
+    if(collapsible){
+      card.id='boss-buyouts1856';
+      card.open=open;
+      head.append(el('span','r1856-chevron'));
+      card.append(panel);
+    }
     const list=el('div','r1853-people'),limit=type==='rental'?rentalLimit1855:buyoutLimit1855;
     if(type==='rental'){
       const tabs=el('div','r1855-period');
@@ -227,8 +237,17 @@ function bossSurname1853(name){
     const duplicates=new Map();for(const p of groups)duplicates.set(bossSurname1853(p.name),(duplicates.get(bossSurname1853(p.name))||new Set()).add(p.name));
     for(const p of groups.slice(0,limit)){const row=bossExtraRow1855(p,type,expanded);if(duplicates.get(bossSurname1853(p.name)).size>1)row.querySelector('.r1853-name').textContent=p.name;list.append(row)}
     if(!groups.length)list.append(el('p','meta r1853-no-people',type==='rental'?'Нет выдач за период':'Нет техники на выкупе'));
-    card.append(list);
-    if(groups.length>limit)card.append(button('Ещё '+Math.min(15,groups.length-limit),()=>{if(type==='rental'){rentalLimit1855+=15;repaintRentals1855(card,rentalCache1855)}else{buyoutLimit1855+=15;card.replaceWith(bossExtraPanel1855(title,groups,type,new Set([...card.querySelectorAll('details[open]')].map(d=>d.dataset.personKey))))}},'secondary r1855-more'));
+    panel.append(list);
+    if(groups.length>limit)panel.append(button('Ещё '+Math.min(15,groups.length-limit),()=>{
+      if(type==='rental'){
+        rentalLimit1855+=15;
+        repaintRentals1855(card,rentalCache1855);
+      }else{
+        buyoutLimit1855+=15;
+        const expandedPeople=new Set([...card.querySelectorAll('details[open]')].map(d=>d.dataset.personKey));
+        card.replaceWith(bossExtraPanel1855(title,groups,type,expandedPeople,card.open));
+      }
+    },'secondary r1855-more'));
     return card
   }
   function repaintRentals1855(card,data){
@@ -256,7 +275,7 @@ function bossSurname1853(name){
       for(const p of r.people){const key=JSON.stringify([p.person_id??null,p.name]);list.append(bossPerson1853(p,key,expanded.has(key),duplicates));unknown=unknown||!!(bossCounts1853(p.items,'camera')['?']+bossCounts1853(p.items,'flash')['?'])}
       if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
-      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
+      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded,$('boss-buyouts1856')?.open);
       const rentals=rentalCache1855?bossExtraPanel1855('Аренда',rentalFilter1855(rentalCache1855,rentalDays1855),'rental',expanded):el('div','card r1855-panel','Аренда: загрузка…');rentals.id='r1855-rentals';
       bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,buyouts,rentals);bossBox.classList.remove('hidden');refreshRentals1855();
     }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
@@ -271,19 +290,24 @@ function buyoutRows1856(items){
     return {code:i.code,person:String(i.buyout_status).trim(),name:i.name,model:hasModel?model:'Не указана',state:held?'held':stock?'stock':'unknown'};
   }).sort((a,b)=>a.person.localeCompare(b.person,'ru')||a.name.localeCompare(b.name,'ru'));
 }
-  const buyoutBox1856=el('section','card r1856-buyouts hidden');
+  const buyoutBox1856=el('details','card r1856-buyouts beta-setting-details hidden');
   buyoutBox1856.id='buyout-list1856';
-  toolbar.before(buyoutBox1856);
+  const buyoutHeading=el('summary','r1856-heading');
+  const buyoutCount=el('span','meta r1856-count','0');
+  const buyoutList=el('div','r1856-list');
+  buyoutHeading.append(el('span','r1856-title','На выкупе'),buyoutCount,el('span','r1856-chevron'));
+  buyoutBox1856.append(buyoutHeading,buyoutList);
+  inventory.prepend(buyoutBox1856);
   let buyoutSignature1856=null;
   function renderBuyout1856(){
     const allowed=['admin','employee'].includes(currentUser?.role)&&!!currentUser?.is_registered;
     buyoutBox1856.classList.toggle('hidden',!allowed);
-    if(!allowed){buyoutBox1856.replaceChildren();buyoutSignature1856=null;return}
+    if(!allowed){buyoutBox1856.open=false;buyoutList.replaceChildren();buyoutSignature1856=null;return}
     const rows=buyoutRows1856(allItems),signature=JSON.stringify(rows);
     if(signature===buyoutSignature1856)return;
     buyoutSignature1856=signature;
-    const header=el('div','r1856-heading');header.append(el('h3','','На выкупе'),el('span','meta',String(rows.length)));
-    const list=el('div','r1856-list');
+    buyoutCount.textContent=String(rows.length);
+    const list=document.createDocumentFragment();
     for(const i of rows){
       const row=button('',()=>openItem(i.code),'r1856-row');
       const person=el('span','r1856-surname',i.person),name=el('span','r1856-name',i.name),model=el('span','r1856-model',i.model);
@@ -292,7 +316,7 @@ function buyoutRows1856(items){
       row.append(person,name,model,state);row.title=[i.person,i.name,i.model,status].join(' · ');list.append(row);
     }
     if(!rows.length)list.append(el('div','meta r1856-empty','Нет техники на выкупе'));
-    buyoutBox1856.replaceChildren(header,list);
+    buyoutList.replaceChildren(list);
   }
 
   const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();refreshBoss()};

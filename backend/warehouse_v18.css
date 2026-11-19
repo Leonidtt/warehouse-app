@@ -47,29 +47,34 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
 #screen-settings .v18-settings-layout, .beta-category-settings {
   max-width: 620px;
   margin: 0 auto;
-  overflow: hidden;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 16px;
 }
 #screen-settings .v18-settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  gap: 6px;
+}
+#screen-settings .v18-settings-group, .beta-category-settings {
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 12px;
 }
 #screen-settings .v18-settings-group, .beta-category-settings details {
   margin: 0;
   min-width: 0;
 }
-#screen-settings .v18-settings-group + .v18-settings-group,
-.beta-category-settings details + details { border-top: 1px solid var(--border); }
+.beta-category-settings details + details {
+  border-top: 1px solid var(--border);
+  border-top-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
 #screen-settings .v18-settings-group>summary {
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 48px;
+  min-height: 44px;
   margin: 0;
   padding: 0 14px;
   color: var(--text);
@@ -85,6 +90,11 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   transition: transform 220ms ease;
 }
 #screen-settings .v18-settings-group[open]>summary .v18-icon { transform: rotate(90deg); }
+#screen-settings .v18-settings-group[open]>summary,
+.beta-category-settings details[open]>summary {
+  background: var(--skeleton-bg);
+  box-shadow: inset 3px 0 var(--primary);
+}
 #screen-settings .v18-settings-group>summary:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -3px;
@@ -95,6 +105,10 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   border-top: 1px solid var(--border);
   border-radius: 0;
   box-shadow: none;
+}
+#screen-settings .v18-settings-list>button {
+  min-height: 44px;
+  padding: 8px 14px 8px 20px !important;
 }
 #screen-settings .v18-settings-list>button .v18-setting-icon {
   color: var(--text-muted);
@@ -150,6 +164,15 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   @media (prefers-reduced-motion: reduce) {
     .beta-setting-details::details-content { transition: none; }
   }
+}
+@supports not (selector(details::details-content) and (interpolate-size: allow-keywords)) {
+  @media (prefers-reduced-motion: no-preference) {
+    .beta-setting-details[open] > :not(summary) { animation: beta-details-open 180ms ease; }
+  }
+}
+@keyframes beta-details-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .beta-activity { margin-bottom: 14px; }
 .beta-activity-bar { display: flex; align-items: stretch; min-width: 0; margin: 0 0 7px; }
