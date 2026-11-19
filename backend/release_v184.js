@@ -203,7 +203,7 @@ function bossSurname1853(name){
     const key=JSON.stringify([type,p.day||'',p.name]),d=el('details','r1853-person r1855-row');d.dataset.personKey=key;d.open=expanded.has(key);
     const head=el('summary','r1853-person-line r1855-line'),name=el('span','r1853-name',bossSurname1853(p.name));name.title=p.name;
     const arrow=el('span','r1853-arrow');arrow.append(bossIcon1853('arrow'));
-    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash'),el('span','r1855-date',type==='rental'?bossDate1855(p.day):String(p.items.length)),arrow);d.append(head);
+    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash',type==='buyout'),el('span','r1855-date',type==='rental'?bossDate1855(p.day):String(p.items.length)),arrow);d.append(head);
     const detail=el('div','r1853-person-details');detail.append(el('div','r1853-full-name',p.name+(p.day?' · '+p.day:'')));
     for(const i of p.items){
       const item=el('div','r1853-detail-item');
@@ -268,7 +268,6 @@ function bossSurname1853(name){
     bossJob=api('/api/v184/boss').then(r=>{
       if(currentUser?.role!=='boss')return;
       const expanded=new Set([...bossBox.querySelectorAll('.r1853-person[open]')].map(d=>d.dataset.personKey));
-      const office=bossPanel('В офисе','office',{...r.office,flashes:r.office.standalone_flashes??r.office.flashes});office.append(el('small','meta','Все помещения склада'));
       const held=el('div','card r184-boss-panel held r1853-held'),header=el('div','r1853-held-head');
       header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.standalone_flashes??r.held.flashes));held.append(header);
       const list=el('div','r1853-people'),seen=new Set(),duplicates=new Set();
@@ -278,7 +277,7 @@ function bossSurname1853(name){
       if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
       const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
-      bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,buyouts);bossBox.classList.remove('hidden');
+      bossBox.replaceChildren(held,buyouts);bossBox.classList.remove('hidden');
     }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
     return bossJob
   }

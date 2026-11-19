@@ -180,8 +180,8 @@
     <script src="/release-v182.js?v=1876"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1873"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1876">
-    <script src="/release-v184.js?v=1880"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=1881">
+    <script src="/release-v184.js?v=1881"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1870"></script>
 <style>
@@ -228,6 +228,14 @@ async function betaCopyMainData(button) {
 @media(prefers-reduced-motion:no-preference){
   :root{--beta-motion:280ms;--beta-ease:cubic-bezier(.22,.75,.24,1)}
   .screen.beta-screen-enter{animation:beta-screen-in 220ms var(--beta-ease) both}
+  .screen.beta-tab-enter{animation:beta-tab-in 340ms cubic-bezier(.2,.78,.22,1) both}
+  .bottom-nav.beta-tab-motion .nav-item{position:relative;z-index:1}
+  .bottom-nav.beta-tab-motion .nav-item.active{background:transparent!important}
+  .beta-tab-capsule{position:absolute;left:0;top:0;z-index:0;pointer-events:none;background:var(--r182-active,var(--skeleton-bg));border-radius:28px;opacity:0;transition:transform 340ms cubic-bezier(.2,.78,.22,1),width 340ms cubic-bezier(.2,.78,.22,1),height 340ms cubic-bezier(.2,.78,.22,1),opacity 160ms ease}
+  .bottom-nav.beta-tab-motion .beta-tab-capsule{opacity:1}
+  .bottom-nav.beta-tab-motion .nav-item.active .icon{animation:beta-tab-icon 320ms cubic-bezier(.2,.78,.22,1)}
+  @media(min-width:900px){.web-mode .beta-tab-capsule{border-radius:11px}}
+
   .modal-overlay{animation:beta-overlay-in 200ms ease both}
   .modal-overlay .modal-content{animation:beta-sheet-in var(--beta-motion) var(--beta-ease) both}
   .toast{animation:beta-toast-in 260ms var(--beta-ease);transition:opacity 250ms ease,transform 250ms var(--beta-ease)}
@@ -244,6 +252,9 @@ async function betaCopyMainData(button) {
   }
 }
 @keyframes beta-screen-in{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes beta-tab-in{from{opacity:.48;transform:translateX(var(--beta-tab-shift,20px))}to{opacity:1;transform:none}}
+@keyframes beta-tab-icon{0%{transform:scale(.88)}65%{transform:scale(1.08)}100%{transform:none}}
+
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
 @keyframes beta-sheet-in{from{opacity:.5;transform:translateY(20px)}to{opacity:1;transform:none}}
 @keyframes beta-toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -2362,15 +2373,55 @@ async function betaCopyMainData(button) {
     refreshPreviews();
     new MutationObserver(refreshPreviews).observe(groupRoot,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','hidden','style']});
   }
+  const tabOrder=['screen-main','screen-platforms','screen-th','screen-rooms','screen-settings'];
+  const nav=document.querySelector('.bottom-nav');
+  const capsule=document.createElement('span');capsule.className='beta-tab-capsule';capsule.setAttribute('aria-hidden','true');
+  if(nav)nav.prepend(capsule);
+  let navReady=false,navFrame=0,lastNav=null;
+  function positionCapsule(){
+    if(!nav)return;
+    const item=nav.querySelector('.nav-item.active:not(.hidden)');
+    if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
+    const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
+    if(!r.width||!r.height)return;
+    if(!navReady)capsule.style.transition='none';
+    capsule.style.width=r.width+'px';capsule.style.height=r.height+'px';
+    capsule.style.transform='translate('+(r.left-base.left-nav.clientLeft+nav.scrollLeft)+'px,'+(r.top-base.top-nav.clientTop+nav.scrollTop)+'px)';
+    nav.classList.add('beta-tab-motion');
+    if(!navReady){void capsule.offsetWidth;capsule.style.transition='';navReady=true}
+    if(lastNav!==item){lastNav=item;for(const tab of nav.querySelectorAll('.nav-item')){if(tab===item)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current')}}
+  }
+  const queueCapsule=()=>{cancelAnimationFrame(navFrame);navFrame=requestAnimationFrame(positionCapsule)};
+  const oldNavActive=updateNavActive;
+  updateNavActive=function(){const result=oldNavActive.apply(this,arguments);queueCapsule();return result};
+  if(nav){
+    new MutationObserver(queueCapsule).observe(nav,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+    if(window.ResizeObserver)new ResizeObserver(queueCapsule).observe(nav);
+    window.addEventListener('resize',queueCapsule,{passive:true});
+    window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change',queueCapsule);
+    queueCapsule();
+  }
   const oldShow=showScreen;
+  const screenEnds=new WeakMap();
   showScreen=function(id){
     const target=document.getElementById(id),wasHidden=target?.classList.contains('hidden');
+    const from=tabOrder.findIndex(key=>!document.getElementById(key)?.classList.contains('hidden')&&!!document.getElementById(key));
+    const to=tabOrder.indexOf(id);
     const result=oldShow.apply(this,arguments);
     if(target&&wasHidden&&!target.classList.contains('hidden')&&!reduced()){
-      target.classList.remove('beta-screen-enter');
-      void target.offsetWidth;target.classList.add('beta-screen-enter');
-      target.addEventListener('animationend',function done(e){if(e.target!==target||e.animationName!=='beta-screen-in')return;target.classList.remove('beta-screen-enter');target.removeEventListener('animationend',done)});
+      const tab=from>=0&&to>=0&&from!==to,cls=tab?'beta-tab-enter':'beta-screen-enter',animationName=tab?'beta-tab-in':'beta-screen-in';
+      for(const screen of document.querySelectorAll('.beta-tab-enter,.beta-screen-enter')){
+        const done=screenEnds.get(screen);if(done)done();
+        screen.classList.remove('beta-tab-enter','beta-screen-enter');
+      }
+      target.style.setProperty('--beta-tab-shift',to>from?'24px':'-24px');
+      target.classList.remove('beta-tab-enter','beta-screen-enter');void target.offsetWidth;target.classList.add(cls);
+      let timeout;
+      const done=()=>{clearTimeout(timeout);target.classList.remove(cls);target.style.removeProperty('--beta-tab-shift');target.removeEventListener('animationend',finish);screenEnds.delete(target)};
+      const finish=e=>{if(e.target===target&&e.animationName===animationName)done()};
+      screenEnds.set(target,done);target.addEventListener('animationend',finish);timeout=setTimeout(done,450);
     }
+    queueCapsule();
     return result;
   };
   // Older WebViews lack intrinsic-height transitions. Preserve native details and keyboard activation.
