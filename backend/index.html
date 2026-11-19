@@ -179,8 +179,8 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css?v=1864">
-    <script src="/warehouse-v18.js?v=1864"></script>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1865">
+    <script src="/warehouse-v18.js?v=1865"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1864">
     <script src="/release-v182.js?v=1864"></script>
     <link rel="stylesheet" href="/release-v183.css">
@@ -522,61 +522,87 @@ async function betaCopyMainData(button) {
     <div id="screen-item" class="screen hidden">
         <div class="sticky-header">
             <button class="sticky-back" onclick="goBack()">← Назад</button>
-            <div class="sticky-title" id="item-title">Товар</div>
-            <div style="width: 80px;"></div>
+            <div class="sticky-title">Карточка товара</div>
         </div>
-        
-        <div style="margin-top: 16px;">
-            <div id="item-status-box"></div>
-            
-            <div style="display:flex; gap:8px; margin-bottom:16px;">
-                <button class="ok" onclick="showEditForm()" id="edit-btn" style="margin:0;">✏️ Ред.</button>
-                <button class="secondary" onclick="showItemHistory()" style="margin:0;">🕒 История</button>
-                <button class="secondary" onclick="showQr()" style="margin:0;">🔲 QR</button>
-            </div>
-            
-            <div id="kit-box" class="kit-box hidden">
-                <b>Комплектация:</b>
-                <div id="kit-body-text"></div>
-                <div id="kit-lens-text"></div>
-                <div id="kit-flash-text"></div>
-                <div id="kit-acc-text"></div>
-                <div id="kit-add-text"></div>
-            </div>
 
-            <div id="admin-price-box" class="hidden" style="margin-top:20px; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-                <table class="price-table">
-                    <thead>
-                        <tr>
-                            <th>Компонент</th>
-                            <th style="text-align:right;">Цена</th>
-                        </tr>
-                    </thead>
-                    <tbody id="price-table-body"></tbody>
-                </table>
-            </div>
-            
-            <div id="passport-v17"></div><div id="actions"></div><div id="repairs-v17"></div>
-            
-            <div id="booking-section">
-                <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
-                <div id="bookings-list"></div>
-                <div class="date-row">
-                    <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
-                    <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+        <article class="beta-item-card" aria-labelledby="item-title">
+            <div class="beta-item-hero">
+                <div>
+                    <h2 id="item-title">Товар</h2>
+                    <div class="meta" id="item-code-category"></div>
                 </div>
-                <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
+                <span class="status-badge" id="item-status-box"></span>
             </div>
+            <div id="item-stock-rows"></div>
+            <div id="actions"></div>
 
-            <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Комментарии</h2>
-            <div id="comments-list"></div>
-            <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
-            <button class="secondary" onclick="doComment()">Отправить</button>
+            <details class="beta-item-disclosure hidden" id="item-kit-section">
+                <summary>Комплектация</summary>
+                <div id="kit-box">
+                    <div id="kit-body-text"></div>
+                    <div id="kit-lens-text"></div>
+                    <div id="kit-flash-text"></div>
+                    <div id="kit-acc-text"></div>
+                    <div id="kit-add-text"></div>
+                </div>
+                <div id="admin-price-box" class="hidden">
+                    <table class="price-table">
+                        <thead>
+                            <tr>
+                                <th>Компонент</th>
+                                <th style="text-align:right;">Цена</th>
+                            </tr>
+                        </thead>
+                        <tbody id="price-table-body"></tbody>
+                    </table>
+                </div>
+            </details>
+            <button type="button" class="beta-item-history" onclick="showItemHistory()">История</button>
+            <details class="beta-item-disclosure" id="item-extra-section">
+                <summary>Дополнительно</summary>
+                <div id="item-facts"></div>
+                <div id="beta-item-tools">
+                    <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
+                    <button type="button" class="secondary" onclick="showQr()">QR-этикетка</button>
+                </div>
+                <div id="item-additional-actions"></div>
+                <div id="passport-v17"></div>
+                <div id="repairs-v17"></div>
 
-            <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
-            <button class="secondary" onclick="markLost()" id="lost-btn" style="margin-bottom:20px;">🚨 Не нашел на месте</button>
-        </div>
+                <div id="booking-section">
+                    <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
+                    <div id="bookings-list"></div>
+                    <div class="date-row">
+                        <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
+                        <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+                    </div>
+                    <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
+                </div>
+
+                <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Комментарии</h2>
+                <div id="comments-list"></div>
+                <div class="input-group"><input id="comment-text" placeholder="Написать комментарий..."></div>
+                <button class="secondary" onclick="doComment()">Отправить</button>
+
+                <button class="danger" onclick="markRepair()" id="repair-btn" style="margin-bottom:10px;">🔧 Отметить как «Требует ремонта»</button>
+                <button class="secondary" onclick="markLost()" id="lost-btn">Не нашёл на месте</button>
+            </details>
+        </article>
     </div>
+
+    <dialog id="item-recipient-dialog" aria-labelledby="item-recipient-title">
+        <form method="dialog">
+            <h2 id="item-recipient-title">Для кого взять технику?</h2>
+            <div class="input-group">
+                <label for="item-recipient-name">Фамилия</label>
+                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" required>
+            </div>
+            <div class="beta-checkout-actions">
+                <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
+                <button type="submit" value="checkout">Выдать</button>
+            </div>
+        </form>
+    </dialog>
 
     <div id="screen-item-history" class="screen hidden">
         <div class="sticky-header">
@@ -1570,36 +1596,56 @@ async function betaCopyMainData(button) {
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
                 document.getElementById("edit-btn").style.display = currentUser.role === 'admin' ? 'block' : 'none'; 
                 
-                let minStockText = currentItem.kind === 'consumable' ? `<div class="meta">Мин. остаток: ${currentItem.min_stock}</div>` : ""; 
-                let priceBadge = currentItem.price ? `<div class="meta" style="color:var(--success); font-weight:bold;">💰 Стоимость: ${currentItem.price} ₽</div>` : ""; 
-                let budgetText = currentItem.budget_tag ? `<div class="meta" style="color:${currentItem.budget_tag === 'КЦ' ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">Бюджет: ${escapeOwnerText(currentItem.budget_tag)}</div>` : ""; 
-                let snText = currentItem.kind==="equipment" && currentItem.serial_number ? `<div class="meta">S/N: ${escapeOwnerText(currentItem.serial_number)}</div>` : ""; 
-                let buyoutText = currentItem.kind==="equipment" && currentItem.buyout_status ? `<div class="status-badge" style="background:var(--purple); color:white;">💸 На выкупе у: ${escapeOwnerText(currentItem.buyout_status)}</div>` : ""; 
-                let catText = currentItem.category ? `<div class="meta">Категория: ${escapeOwnerText(currentItem.category)}</div>` : "";
-                
-                if (currentItem.kind==="equipment" && (currentItem.kit_body || currentItem.kit_lens || currentItem.kit_flash || currentItem.kit_acc || currentItem.kit_add)) { 
-                    document.getElementById("kit-box").classList.remove("hidden"); 
-                    document.getElementById("kit-body-text").innerHTML = currentItem.kit_body ? `<b>Тушка:</b> ${escapeOwnerText(currentItem.kit_body)}` : ""; 
-                    document.getElementById("kit-lens-text").innerHTML = currentItem.kit_lens ? `<b>Объектив:</b> ${escapeOwnerText(currentItem.kit_lens)}` : ""; 
-                    document.getElementById("kit-flash-text").innerHTML = currentItem.kit_flash ? `<b>Вспышка:</b> ${escapeOwnerText(currentItem.kit_flash)}` : ""; 
-                    document.getElementById("kit-acc-text").innerHTML = currentItem.kit_acc ? `<b>Аксессуары:</b> ${escapeOwnerText(currentItem.kit_acc)}` : ""; 
-                    document.getElementById("kit-add-text").innerHTML = currentItem.kit_add ? `<b>Допы:</b> ${escapeOwnerText(currentItem.kit_add)}` : ""; 
-                } else { document.getElementById("kit-box").classList.add("hidden"); } 
-                
-                let statusHtml = ""; 
-                const repairBtn = document.getElementById("repair-btn");
-                if (currentItem.needs_repair) { statusHtml = `<div class="status-badge status-broken">🔧 Требует ремонта</div>`; repairBtn.textContent = "✅ Вернуть в строй"; } 
-                else { 
-                    repairBtn.textContent = "🔧 Отметить как «Требует ремонта»"; 
-                    if (currentItem.holders.length > 0) { statusHtml = `<div class="status-badge status-taken">На руках у ${escapeOwnerText(currentItem.holders[0].full_name)} ${currentItem.holders[0].taken_for ? `(Кому: ${escapeOwnerText(currentItem.holders[0].taken_for)})` : ""}</div>`; } 
-                    else { 
-                        let totalQty = currentItem.stocks.reduce((sum, s) => sum + s.quantity, 0); 
-                        let places = currentItem.stocks.map(s => s.location_name).filter((v,i,a)=>a.indexOf(v)===i).join(", "); 
-                        statusHtml = currentItem.kind === 'equipment' ? `<div class="status-badge status-free">📍 Место хранения: ${places || "Не указано"}</div>` : `<div class="status-badge status-free">В наличии: ${places || "Нет"} (${totalQty} шт)</div>`; 
-                    } 
-                } 
-                document.getElementById("item-status-box").innerHTML = `<div class="meta">Код: ${escapeOwnerText(currentItem.code)}</div><div class="meta">Тип: ${currentItem.kind === 'equipment' ? 'оборудование' : 'расходник'}</div>${catText}${priceBadge}${budgetText}${snText}${minStockText}${buyoutText}${statusHtml}`; 
-                
+                const item = currentItem;
+                const isEquipment = item.kind === 'equipment';
+                $('item-code-category').textContent = [item.code, item.category || (isEquipment ? 'Оборудование' : 'Расходники')].join(' · ');
+                $('item-facts').replaceChildren();
+                const facts = [
+                    isEquipment ? 'Оборудование' : 'Расходник',
+                    item.price && 'Стоимость: ' + money17(item.price),
+                    item.budget_tag && 'Бюджет: ' + item.budget_tag,
+                    isEquipment && item.serial_number && 'Серийный номер: ' + item.serial_number,
+                    isEquipment && item.buyout_status && 'На выкупе у: ' + item.buyout_status,
+                    !isEquipment && 'Минимальный остаток: ' + item.min_stock,
+                ];
+                for (const value of facts.filter(Boolean)) {
+                    const line = document.createElement('div');
+                    line.className = 'meta';
+                    line.textContent = value;
+                    $('item-facts').append(line);
+                }
+
+                let hasKit = false;
+                for (const [key, label] of [['body','Тушка'],['lens','Объектив'],['flash','Вспышка'],['acc','Аксессуары'],['add','Допы']]) {
+                    const value = isEquipment && item['kit_' + key];
+                    $('kit-' + key + '-text').textContent = value ? label + ': ' + value : '';
+                    hasKit ||= Boolean(value);
+                }
+
+                const status = $('item-status-box');
+                const holder = item.holders[0];
+                if (item.needs_repair) {
+                    status.textContent = 'В ремонте';
+                    status.className = 'status-badge status-broken';
+                } else if (holder) {
+                    status.textContent = 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
+                    status.className = 'status-badge status-taken';
+                } else {
+                    status.textContent = item.stocks.length ? (isEquipment ? 'Свободно' : 'В наличии') : 'Нет в наличии';
+                    status.className = 'status-badge ' + (item.stocks.length ? 'status-free' : 'status-broken');
+                }
+                $('repair-btn').textContent = item.needs_repair ? 'Вернуть в строй' : 'Отметить как «Требует ремонта»';
+                $('item-stock-rows').replaceChildren(...item.stocks.map(stock => {
+                    const row = document.createElement('div');
+                    row.className = 'beta-item-stock';
+                    const place = document.createElement('span');
+                    place.textContent = stock.location_name;
+                    const amount = document.createElement('strong');
+                    amount.textContent = stock.quantity + ' шт.';
+                    row.append(place, amount);
+                    return row;
+                }));
+
                 const bookingSection = document.getElementById("booking-section"); 
                 if (currentItem.kind === "consumable") { bookingSection.classList.add("hidden"); } else { bookingSection.classList.remove("hidden"); $("book-from").min=$("book-to").min=localDay17(); $("book-from").value=""; $("book-to").value=""; loadBookings(currentItem.code); } 
                 
@@ -1632,6 +1678,7 @@ async function betaCopyMainData(button) {
                     priceBox.classList.add("hidden");
                 }
 
+                $('item-kit-section').classList.toggle('hidden', !hasKit && priceBox.classList.contains('hidden'));
                 renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
@@ -1754,7 +1801,10 @@ async function betaCopyMainData(button) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
-                        html += `<button onclick="doCheckout()">📤 Взять себе</button><button class="secondary" onclick="doCheckoutFor()">📝 Взять для...</button>`; 
+                        html += `<div class="beta-checkout-actions">
+                            <button type="button" onclick="doCheckout()">Взять технику</button>
+                            <button type="button" class="secondary" onclick="doCheckoutFor()">Взять для…</button>
+                        </div>`;
                     } else {
                         html += `<div class="status-badge status-broken" style="margin-top:20px;">На складе: 0 шт.</div>`;
                         if (currentUser.role === 'admin') {
@@ -1766,10 +1816,10 @@ async function betaCopyMainData(button) {
                 html += `<h2 style="font-size:18px; margin-top:20px; font-weight:700; letter-spacing:-0.5px;">Списать</h2><select id="wo-loc">${currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${escapeOwnerText(s.location_name)} (${s.quantity} шт)</option>`).join("")}</select><input id="wo-qty" type="number" value="1" style="margin-top:10px;"><button class="danger" onclick="doWriteoff()">📉 Списать</button>`; 
             } 
             
-            const stockOpts = currentItem.stocks.filter(s => s.quantity > 0).map(s => `<option value="${s.location_id}">${escapeOwnerText(s.location_name)} (${s.quantity} шт)</option>`).join(""); 
-            if (stockOpts) {
-                html += `<h2 style="font-size:18px; margin-top:24px; font-weight:700; letter-spacing:-0.5px;">Переместить</h2><button class="secondary" onclick="showMoveItemScreen()">📦 Переместить в другую комнату</button>`; 
-            }
+            $('item-additional-actions').innerHTML = currentItem.stocks.some(s => s.quantity > 0)
+                ? '<button type="button" class="secondary" onclick="showMoveItemScreen()">Переместить в другую комнату</button>'
+                : '';
+
             box.innerHTML = html; if(currentUser.role==="admin"&&currentItem.kind==="consumable")btn17(box,"Пополнить запас",()=>replenish17(currentItem.code)); 
         }
         
@@ -1786,8 +1836,52 @@ async function betaCopyMainData(button) {
         
         
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
-        async function doCheckout() { try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: "" }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
-        async function doCheckoutFor() { const person = prompt("Для кого? (Введите Фамилию)"); if (person === null) return; try { await api(`/api/checkout`, { method: "POST", body: JSON.stringify({ code: currentItem.code, taken_for: person.trim() }) }); showToast("Выдано"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
+        let checkoutPending = false;
+        async function doCheckout(takenFor = "") {
+            if (checkoutPending) return;
+            const {code} = currentItem;
+            const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
+            checkoutPending = true;
+            buttons.forEach(button => { button.disabled = true; });
+            try {
+                await api('/api/checkout', {
+                    method: 'POST',
+                    body: JSON.stringify({code, taken_for: takenFor}),
+                });
+                showToast('Выдано');
+                if (currentScreen === 'screen-item' && currentItem.code === code) await openItem(code);
+            } catch (e) {
+                notify(e.message);
+            } finally {
+                checkoutPending = false;
+                buttons.forEach(button => { button.disabled = false; });
+            }
+        }
+
+        const recipientDialog = document.getElementById('item-recipient-dialog');
+        const recipientName = document.getElementById('item-recipient-name');
+        function doCheckoutFor() {
+            if (checkoutPending || recipientDialog.open) return;
+            recipientDialog.returnValue = '';
+            recipientDialog.dataset.itemCode = currentItem.code;
+            recipientName.value = '';
+            recipientName.setCustomValidity('');
+            recipientDialog.showModal();
+            recipientName.focus();
+        }
+        recipientName.addEventListener('input', () => recipientName.setCustomValidity(''));
+        recipientDialog.querySelector('form').addEventListener('submit', event => {
+            if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
+            event.preventDefault();
+            recipientName.setCustomValidity('Введите фамилию.');
+            recipientName.reportValidity();
+        });
+        recipientDialog.addEventListener('close', () => {
+            if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
+                currentItem?.code === recipientDialog.dataset.itemCode) {
+                doCheckout(recipientName.value.trim());
+            }
+        });
         async function doReturn() { try { await api(`/api/return?code=${encodeURIComponent(currentItem.code)}`, { method: "POST" }); showToast("Возвращено"); openItem(currentItem.code); } catch (e) { notify(e.message); } }
         
         function showMoveItemScreen() {
