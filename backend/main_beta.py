@@ -6,7 +6,7 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 import qrcode
@@ -37,6 +37,7 @@ from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
+from pwa_assets import render_icon_png
 
 import urllib3
 urllib3.disable_warnings()
@@ -1406,6 +1407,7 @@ async def web_session_middleware(request: Request, call_next):
 
 class WebLogin(BaseModel):
     code: str
+    pwa: bool = False
 
 @app.post("/api/web/code")
 def web_code(x_init_data: Optional[str]=Header(None)):
@@ -1423,15 +1425,16 @@ def web_login(req: WebLogin):
     code=re.sub(r"[ -]","",req.code).upper()
     if not re.fullmatch(r"[A-F0-9]{12}",code): raise HTTPException(400,"Введите код из Telegram")
     token=secrets.token_urlsafe(32)
+    session_ttl=2592000 if req.pwa else 43200
     with transaction() as conn:
         row=conn.execute("SELECT c.user_id FROM web_codes c JOIN users u ON u.tg_id=c.user_id WHERE digest=? AND expires>?",(web_digest(code),int(time.time()))).fetchone()
         if not row: raise HTTPException(401,"Код неверный или истёк")
         deny_blocked(conn, row[0], MAIN_ADMIN_ID)
         conn.execute("DELETE FROM web_codes WHERE digest=?",(web_digest(code),))
         conn.execute("DELETE FROM web_sessions WHERE expires<=?",(int(time.time()),))
-        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+43200))
+        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+session_ttl))
     response=JSONResponse({"status":"ok"})
-    response.set_cookie(WEB_COOKIE,token,max_age=43200,httponly=True,secure=True,samesite="strict",path="/")
+    response.set_cookie(WEB_COOKIE,token,max_age=session_ttl,httponly=True,secure=True,samesite="strict",path="/")
     return response
 
 @app.post("/api/web/logout")
@@ -1528,6 +1531,45 @@ register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_
 with transaction() as conn:
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4')")
 
+
+
+# The installable web app reuses Beta's app, user permissions and database.
+# Private HTTP endpoints and data are never cached by its service worker.
+_PWA_DIR = Path(__file__).resolve().parent
+
+@app.get("/pwa", include_in_schema=False)
+def pwa_redirect():
+    return RedirectResponse("/pwa/", status_code=307)
+
+@app.get("/pwa/", include_in_schema=False)
+def pwa_home():
+    return FileResponse(_PWA_DIR / "index.html", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/manifest.webmanifest", include_in_schema=False)
+def pwa_manifest():
+    return FileResponse(_PWA_DIR / "pwa_manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/sw.js", include_in_schema=False)
+def pwa_service_worker():
+    return FileResponse(_PWA_DIR / "pwa_sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Service-Worker-Allowed": "/pwa/", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/client.js", include_in_schema=False)
+def pwa_client():
+    return FileResponse(_PWA_DIR / "pwa_client.js", media_type="text/javascript", headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/jsqr.js", include_in_schema=False)
+def pwa_qr_decoder():
+    return FileResponse(_PWA_DIR / "pwa_jsqr.js", media_type="text/javascript", headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/offline.html", include_in_schema=False)
+def pwa_offline():
+    return FileResponse(_PWA_DIR / "pwa_offline.html", media_type="text/html", headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
+
+@app.get("/pwa/icon-{size}.png", include_in_schema=False)
+def pwa_icon(size: int):
+    if size not in (180, 192, 512):
+        raise HTTPException(404, "Иконка не найдена")
+    return Response(content=render_icon_png(size), media_type="image/png", headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
 @app.get("/")
 @app.get("/index.html")

@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Склад</title>
+    <link rel="manifest" href="/pwa/manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="/pwa/icon-180.png">
+    <meta name="theme-color" content="#0e1534">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Склад Бета">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -265,6 +271,12 @@ async function betaCopyMainData(button) {
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
 @keyframes beta-sheet-in{from{opacity:.5;transform:translateY(20px)}to{opacity:1;transform:none}}
 @keyframes beta-toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+@media (display-mode: standalone) { body.pwa-mode { padding-top: env(safe-area-inset-top); } }
+body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
+.pwa-install-info { margin: 16px 0 6px; padding: 14px; border-radius: 15px; background: var(--skeleton-bg); font-size: 13px; line-height: 1.55; text-align: left; }
+.pwa-install-info p { margin: 5px 0; }
+.pwa-install-info button { margin: 10px 0 0; min-height: 40px; }
 </style>
 </head>
 <body>
@@ -2237,7 +2249,7 @@ async function betaCopyMainData(button) {
         function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
         async function issueWebCode(){try{const r=await api('/api/web/code',{method:'POST'});const {b}=overlay17('Вход на сайт');const code=r.code.match(/.{1,4}/g).join('-');const p=document.createElement('p');p.textContent=code;p.style.cssText='font-size:27px;font-weight:bold;letter-spacing:2px;text-align:center';b.append(p);btn17(b,'Копировать код',()=>copyText(code));const note=document.createElement('p');note.textContent='Введите код в браузере. Действует 5 минут. Никому не передавайте.';b.append(note); const a=document.createElement('a');a.href=location.origin+'/';a.textContent='Открыть сайт';a.target='_blank';a.rel='noopener';a.onclick=e=>{if(tg.openLink){e.preventDefault();tg.openLink(a.href)}};b.append(a)}catch(e){notify(e.message)}}
-        async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
+        async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value,pwa:location.pathname.startsWith('/pwa/')})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
         async function webLogout(){try{await api('/api/web/logout',{method:'POST'});try{localStorage.removeItem(cacheKey17('platforms'));localStorage.removeItem(cacheKey17('ships'));clearDraft17()}catch(e){}location.reload()}catch(e){notify(e.message)}}
         async function blob17(url){const r=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.detail||'Не удалось загрузить файл')}return r.blob()}
         async function image17(img,url){const obj=URL.createObjectURL(await blob17(url));if(img.dataset.objecturl)URL.revokeObjectURL(img.dataset.objecturl);img.dataset.objecturl=obj;img.src=obj}
@@ -2502,6 +2514,12 @@ async function betaCopyMainData(button) {
             } catch (error) {
                 notify(error.message);
             }
+        }
+        // Load installability and iOS camera support exclusively for the PWA entry point.
+        if(!tg.initData && location.pathname.startsWith('/pwa/')){
+          const pwaScript=document.createElement('script');
+          pwaScript.src='/pwa/client.js?v=1';
+          document.body.append(pwaScript);
         }
         (async () => { await init(); await openReturnReminder(); })();
     </script>
