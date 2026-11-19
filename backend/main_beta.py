@@ -196,7 +196,8 @@ if not os.path.exists("/data"):
     try: os.makedirs("/data")
     except: pass
 
-prepare_migration(DB_PATH, "18.5.4")
+if os.path.exists(DB_PATH):
+    prepare_migration(DB_PATH, "18.5.4")
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
