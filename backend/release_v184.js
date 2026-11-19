@@ -146,6 +146,58 @@ function bossSurname1853(name){
     }
     d.append(content);return d
   }
+
+  let rentalDays1855=7,rentalLimit1855=15,buyoutLimit1855=15,rentalCache1855=null,rentalFetch1855=0;
+  function bossDate1855(day){const m=String(day||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]:'—'}
+  function rentalFilter1855(data,days){
+    const today=Date.parse(data.today+'T00:00:00Z');
+    return (data.groups||[]).filter(g=>{const delta=(today-Date.parse(g.day+'T00:00:00Z'))/86400000;return delta>=0&&delta<days});
+  }
+  function bossExtraRow1855(p,type,expanded){
+    const key=JSON.stringify([type,p.day||'',p.name]),d=el('details','r1853-person r1855-row');d.dataset.personKey=key;d.open=expanded.has(key);
+    const head=el('summary','r1853-person-line r1855-line'),name=el('span','r1853-name',bossSurname1853(p.name));name.title=p.name;
+    const arrow=el('span','r1853-arrow');arrow.append(bossIcon1853('arrow'));
+    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash'),el('span','r1855-date',type==='rental'?bossDate1855(p.day):String(p.items.length)),arrow);d.append(head);
+    const detail=el('div','r1853-person-details');detail.append(el('div','r1853-full-name',p.name+(p.day?' · '+p.day:'')));
+    for(const i of p.items){
+      const item=el('div','r1853-detail-item');
+      if(i.archived)item.append(el('div','r1853-full-name',i.name+' · '+i.code+' (архив)'));
+      else item.append(button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link'));
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash']])if(String(i[k]||'').trim())item.append(el('div','meta',label+': '+i[k]));
+      if(type==='rental'){
+        item.append(el('div','meta','Выдал: '+(i.giver||'Не указан')),el('div','meta',i.returned_at?'Возвращено: '+bossDate1855(i.returned_at):'На руках'));
+      }else item.append(el('div','meta',i.holders?.length?'На руках: '+i.holders.join(', '):'Нет активной выдачи'));
+      detail.append(item);
+    }
+    d.append(detail);return d
+  }
+  function bossExtraPanel1855(title,groups,type,expanded){
+    const card=el('div','card r184-boss-panel r1855-panel'),head=el('div','r1853-held-head');
+    head.append(el('h3','',title),el('span','meta',String(groups.length)));card.append(head);
+    const list=el('div','r1853-people'),limit=type==='rental'?rentalLimit1855:buyoutLimit1855;
+    if(type==='rental'){
+      const tabs=el('div','r1855-period');
+      for(const days of [7,30,90]){const b=button(days+' дн.',()=>{rentalDays1855=days;rentalLimit1855=15;repaintRentals1855(card,rentalCache1855)},'secondary');b.classList.toggle('active',days===rentalDays1855);b.setAttribute('aria-pressed',String(days===rentalDays1855));tabs.append(b)}
+      card.append(tabs);
+    }
+    const duplicates=new Map();for(const p of groups)duplicates.set(bossSurname1853(p.name),(duplicates.get(bossSurname1853(p.name))||new Set()).add(p.name));
+    for(const p of groups.slice(0,limit)){const row=bossExtraRow1855(p,type,expanded);if(duplicates.get(bossSurname1853(p.name)).size>1)row.querySelector('.r1853-name').textContent=p.name;list.append(row)}
+    if(!groups.length)list.append(el('p','meta r1853-no-people',type==='rental'?'Нет выдач за период':'Нет техники на выкупе'));
+    card.append(list);
+    if(groups.length>limit)card.append(button('Ещё '+Math.min(15,groups.length-limit),()=>{if(type==='rental'){rentalLimit1855+=15;repaintRentals1855(card,rentalCache1855)}else{buyoutLimit1855+=15;card.replaceWith(bossExtraPanel1855(title,groups,type,new Set([...card.querySelectorAll('details[open]')].map(d=>d.dataset.personKey))))}},'secondary r1855-more'));
+    return card
+  }
+  function repaintRentals1855(card,data){
+    if(!card.isConnected||!data)return;
+    const expanded=new Set([...card.querySelectorAll('details[open]')].map(d=>d.dataset.personKey));
+    const next=bossExtraPanel1855('Аренда',rentalFilter1855(data,rentalDays1855),'rental',expanded);next.id='r1855-rentals';card.replaceWith(next)
+  }
+  async function refreshRentals1855(){
+    const id=++rentalFetch1855;
+    try{const data=await api('/api/v1855/boss/rentals');if(id!==rentalFetch1855||currentUser?.role!=='boss')return;rentalCache1855=data;const card=$('r1855-rentals');if(card)repaintRentals1855(card,data)}
+    catch(e){const card=$('r1855-rentals');if(id===rentalFetch1855&&card&&!rentalCache1855)card.textContent='Аренда: не удалось загрузить историю'}
+  }
+
   async function refreshBoss(){
     if(currentUser?.role!=='boss')return;if(bossJob)return bossJob;
     bossJob=api('/api/v184/boss').then(r=>{
@@ -161,7 +213,9 @@ function bossSurname1853(name){
       if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
       const showFinance=button('Финансы',()=>showExtra('finance'),'secondary');
-      bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,showFinance);bossBox.classList.remove('hidden');
+      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
+      const rentals=rentalCache1855?bossExtraPanel1855('Аренда',rentalFilter1855(rentalCache1855,rentalDays1855),'rental',expanded):el('div','card r1855-panel','Аренда: загрузка…');rentals.id='r1855-rentals';
+      bossBox.replaceChildren(el('h2','','Сводка по технике'),office,held,buyouts,rentals,showFinance);bossBox.classList.remove('hidden');refreshRentals1855();
     }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
     return bossJob
   }
