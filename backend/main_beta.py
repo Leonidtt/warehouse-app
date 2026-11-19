@@ -23,6 +23,7 @@ import asyncio
 import time
 import math
 import tempfile
+from pathlib import Path
 import secrets
 import re
 from urllib.parse import urlsplit
@@ -34,6 +35,7 @@ from release_v184 import effective_user, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
+from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
 
 import urllib3
 urllib3.disable_warnings()
@@ -84,12 +86,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 def healthcheck(): return {"status": "ok"}
 
-DB_PATH = "/data/warehouse_beta.db"
+DB_PATH = str(Path(os.environ.get("WAREHOUSE_BETA_DB_PATH") or "/data/warehouse_beta.db").resolve())
+if Path(DB_PATH).name != "warehouse_beta.db":
+    raise RuntimeError("WAREHOUSE_BETA_DB_PATH должен указывать на файл warehouse_beta.db")
 
 # Основной сервис открывает только рабочую базу.
 def get_conn(x_init_data: Optional[str] = None):
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn = sqlite3.connect(DB_PATH, timeout=15, uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
@@ -189,12 +193,8 @@ def init_db(db_path):
         c.execute("ALTER TABLE employee_preview ADD COLUMN preview_role TEXT NOT NULL DEFAULT 'employee'")
         c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS beta_snapshot_state (id INTEGER PRIMARY KEY CHECK(id=1))")
     conn.commit(); conn.close()
-
-# Создаем папку /data перед инициализацией баз
-if not os.path.exists("/data"):
-    try: os.makedirs("/data")
-    except: pass
 
 if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
@@ -202,7 +202,7 @@ init_db(DB_PATH)
 
 def seed_beta_demo_items(db_path):
     # One-time demo fixture for the isolated Beta database only.
-    if os.path.abspath(db_path) != "/data/warehouse_beta.db":
+    if Path(db_path).resolve() != Path(DB_PATH):
         raise RuntimeError("Demo fixtures are restricted to Beta")
     with sqlite3.connect(db_path, timeout=15) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -261,6 +261,15 @@ def verify_init_data(init_data: str, token: str) -> dict:
     if not user_json: raise HTTPException(status_code=401, detail="Нет пользователя")
     return json.loads(user_json)
 
+def check_snapshot_access(conn, tg_id):
+    if tg_id == MAIN_ADMIN_ID:
+        return
+    if os.environ.get("WAREHOUSE_SNAPSHOT_URL", "").strip() or conn.execute(
+        "SELECT 1 FROM beta_snapshot_state WHERE id=1"
+    ).fetchone():
+        raise HTTPException(403, "Бета с рабочими данными доступна только владельцу")
+
+
 def real_user(x_init_data: Optional[str]):
     if not x_init_data:
         raise HTTPException(status_code=401, detail="Нет авторизации")
@@ -269,7 +278,9 @@ def real_user(x_init_data: Optional[str]):
         if x_init_data.startswith("web:"):
             with contextmanager_session() as session_conn:
                 session = session_conn.execute("SELECT u.* FROM web_sessions s JOIN users u ON u.tg_id=s.user_id WHERE s.digest=? AND s.expires>?", (web_digest(x_init_data[4:]), int(time.time()))).fetchone()
-                if session: deny_blocked(session_conn, session["tg_id"], MAIN_ADMIN_ID)
+                if session:
+                    check_snapshot_access(session_conn, session["tg_id"])
+                    deny_blocked(session_conn, session["tg_id"], MAIN_ADMIN_ID)
             if not session: raise HTTPException(401,"Войдите на сайт заново")
             user=dict(session); user["is_owner"]=user["tg_id"]==MAIN_ADMIN_ID
             if user["is_owner"]: user["role"]="admin"
@@ -286,6 +297,7 @@ def real_user(x_init_data: Optional[str]):
     is_owner = tg_id == MAIN_ADMIN_ID
     conn = get_conn(x_init_data)
     try:
+        check_snapshot_access(conn, tg_id)
         deny_blocked(conn, tg_id, MAIN_ADMIN_ID)
         row = conn.execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,)).fetchone()
         if not row:
@@ -1208,68 +1220,30 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
     return StreamingResponse(io.BytesIO(content),media_type='application/octet-stream',headers={'Content-Disposition':'attachment; filename=warehouse_backup.db','Cache-Control':'no-store'})
 
 
-@app.post('/api/beta/import-backup')
+def apply_warehouse_snapshot(path, actor):
+    with transaction() as conn:
+        tables = import_snapshot(conn, path, DB_PATH)
+        conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
+        audit(conn, actor, "Импорт снимка", "Складские данные из Основы")
+    return {"status": "ok", "tables": tables}
+
+
+@app.post("/api/beta/copy-main-data")
+def copy_main_data(x_init_data: Optional[str] = Header(None)):
+    actor = check_owner(x_init_data)
+    with tempfile.TemporaryDirectory(prefix="warehouse-beta-import-") as directory:
+        path = Path(directory) / "source.db"
+        fetch_snapshot(path)
+        return apply_warehouse_snapshot(path, actor)
+
+
+@app.post("/api/beta/import-backup")
 def import_main_backup(file: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
     actor = check_owner(x_init_data)
-    # Import data only; never execute schema, triggers or code from an uploaded database.
-    excluded = {'web_codes','web_sessions','employee_preview','blocked_telegram','terminal_logs'}
-    with tempfile.TemporaryDirectory() as directory:
-        path = os.path.join(directory, 'source.db')
-        size = 0
-        with open(path, 'wb') as out:
-            while True:
-                chunk = file.file.read(1024*1024)
-                if not chunk: break
-                size += len(chunk)
-                if size > 256*1024*1024: raise HTTPException(413, 'Файл слишком большой')
-                out.write(chunk)
-        try:
-            src = sqlite3.connect('file:'+path+'?mode=ro&immutable=1', uri=True)
-            src.execute('PRAGMA trusted_schema=OFF')
-            if src.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
-                src.close()
-                raise HTTPException(400, 'Повреждённая база')
-            src.close()
-            conn = get_conn()
-            try:
-                conn.execute('PRAGMA foreign_keys=OFF')
-                conn.execute('PRAGMA trusted_schema=OFF')
-                conn.execute('ATTACH DATABASE ? AS incoming', ('file:'+path+'?mode=ro&immutable=1',))
-                conn.execute('BEGIN IMMEDIATE')
-                tables = [r[0] for r in conn.execute("SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
-                source = {r[0] for r in conn.execute("SELECT name FROM incoming.sqlite_master WHERE type='table' AND sql LIKE 'CREATE TABLE%'")}
-                if not {'items','users','stock','locations','checkouts'}.issubset(source):
-                    raise HTTPException(400,'Это не резервная копия Склада')
-                owner = conn.execute('SELECT * FROM users WHERE tg_id=?',(actor['tg_id'],)).fetchone()
-                def ident(name): return '"' + name.replace('"','""') + '"'
-                copied = 0
-                for table in tables:
-                    if table in excluded or table not in source: continue
-                    q = ident(table)
-                    cols = [r[1] for r in conn.execute('PRAGMA main.table_info('+q+')')]
-                    incoming = {r[1] for r in conn.execute('PRAGMA incoming.table_info('+q+')')}
-                    if not set(cols).issubset(incoming):
-                        raise HTTPException(400,'Несовместимая версия базы: '+table)
-                    fields = ','.join(map(ident,cols))
-                    conn.execute('DELETE FROM main.'+q)
-                    conn.execute('INSERT INTO main.'+q+' ('+fields+') SELECT '+fields+' FROM incoming.'+q)
-                    copied += 1
-                if owner:
-                    cols = list(owner.keys())
-                    conn.execute('INSERT OR REPLACE INTO users ('+','.join(map(ident,cols))+') VALUES ('+','.join('?' for _ in cols)+')',tuple(owner))
-                conn.execute("UPDATE users SET role='admin',is_registered=1 WHERE tg_id=?",(actor['tg_id'],))
-                conn.execute('DELETE FROM employee_preview')
-                if conn.execute('PRAGMA main.foreign_key_check').fetchone():
-                    raise HTTPException(400,'Нарушена целостность данных')
-                conn.commit()
-            except BaseException:
-                conn.rollback()
-                raise
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            raise HTTPException(400,'Не удалось прочитать резервную копию')
-    return {'status':'ok','tables':copied}
+    with tempfile.TemporaryDirectory(prefix="warehouse-beta-import-") as directory:
+        path = Path(directory) / "source.db"
+        save_snapshot(path, iter(lambda: file.file.read(1024 * 1024), b""))
+        return apply_warehouse_snapshot(path, actor)
 
 
 @app.get('/api/label/{code}')
