@@ -99,7 +99,7 @@
         .take-btn { background: linear-gradient(135deg, #007aff, #00c6ff); font-size: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4); margin-top: 16px; margin-bottom: 24px; border-radius: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .qr-btn-main { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px; font-size: 17px; border-radius: 16px; display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 24px; margin-top: 16px; }
 
-        .screen { padding: 0 16px 20px; animation: fadeIn 0.3s ease; }
+        .screen { padding: 0 16px 20px; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .hidden { display: none !important; }
 
@@ -226,21 +226,28 @@ async function betaCopyMainData(button) {
 #screen-settings .v18-settings-group[open]>summary .beta-settings-preview{display:none}
 #screen-settings .v18-settings-group>summary>.v18-icon{flex-shrink:0}
 @media(prefers-reduced-motion:no-preference){
-  :root{--beta-motion:280ms;--beta-ease:cubic-bezier(.22,.75,.24,1)}
-  .screen.beta-screen-enter{animation:beta-screen-in 220ms var(--beta-ease) both}
-  .screen.beta-tab-enter{animation:beta-tab-in 340ms cubic-bezier(.2,.78,.22,1) both}
+  :root{--beta-motion:360ms;--beta-tab-motion:440ms;--beta-ease:cubic-bezier(.25,.8,.25,1)}
+  /* Animate content, never the screen or its sticky header. Avoid a second fade when animation ends. */
+  .screen.beta-screen-enter > :not(.sticky-header):not(.floating-bar):not(.hidden){animation:beta-screen-in var(--beta-motion) var(--beta-ease)}
+  .screen.beta-tab-enter > :not(.sticky-header):not(.floating-bar):not(.hidden){animation:beta-tab-in var(--beta-tab-motion) var(--beta-ease)}
+  .screen.beta-tab-enter,.screen.beta-screen-enter{overflow-x:clip}
+  .bottom-nav .nav-item,.bottom-nav .nav-item *{-webkit-tap-highlight-color:transparent}
+  button,summary,[role="button"]{-webkit-tap-highlight-color:transparent}
+  button:active:not(:disabled){opacity:1}
+
   .bottom-nav.beta-tab-motion .nav-item{position:relative;z-index:1}
   .bottom-nav.beta-tab-motion .nav-item.active{background:transparent!important}
-  .beta-tab-capsule{position:absolute;left:0;top:0;z-index:0;pointer-events:none;background:var(--r182-active,var(--skeleton-bg));border-radius:28px;opacity:0;transition:transform 340ms cubic-bezier(.2,.78,.22,1),width 340ms cubic-bezier(.2,.78,.22,1),height 340ms cubic-bezier(.2,.78,.22,1),opacity 160ms ease}
+  .beta-tab-capsule{position:absolute;left:0;top:0;z-index:0;pointer-events:none;background:var(--r182-active,var(--skeleton-bg));border-radius:28px;opacity:0;transition:transform var(--beta-tab-motion) var(--beta-ease),width var(--beta-tab-motion) var(--beta-ease),height var(--beta-tab-motion) var(--beta-ease),opacity 180ms ease}
   .bottom-nav.beta-tab-motion .beta-tab-capsule{opacity:1}
-  .bottom-nav.beta-tab-motion .nav-item.active .icon{animation:beta-tab-icon 320ms cubic-bezier(.2,.78,.22,1)}
+  .bottom-nav.beta-tab-motion .nav-item.active .icon{animation:beta-tab-icon var(--beta-tab-motion) var(--beta-ease)}
   @media(min-width:900px){.web-mode .beta-tab-capsule{border-radius:11px}}
 
   .modal-overlay{animation:beta-overlay-in 200ms ease both}
   .modal-overlay .modal-content{animation:beta-sheet-in var(--beta-motion) var(--beta-ease) both}
   .toast{animation:beta-toast-in 260ms var(--beta-ease);transition:opacity 250ms ease,transform 250ms var(--beta-ease)}
   button,.nav-item,.room-card,summary{transition:background-color 180ms ease,border-color 180ms ease,color 180ms ease,opacity 180ms ease,transform 160ms var(--beta-ease)}
-  .nav-item:active,summary:active{transform:scale(.99)}
+  .nav-item:active{transform:none}
+  summary:active{transform:none}
   @supports selector(details::details-content) and (interpolate-size:allow-keywords){
     details::details-content{interpolate-size:allow-keywords;height:0;overflow:clip;content-visibility:hidden;transition:height var(--beta-motion) var(--beta-ease),content-visibility var(--beta-motion) allow-discrete}
     details[open]::details-content{height:auto;content-visibility:visible}
@@ -251,9 +258,9 @@ async function betaCopyMainData(button) {
     #create-item-modal.hidden{opacity:0;pointer-events:none}
   }
 }
-@keyframes beta-screen-in{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes beta-tab-in{from{opacity:.48;transform:translateX(var(--beta-tab-shift,20px))}to{opacity:1;transform:none}}
-@keyframes beta-tab-icon{0%{transform:scale(.88)}65%{transform:scale(1.08)}100%{transform:none}}
+@keyframes beta-screen-in{from{transform:translateY(6px)}to{transform:none}}
+@keyframes beta-tab-in{from{transform:translateX(var(--beta-tab-shift,14px))}to{transform:none}}
+@keyframes beta-tab-icon{0%{transform:scale(.96)}65%{transform:scale(1.025)}100%{transform:none}}
 
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
 @keyframes beta-sheet-in{from{opacity:.5;transform:translateY(20px)}to{opacity:1;transform:none}}
@@ -2322,7 +2329,7 @@ async function betaCopyMainData(button) {
 
 (function installBetaMotion(){
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const timing={duration:280,easing:'cubic-bezier(.22,.75,.24,1)'};
+  const timing={duration:360,easing:'cubic-bezier(.25,.8,.25,1)'};
   const shortLabels={
     'Активные сеансы сайта':'Сеансы','Акцентный цвет':'Акцент','Что нового в v18.5.2':'Что нового',
     'Массовое редактирование':'Массовая правка','Архив и восстановление':'Архив','Шаблоны товаров':'Шаблоны',
@@ -2414,12 +2421,12 @@ async function betaCopyMainData(button) {
         const done=screenEnds.get(screen);if(done)done();
         screen.classList.remove('beta-tab-enter','beta-screen-enter');
       }
-      target.style.setProperty('--beta-tab-shift',to>from?'24px':'-24px');
-      target.classList.remove('beta-tab-enter','beta-screen-enter');void target.offsetWidth;target.classList.add(cls);
+      target.style.setProperty('--beta-tab-shift',to>from?'14px':'-14px');
+      target.classList.remove('beta-tab-enter','beta-screen-enter');target.classList.add(cls);
       let timeout;
       const done=()=>{clearTimeout(timeout);target.classList.remove(cls);target.style.removeProperty('--beta-tab-shift');target.removeEventListener('animationend',finish);screenEnds.delete(target)};
-      const finish=e=>{if(e.target===target&&e.animationName===animationName)done()};
-      screenEnds.set(target,done);target.addEventListener('animationend',finish);timeout=setTimeout(done,450);
+      const finish=e=>{if(e.target.parentElement===target&&e.animationName===animationName)done()};
+      screenEnds.set(target,done);target.addEventListener('animationend',finish);timeout=setTimeout(done,tab?520:440);
     }
     queueCapsule();
     return result;
