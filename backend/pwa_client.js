@@ -37,10 +37,10 @@
     }, {once:true});
   }
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/pwa/sw.js', {scope:'/pwa/'})
-        .catch(error => console.warn('PWA registration:', error));
-    }, {once:true});
+    const register = () => navigator.serviceWorker.register('/pwa/sw.js', {scope:'/pwa/'})
+      .catch(error => console.warn('PWA registration:', error));
+    if (document.readyState === 'complete') register();
+    else window.addEventListener('load', register, {once:true});
   }
   // iOS Safari lacks BarcodeDetector. Use the locally hosted Apache-2.0 jsQR decoder.
   // The existing camera button, manual entry and Telegram scanner remain untouched.
