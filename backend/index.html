@@ -2343,11 +2343,15 @@ async function betaCopyMainData(button) {
         for(const button of list.querySelectorAll(':scope > button')){
           if(button.hidden||button.classList.contains('hidden')||button.style.display==='none')continue;
           const label=button.querySelector('.v18-setting-label');
-          const full=(label||button).textContent.trim();
-          if(!full)continue;
+          const shown=(label||button).textContent.trim();
+          if(!shown)continue;
+          const full=button.dataset.betaFullLabel||shown;
           const brief=shortLabels[full]||full;
           if(!button.title)button.title=full;
           if(!button.getAttribute('aria-label'))button.setAttribute('aria-label',full);
+          if(label&&shortLabels[full]&&shown!==brief){
+            button.dataset.betaFullLabel=full;label.textContent=brief;
+          }
           labels.push(brief);
         }
         if(list.querySelector('#locations-list'))labels.push('Список помещений');
@@ -2384,7 +2388,15 @@ async function betaCopyMainData(button) {
       const opening=previous?!previous.opening:!details.open;
       if(previous){previous.animation.onfinish=null;previous.animation.cancel();}
       if(opening)details.open=true;
-      const end=opening?details.getBoundingClientRect().height:Math.max(0,start-details.getBoundingClientRect().height+summary.getBoundingClientRect().height+parseFloat(getComputedStyle(details).borderTopWidth||0)+parseFloat(getComputedStyle(details).borderBottomWidth||0));
+      let end=details.getBoundingClientRect().height;
+      if(!opening){
+        const preview=summary.querySelector('.beta-settings-preview');
+        const display=preview?.style.display;
+        if(preview)preview.style.display='block';
+        const style=getComputedStyle(details);
+        end=summary.getBoundingClientRect().height+['paddingTop','paddingBottom','borderTopWidth','borderBottomWidth'].reduce((sum,key)=>sum+(parseFloat(style[key])||0),0);
+        if(preview)preview.style.display=display;
+      }
       const animation=details.animate([{height:start+'px',overflow:'hidden'},{height:end+'px',overflow:'hidden'}],timing);
       active.set(details,{animation,opening});
       animation.onfinish=()=>{if(active.get(details)?.animation!==animation)return;details.open=opening;active.delete(details);};
@@ -2400,6 +2412,7 @@ async function betaCopyMainData(button) {
       const snapshot=node.cloneNode(true);
       snapshot.removeAttribute('id');snapshot.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
       snapshot.setAttribute('aria-hidden','true');snapshot.inert=true;
+      snapshot.querySelectorAll('button,input,textarea,select,a,[tabindex]').forEach(el=>{el.tabIndex=-1;if('disabled' in el)el.disabled=true;});
       snapshot.style.pointerEvents='none';snapshot.style.animation='none';
       const sheet=snapshot.querySelector('.modal-content');if(sheet)sheet.style.animation='none';
       remove();document.body.append(snapshot);
