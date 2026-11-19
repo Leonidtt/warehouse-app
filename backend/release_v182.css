@@ -178,119 +178,26 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
 }
 
 .screen .r182-overview.card {
-  --overview-tile: #eff2f7;
-  --overview-ring-track: #e3e8ef;
-  --overview-stock: #23b86a;
-  --overview-working: #3189fb;
-  --overview-repair: #f35460;
   display: grid;
   gap: 14px;
   margin: 12px 0 16px;
   padding: clamp(12px, 3vw, 20px);
   border-radius: 26px;
 }
-:root[data-theme=dark] .r182-overview.card {
-  --overview-tile: #26303e;
-  --overview-ring-track: #334050;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme=light]) .r182-overview.card {
-    --overview-tile: #26303e;
-    --overview-ring-track: #334050;
-  }
-}
-.r182-overview .r182-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  align-items: start;
-  gap: 14px;
-}
 .r182-summary-main {
   display: grid;
   min-width: 0;
   gap: 8px;
 }
-.r182-overview .r182-total {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  min-height: 106px;
-  padding: 12px 16px;
-  border-radius: 20px;
-  background: var(--overview-tile);
-}
-.r182-total-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-.r182-overview .r182-total strong {
-  color: var(--text);
-  font-size: clamp(32px, 8vw, 42px);
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.06;
-  overflow-wrap: anywhere;
-}
-.r182-overview .r182-total .r182-muted { color: var(--r185-muted); }
-.r182-ring {
-  --overview-ring-fill: var(--overview-ring-track);
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 92px;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--overview-ring-fill);
-}
-.r182-overview-photo {
-  width: calc(100% - 16px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  /* Positions select individual items from the 4×4 catalog image. */
-  background: #d9dee5 url('/catalog-v185.webp') 0 0 / 400% 400%;
-}
-.r182-overview-photo.printer { background-position: 0 100%; }
-.r182-overview-photo.laptop { background-position: 100% 66.6667%; }
-.r182-overview .r182-numbers {
-  grid-template-columns: none;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-.r182-overview .r182-stat {
-  display: grid;
-  place-content: center start;
-  gap: 4px;
-  width: 100%;
-  min-height: 76px;
-  padding: 9px 10px;
-  border-radius: 16px;
-  background: var(--overview-tile);
-  text-align: left;
-}
-.r182-overview .r182-stat>span:last-child {
-  color: var(--r185-muted);
-  overflow-wrap: anywhere;
-}
-.r182-overview-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-.r182-overview-dot.stock { background: var(--overview-stock); }
-.r182-overview-dot.working { background: var(--overview-working); }
-.r182-overview-dot.repair { background: var(--overview-repair); }
 .r182-overview .r182-summary.r182-featured {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 8px;
 }
 .r182-featured .r182-summary-main {
+  display: grid;
+  min-width: 0;
   grid-template-rows: auto 1fr;
   gap: 7px;
 }
@@ -314,6 +221,8 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
 }
 .r182-overview .r182-featured .r182-total {
   display: grid;
+  border-radius: 12px;
+  width: 100%;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
   min-height: 44px;
@@ -321,13 +230,23 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
   background: transparent;
   text-align: center;
 }
-.r182-featured .r182-total-copy { gap: 1px; }
+.r182-featured .r182-total-copy { display: grid; min-width: 0; gap: 1px; }
 .r182-overview .r182-featured .r182-total strong {
   font-size: clamp(25px, 7.7vw, 31px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.06;
+  overflow-wrap: anywhere;
 }
-.r182-overview .r182-featured .r182-total .r182-muted { font-size: 11px; }
-.r182-overview .r182-featured .r182-numbers { gap: 3px; }
+.r182-overview .r182-featured .r182-total .r182-muted { color: var(--r185-muted); font-size: 11px; }
+.r182-overview .r182-featured .r182-numbers {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 3px;
+}
 .r182-overview .r182-featured .r182-stat {
+  display: grid;
+  width: 100%;
   grid-template-columns: minmax(0, 1fr);
   align-content: center;
   justify-items: center;
@@ -338,13 +257,16 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
   background: var(--warehouse-mini-tile);
   text-align: center;
 }
-.r182-featured .r182-overview-dot { display: none; }
 .r182-featured .r182-stat strong {
   max-width: 100%;
   font-size: clamp(14px, 4.1vw, 17px);
   overflow-wrap: anywhere;
 }
-.r182-overview .r182-featured .r182-stat>span:last-child { font-size: clamp(9px, 2.45vw, 11px); }
+.r182-overview .r182-featured .r182-stat>span:last-child {
+  color: var(--r185-muted);
+  font-size: clamp(9px, 2.45vw, 11px);
+  overflow-wrap: anywhere;
+}
 .r182-disclosure {
   min-width: 0;
   border: 1px solid var(--r185-edge);
@@ -388,6 +310,13 @@ button.ok:where(:not(.v18-settings-list>button)){background:linear-gradient(150d
   font-size: 13px;
   text-align: left;
   overflow-wrap: anywhere;
+}
+.r182-featured .r182-printer-locations { gap: 3px; }
+.r182-overview .r182-featured .r182-printer-location {
+  padding: 4px 3px;
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: clamp(9px, 2.45vw, 11px);
 }
 #screen-rooms .r182-consumables.card {
   display: block;

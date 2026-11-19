@@ -33,48 +33,24 @@ function installRelease182(){
   async function openDailyHistory(date,key){$('history-query').value='';$('history-date').value=date;historyType.value={taken:'checkout',returned:'return',written_off:'writeoff'}[key]||'';await showHistory()}
   const dashboard=$('dashboard-v17'),daily=$('daily-report-box'),low=$('low-stock-banner');
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
-  function categoryWidget(category,label,photo,counts={}){
+  function categoryWidget(category,label,counts={}){
     const widget=el('section','r182-summary-main');
     widget.setAttribute('aria-label',label);
-    const content=photo?widget:el('div','r182-featured-card');
-    if(!photo)widget.append(el('h2','r182-featured-title',label),content);
-
-    const states=[['stock','На складе','stock182','Склад'],['working','В работе','work182','Работа']];
-    if(Number(counts.repair)>0)states.push(['repair','В ремонте','repair','Ремонт']);
+    const content=el('div','r182-featured-card');
+    widget.append(el('h2','r182-featured-title',label),content);
 
     const total=button('',()=>filterTo(category),'r182-total');
     const totalCopy=el('span','r182-total-copy');
-    const number=el('strong','',countNum(counts.total));
-    const caption=el('span','r182-muted',photo?label:'Всего');
-    if(photo)totalCopy.append(caption,number);
-    else totalCopy.append(number,caption);
+    totalCopy.append(el('strong','',countNum(counts.total)),el('span','r182-muted','Всего'));
     total.append(totalCopy);
-
-    if(photo){
-      const ring=el('span','r182-ring');
-      ring.setAttribute('aria-hidden','true');
-      ring.append(el('span','r182-overview-photo '+photo));
-      if(counts.total>0){
-        const segments=[];
-        let shown=0;
-        for(const [key] of states){
-          const count=Number(counts[key]);
-          if(count<=0)continue;
-          const start=shown/counts.total*100;
-          shown+=count;
-          segments.push('var(--overview-'+key+') '+start+'% '+(shown/counts.total*100)+'%');
-        }
-        if(segments.length)ring.style.setProperty('--overview-ring-fill','conic-gradient('+segments.join(',')+')');
-      }
-      total.append(ring);
-    }
     content.append(total);
+
+    const states=[['stock','Склад','stock182'],['working','Работа','work182']];
+    if(Number(counts.repair)>0)states.push(['repair','Ремонт','repair']);
     const numbers=el('div','r182-numbers');
-    for(const [key,statusLabel,status,shortLabel] of states){
+    for(const [key,statusLabel,status] of states){
       const tile=button('',()=>filterTo(category,status),'r182-stat');
-      const dot=el('span','r182-overview-dot '+key);
-      dot.setAttribute('aria-hidden','true');
-      tile.append(dot,el('strong','r182-color-'+key,countNum(counts[key])),el('span','',photo?statusLabel:shortLabel));
+      tile.append(el('strong','r182-color-'+key,countNum(counts[key])),el('span','',statusLabel));
       numbers.append(tile);
     }
     content.append(numbers);
@@ -88,16 +64,16 @@ function installRelease182(){
     const byName=new Map(categories.map(category=>[category.name,category]));
     const primary=el('div','r182-summary r182-featured');
     primary.append(
-      categoryWidget('Фотокомплекты','Фотоаппараты',null,byName.get('Фотокомплекты')),
-      categoryWidget('Вспышки','Вспышки',null,byName.get('Вспышки')),
+      categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
+      categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
     );
 
     const detail=el('details','r182-disclosure');
     detail.open=expanded;
     const detailTitle=el('summary');
-    detailTitle.append(el('span','','Оборудование'),icon('right'));
-    const other=el('div','r182-summary');
-    const printers=categoryWidget('Принтеры','Принтеры','printer',byName.get('Принтеры'));
+    detailTitle.append(el('span','','Ноутбуки и принтеры'),icon('right'));
+    const other=el('div','r182-summary r182-featured');
+    const printers=categoryWidget('Принтеры','Принтеры',byName.get('Принтеры'));
     const roomTiles=el('div','r182-printer-locations');
     for(const [name,type] of [['Склад','storage'],['Офис','office']]){
       const sameType=printerRooms.filter(room=>room.type===type);
@@ -107,8 +83,8 @@ function installRelease182(){
       tile.append(el('span','',room?.name||name),el('strong','',countNum(room?.count)));
       roomTiles.append(tile);
     }
-    printers.append(roomTiles);
-    other.append(printers,categoryWidget('Ноутбуки','Ноутбуки','laptop',byName.get('Ноутбуки')));
+    printers.querySelector('.r182-featured-card').append(roomTiles);
+    other.append(categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),printers);
     detail.append(detailTitle,other);
     dashboard.className='r182-overview card';
     dashboard.replaceChildren(primary,detail);
@@ -189,9 +165,11 @@ function installRelease182(){
     if(row.state==='issue' && row.status.trim().toLowerCase()!==label.toLowerCase()){
       card.append(el('p','r182-event-note',row.status));
     }
-    const equipment=button('',()=>showLinked17(key,row.name),'r182-event-link');
-    equipment.append(el('span','',key==='site'?'Оборудование площадки':'Оборудование теплохода'),icon('right'));
-    card.append(equipment);
+    if(key==='vessel'){
+      const equipment=button('',()=>showLinked17(key,row.name),'r182-event-link');
+      equipment.append(el('span','','Оборудование теплохода'),icon('right'));
+      card.append(equipment);
+    }
     return card;
   }
 
