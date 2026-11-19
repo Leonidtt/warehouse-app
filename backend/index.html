@@ -206,7 +206,17 @@
 .beta-simple #items-list .r1857-top .name{font-size:15px}
 .beta-simple #items-list .r1857-summary{display:none}
 .beta-simple #my-items-list .my-item-btn{min-height:44px}
-</style></head>
+</style><script>
+function betaImportBackup(){
+ if(!currentUser?.is_owner)return;
+ alert('В Основе открой Настройки → Резервная копия. Выбери сохранённый файл базы. Данные Беты будут заменены.');
+ const f=document.getElementById('beta-import-file');f.value='';
+ f.onchange=async()=>{if(!f.files.length||!confirm('Заменить данные Беты резервной копией Основы?'))return;
+ const data=new FormData();data.append('file',f.files[0]);
+ try{await api('/api/beta/import-backup',{method:'POST',body:data});alert('Данные скопированы');location.reload()}catch(e){alert(e.message||'Ошибка копирования')}};
+ f.click();
+}
+</script></head>
 <body>
 
     <div id="toast-container"></div>
@@ -330,6 +340,7 @@
 
         <button class="secondary" onclick="showExtra('bookings')">🗓 Календарь бронирований</button><button class="secondary" onclick="showHistory()" style="margin-bottom: 24px;">🕒 История действий</button>
 
+        <div class="owner-only hidden"><button class="secondary" style="width:100%;margin:6px 0" onclick="betaImportBackup()">Скопировать данные из Основы</button><input type="file" id="beta-import-file" accept=".db,.sqlite,.sqlite3" hidden></div>
         <div id="my-items-section" class="hidden" style="margin-bottom: 24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <h2 style="font-size: 18px; margin:0; font-weight: 700; letter-spacing: -0.5px;">🖐 Мои вещи</h2>

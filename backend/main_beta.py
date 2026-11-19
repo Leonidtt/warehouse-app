@@ -1168,6 +1168,71 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
         with open(path,'rb') as f: content=f.read()
     return StreamingResponse(io.BytesIO(content),media_type='application/octet-stream',headers={'Content-Disposition':'attachment; filename=warehouse_backup.db','Cache-Control':'no-store'})
 
+
+@app.post('/api/beta/import-backup')
+def import_main_backup(file: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
+    actor = check_owner(x_init_data)
+    # Import data only; never execute schema, triggers or code from an uploaded database.
+    excluded = {'web_codes','web_sessions','employee_preview','blocked_telegram','terminal_logs'}
+    with tempfile.TemporaryDirectory() as directory:
+        path = os.path.join(directory, 'source.db')
+        size = 0
+        with open(path, 'wb') as out:
+            while True:
+                chunk = file.file.read(1024*1024)
+                if not chunk: break
+                size += len(chunk)
+                if size > 256*1024*1024: raise HTTPException(413, 'Файл слишком большой')
+                out.write(chunk)
+        try:
+            src = sqlite3.connect('file:'+path+'?mode=ro&immutable=1', uri=True)
+            src.execute('PRAGMA trusted_schema=OFF')
+            if src.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+                src.close()
+                raise HTTPException(400, 'Повреждённая база')
+            src.close()
+            conn = get_conn()
+            try:
+                conn.execute('PRAGMA foreign_keys=OFF')
+                conn.execute('PRAGMA trusted_schema=OFF')
+                conn.execute('ATTACH DATABASE ? AS incoming', ('file:'+path+'?mode=ro&immutable=1',))
+                conn.execute('BEGIN IMMEDIATE')
+                tables = [r[0] for r in conn.execute("SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+                source = {r[0] for r in conn.execute("SELECT name FROM incoming.sqlite_master WHERE type='table' AND sql LIKE 'CREATE TABLE%'")}
+                if not {'items','users','stock','locations','checkouts'}.issubset(source):
+                    raise HTTPException(400,'Это не резервная копия Склада')
+                owner = conn.execute('SELECT * FROM users WHERE tg_id=?',(actor['tg_id'],)).fetchone()
+                def ident(name): return '"' + name.replace('"','""') + '"'
+                copied = 0
+                for table in tables:
+                    if table in excluded or table not in source: continue
+                    q = ident(table)
+                    cols = [r[1] for r in conn.execute('PRAGMA main.table_info('+q+')')]
+                    incoming = {r[1] for r in conn.execute('PRAGMA incoming.table_info('+q+')')}
+                    if not set(cols).issubset(incoming):
+                        raise HTTPException(400,'Несовместимая версия базы: '+table)
+                    fields = ','.join(map(ident,cols))
+                    conn.execute('DELETE FROM main.'+q)
+                    conn.execute('INSERT INTO main.'+q+' ('+fields+') SELECT '+fields+' FROM incoming.'+q)
+                    copied += 1
+                if owner:
+                    cols = list(owner.keys())
+                    conn.execute('INSERT OR REPLACE INTO users ('+','.join(map(ident,cols))+') VALUES ('+','.join('?' for _ in cols)+')',tuple(owner))
+                conn.execute("UPDATE users SET role='admin',is_registered=1 WHERE tg_id=?",(actor['tg_id'],))
+                conn.execute('DELETE FROM employee_preview')
+                if conn.execute('PRAGMA main.foreign_key_check').fetchone():
+                    raise HTTPException(400,'Нарушена целостность данных')
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            raise HTTPException(400,'Не удалось прочитать резервную копию')
+    return {'status':'ok','tables':copied}
+
+
 @app.get('/api/label/{code}')
 def print_label(code: str,name: Optional[str]=None,dpi: int=203,format: str='png',width_mm: int=50,height_mm: int=80,x_init_data: Optional[str]=Header(None)):
     if name is None: get_user(x_init_data)
@@ -1427,6 +1492,7 @@ with transaction() as conn:
 
 @app.get("/")
 @app.get("/index.html")
+@app.get("/beta")
 @app.get("/beta.html")
 def serve_main():
     return FileResponse(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), headers={"Cache-Control":"no-cache"})
