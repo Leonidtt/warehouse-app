@@ -2381,13 +2381,13 @@ async function betaCopyMainData(button) {
   function positionCapsule(){
     if(!nav)return;
     const item=nav.querySelector('.nav-item.active:not(.hidden)');
-    if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
+    if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){if(nav.classList.contains('beta-tab-motion'))nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
     const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
     if(!r.width||!r.height)return;
     if(!navReady)capsule.style.transition='none';
     capsule.style.width=r.width+'px';capsule.style.height=r.height+'px';
     capsule.style.transform='translate('+(r.left-base.left-nav.clientLeft+nav.scrollLeft)+'px,'+(r.top-base.top-nav.clientTop+nav.scrollTop)+'px)';
-    nav.classList.add('beta-tab-motion');
+    if(!nav.classList.contains('beta-tab-motion'))nav.classList.add('beta-tab-motion');
     if(!navReady){void capsule.offsetWidth;capsule.style.transition='';navReady=true}
     if(lastNav!==item){lastNav=item;for(const tab of nav.querySelectorAll('.nav-item')){if(tab===item)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current')}}
   }
