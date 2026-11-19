@@ -38,10 +38,42 @@ function installRelease184(){
   function setSource(id){const s=currentItem.stocks.find(x=>x.location_id===Number(id));if(!s)return;moveFromLocId=s.location_id;selectedMoveRoomId=null;$('move-step-2').classList.add('hidden');$('move-item-from').textContent='Откуда: '+s.location_name;$('move-qty').max=String(s.quantity);$('move-qty').value=currentItem.kind==='consumable'?String(s.quantity):'1';$('move-rooms-list').replaceChildren(...locations.filter(l=>l.id!==moveFromLocId).map(l=>button(l.name,()=>selectMoveRoom(l.id,l.name),'secondary')));updateRemain()}
   source.onchange=()=>setSource(source.value);$('move-qty').oninput=updateRemain;showMoveItemScreen=()=>{oldMove();source.replaceChildren(...currentItem.stocks.filter(s=>s.quantity>0).map(s=>new Option(s.location_name+' · '+s.quantity,s.location_id)));source.classList.toggle('hidden',source.options.length<=1);allQty.classList.toggle('hidden',currentItem.kind!=='consumable');if(source.value)setSource(source.value)};
   const oldExecute=executeMoveItem;let moving=false;executeMoveItem=async()=>{const n=Number($('move-qty').value);if(moving||!Number.isInteger(n)||n<=0||n>Number($('move-qty').max))return notify('Некорректное количество');moving=true;try{await oldExecute()}finally{moving=false}};
-  // Roles and employee preview. Reload drops any previously rendered financial data.
-  const setting=$('screen-settings').querySelector('.v18-settings-layout'),preview=button('Стать сотрудником на 3 минуты',async()=>{if(!admin()||!confirm('Временно перейти в интерфейс сотрудника?'))return;preview.disabled=true;try{await api('/api/v184/preview/start',{method:'POST'});location.reload()}finally{preview.disabled=false}},'secondary r184-admin-dot');setting.prepend(preview);
-  const previewBanner=el('div','r184-preview hidden'),timer=el('b'),stop=button('Выйти из режима',async()=>{stop.disabled=true;try{await api('/api/v184/preview/stop',{method:'POST'});location.reload()}finally{stop.disabled=false}});previewBanner.append(timer,stop);document.body.prepend(previewBanner);
-  let previewTimer;function renderPreview(){clearInterval(previewTimer);if(!currentUser?.preview_until)return;previewBanner.classList.remove('hidden');document.body.classList.add('r184-preview-active');const tick=()=>{let left=Math.max(0,Math.ceil(currentUser.preview_until-Date.now()/1000));timer.textContent='Режим сотрудника · '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0');if(!left){clearInterval(previewTimer);location.reload()}};tick();previewTimer=setInterval(tick,500)}
+  // Real permissions follow the selected role. Account role stays unchanged.
+  const setting=$('screen-settings').querySelector('.v18-settings-layout');
+  const roleNames1854={admin:'Администратор',boss:'Босс',employee:'Сотрудник'};
+  let switching1854=false;
+  async function changePreview1854(role){
+    if(!currentUser?.can_preview||switching1854)return;
+    switching1854=true;
+    try{
+      await api('/api/v184/preview/role',{method:'POST',body:JSON.stringify({role})});
+      clearInterval(autoRefreshInterval);location.reload();
+    }catch(e){switching1854=false;throw e}
+  }
+  function choosePreview1854(){
+    if(!currentUser?.can_preview)return;
+    const {o,b}=overlay17('Тестирование интерфейса');
+    const note=el('p','meta','Действия реальные и сохраняются в рабочей базе. Ваша роль в аккаунте не меняется.');
+    b.append(note);
+    for(const role of ['admin','boss','employee']){
+      const label=roleNames1854[role]+(currentUser.role===role?' · Сейчас':'');
+      const btn=btn17(b,label,()=>changePreview1854(role),currentUser.role===role?'secondary':'primary');
+      if(currentUser.role===role)btn.disabled=true;
+    }
+  }
+  const preview=button('Тестирование интерфейса',choosePreview1854,'secondary r184-admin-dot hidden');
+  setting.prepend(preview);
+  const previewBanner=el('div','r184-preview hidden'),previewLabel=el('b');
+  const switchRole=button('Сменить',choosePreview1854);
+  const stop=button('Выйти',()=>changePreview1854('admin'));
+  previewBanner.append(previewLabel,switchRole,stop);document.body.prepend(previewBanner);
+  function renderPreview(){
+    preview.classList.toggle('hidden',!currentUser?.can_preview);
+    const active=!!currentUser?.can_preview&&['employee','boss'].includes(currentUser.preview_role);
+    previewBanner.classList.toggle('hidden',!active);
+    document.body.classList.toggle('r184-preview-active',active);
+    previewLabel.textContent=active?'Тест: '+roleNames1854[currentUser.preview_role]:'';
+  }
   // Boss view, with explicit stock-room interpretation and separate holder detail.
   const bossBox=el('section','r184-boss hidden');main.querySelector('.v18-quick').before(bossBox);let bossJob=null;
   function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
