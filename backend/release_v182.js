@@ -13,94 +13,114 @@ function installRelease182(){
   const icon=k=>{const e=el('span','r182-icon');e.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(icons[k]||icons.box)+'</svg>';return e};
   document.querySelectorAll('.search-icon').forEach(e=>e.replaceChildren(icon('search')));
   const main=$('screen-main'),quick=main.querySelector('.v18-quick'),overview=main.querySelector('.v18-overview');
-  quick.prepend(quick.querySelector('.take-btn'));quick.before($('dashboard-v17'));quick.querySelector('.qr-btn-main').lastChild.textContent=' Сканировать QR';overview.prepend($('low-stock-banner'));
+  quick.prepend(quick.querySelector('.take-btn'));quick.before($('dashboard-v17'));quick.querySelector('.qr-btn-main').lastChild.textContent=' Сканировать QR';
   overview.querySelector('.v18-overview-details')?.remove();
   const addNoCategory=()=>{if(![...$('filter-category').options].some(o=>o.value==='__without_category__'))$('filter-category').add(new Option('Без категории','__without_category__'))};const oldCategories=loadCategories17;loadCategories17=async()=>{await oldCategories();addNoCategory()};addNoCategory();
   const filter=$('filter-status');filter.add(new Option('На складе','stock182'));filter.add(new Option('В работе','work182'));
   const prevMatches=matchesStatus17;matchesStatus17=(i,s)=>s==='stock182'?i.kind==='equipment'&&!i.needs_repair&&i.total>0:s==='work182'?i.kind==='equipment'&&!i.needs_repair&&i.holders.length>0:prevMatches(i,s);
-  function filterTo(status='',category='',equipment=true){
-    $('filter-status').value=status;$('filter-kind').value=equipment?'equipment':'';$('filter-category').value=category==='Без категории'?'__without_category__':category;$('filter-location').value='';$('search-input').value='';filterItems();
+  function filterTo(category,status='',location=''){
+    const select=$('filter-category');
+    if(![...select.options].some(option=>option.value===category))select.add(new Option(category,category));
+    select.value=category;
+    $('filter-status').value=status;
+    $('filter-kind').value='equipment';
+    $('filter-location').value=location;
+    $('search-input').value='';
+    filterItems();
     $('items-list').scrollIntoView({block:'start',behavior:'smooth'});
   }
   const historyType=el('select');historyType.id='history-type182';[['','Все действия'],['checkout','Выдача'],['return','Возврат'],['writeoff','Списание'],['move','Перемещение']].forEach(([v,t])=>historyType.add(new Option(t,v)));$('history-date').after(historyType);historyType.onchange=()=>renderHistory17();
   async function openDailyHistory(date,key){$('history-query').value='';$('history-date').value=date;historyType.value={taken:'checkout',returned:'return',written_off:'writeoff'}[key]||'';await showHistory()}
   const dashboard=$('dashboard-v17'),daily=$('daily-report-box'),low=$('low-stock-banner');
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
-  function renderOverview(data){
-    const {counts:c,categories,booked,daily:d,low:short}=data;booked17=new Set(booked);
-    const expanded=dashboard.querySelector('details')?.open??false;
-    dashboard.className='r182-overview card';
-    dashboard.replaceChildren();
-    const summary=el('div','r182-summary');
-    const left=el('div','r182-summary-main');
-    const right=el('div','r182-summary-cats');
-    dashboard.append(summary);
-    summary.append(left,right);
-
-    const hasRepairs=Number(c.repair)>0;
+  function categoryWidget(category,label,photo,counts={}){
+    const widget=el('section','r182-summary-main');
+    widget.setAttribute('aria-label',label);
     const states=[['stock','На складе','stock182'],['working','В работе','work182']];
-    if(hasRepairs)states.push(['repair','В ремонте','repair']);
-    dashboard.classList.toggle('r182-no-repair',!hasRepairs);
+    if(Number(counts.repair)>0)states.push(['repair','В ремонте','repair']);
 
-    const total=button('',()=>filterTo(),'r182-total');
+    const total=button('',()=>filterTo(category),'r182-total');
     const totalCopy=el('span','r182-total-copy');
-    totalCopy.append(el('span','r182-muted','Всего фототехники'),el('strong','',countNum(c.total)));
+    totalCopy.append(el('span','r182-muted',label),el('strong','',countNum(counts.total)));
     const ring=el('span','r182-ring');
     ring.setAttribute('aria-hidden','true');
-    ring.append(el('span','r182-overview-photo'));
-    if(c.total>0){
+    ring.append(el('span','r182-overview-photo '+photo));
+    if(counts.total>0){
       const segments=[];
       let shown=0;
       for(const [key] of states){
-        const count=Number(c[key]);
+        const count=Number(counts[key]);
         if(count<=0)continue;
-        const start=shown/c.total*100;
+        const start=shown/counts.total*100;
         shown+=count;
-        segments.push('var(--overview-'+key+') '+start+'% '+(shown/c.total*100)+'%');
+        segments.push('var(--overview-'+key+') '+start+'% '+(shown/counts.total*100)+'%');
       }
       if(segments.length)ring.style.setProperty('--overview-ring-fill','conic-gradient('+segments.join(',')+')');
     }
     total.append(totalCopy,ring);
-    left.append(total);
-
+    widget.append(total);
     const numbers=el('div','r182-numbers');
     for(const [key,label,status] of states){
-      const tile=button('',()=>filterTo(status),'r182-stat');
+      const tile=button('',()=>filterTo(category,status),'r182-stat');
       const dot=el('span','r182-overview-dot '+key);
       dot.setAttribute('aria-hidden','true');
-      tile.append(dot,el('strong','r182-color-'+key,countNum(c[key])),el('span','',label));
+      tile.append(dot,el('strong','r182-color-'+key,countNum(counts[key])),el('span','',label));
       numbers.append(tile);
     }
-    left.append(numbers);
-    const reservations=button('',()=>filterTo('booked_today'),'r182-booked');
-    reservations.append(el('span','r182-booked-label','Забронировано сегодня'),el('b','',countNum(booked.length)),icon('right'));
-    left.append(reservations);
+    widget.append(numbers);
+    return widget;
+  }
 
-    const detail=el('details','r182-categories');
+  function renderOverview(data){
+    const {categories,booked,daily:d,low:short,printer_locations:printerRooms=[],consumables=0}=data;
+    booked17=new Set(booked);
+    const expanded=dashboard.querySelector('details')?.open??false;
+    const byName=new Map(categories.map(category=>[category.name,category]));
+    const primary=el('div','r182-summary');
+    primary.append(
+      categoryWidget('Фотокомплекты','Фотоаппараты','camera',byName.get('Фотокомплекты')),
+      categoryWidget('Вспышки','Вспышки','flash',byName.get('Вспышки')),
+    );
+
+    const detail=el('details','r182-disclosure');
     detail.open=expanded;
     const detailTitle=el('summary');
-    detailTitle.append(el('span','','По категориям'),icon('right'));
-    detail.append(detailTitle);
-    right.append(detail);
-    const table=el('div','r182-category-table'), row=el('div','r182-cat-row r182-cat-head');
-    const headings=['Категория','Всего','Склад','Работа'];
-    if(hasRepairs)headings.push('Рем.');
-    row.append(...headings.map(title=>el('span','',title)));
-    table.append(row);
-    const categoryStates=[['total','Всего',''],...states];
-    for(const cat of categories.filter(x=>x.total>0)){
-      const line=el('div','r182-cat-row');
-      line.append(button(cat.name,()=>openCategoryStats(cat.name),'r182-cat-name'));
-      for(const [key,label,status] of categoryStates){
-        const count=button(countNum(cat[key]),()=>filterTo(status,cat.name),'r182-cat-num r182-color-'+key);
-        count.setAttribute('aria-label',cat.name+': '+label+' '+countNum(cat[key]));
-        line.append(count);
-      }
-      table.append(line);
+    detailTitle.append(el('span','','Оборудование'),icon('right'));
+    const other=el('div','r182-summary');
+    const printers=categoryWidget('Принтеры','Принтеры','printer',byName.get('Принтеры'));
+    const roomTiles=el('div','r182-printer-locations');
+    for(const [name,type] of [['Склад','storage'],['Офис','office']]){
+      const sameType=printerRooms.filter(room=>room.type===type);
+      const room=printerRooms.find(room=>room.name===name) || (sameType.length===1?sameType[0]:null);
+      const tile=button('',()=>filterTo('Принтеры','stock182',room.id),'r182-printer-location');
+      tile.disabled=!room;
+      tile.append(el('span','',room?.name||name),el('strong','',countNum(room?.count)));
+      roomTiles.append(tile);
     }
-    if(!categories.some(x=>x.total>0))table.append(el('p','r182-muted','Нет оборудования'));detail.append(table);
+    printers.append(roomTiles);
+    other.append(printers,categoryWidget('Ноутбуки','Ноутбуки','laptop',byName.get('Ноутбуки')));
+    detail.append(detailTitle,other);
+    dashboard.className='r182-overview card';
+    dashboard.replaceChildren(primary,detail);
+
     if(d){daily.className='card r182-daily';daily.replaceChildren(el('div','r182-overview-heading','Сводка за '+d.date.split('-').reverse().join('.')));const metrics=el('div','r182-numbers');for(const [key,label,color]of [['taken','Выдано','working'],['returned','Возвращено','stock'],['written_off','Списано','repair']]){const b=button('',()=>openDailyHistory(d.date,key),'r182-stat');b.append(el('strong','r182-color-'+color,countNum(d[key])),el('span','',label));metrics.append(b)}daily.append(metrics);}else{daily.replaceChildren();daily.className="hidden";}
-    low.className='card r182-low'+(short.length?'':' hidden');low.removeAttribute('style');low.replaceChildren();if(short.length){const h=el('div','r182-overview-heading');h.append(icon('alert'),el('span','','Заканчиваются расходники'));low.append(h);for(const item of short){const b=button('',()=>openItem(item.code),'r182-low-row');b.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));low.append(b)}}
+    low.className='card r182-consumables r182-disclosure';
+    const stockTitle=el('summary');
+    stockTitle.append(el('span','','Статистика расходников'),icon('right'));
+    const stockBody=el('div','r182-consumables-body');
+    low.replaceChildren(stockTitle,stockBody);
+    const metrics=el('div','r182-consumable-metrics');
+    for(const [label,value] of [['Позиций',consumables],['На исходе',short.length]]){
+      const metric=el('div','r182-consumable-metric');
+      metric.append(el('span','',label),el('strong','',countNum(value)));
+      metrics.append(metric);
+    }
+    stockBody.append(metrics);
+    for(const item of short){
+      const row=button('',()=>openItem(item.code),'r182-low-row');
+      row.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));
+      stockBody.append(row);
+    }
     filterItems();
   }
   let pendingOverview=null,lastOverview=0;

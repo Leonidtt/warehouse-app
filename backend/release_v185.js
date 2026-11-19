@@ -91,6 +91,7 @@ function installRooms1851(){
   let request=0;showRooms=async()=>{
     if(currentUser?.role!=='admin')return;
     const id=++request;showScreen('screen-rooms');updateNavActive('nav-rooms');$('batch-actions').style.display='none';
+    loadLowStock();
     if(!list.querySelector('.r1851-room-card')){const skeleton=document.createElement('div');skeleton.className='card';skeleton.textContent='Загрузка помещений…';list.replaceChildren(skeleton)}
     try{const rooms=await api('/api/locations_view');if(id!==request||currentUser?.role!=='admin')return;list.replaceChildren(...rooms.map(roomCard1851));if(!rooms.length)list.textContent='Нет помещений'}catch(e){if(id!==request)return;if(list.querySelector('.r1851-room-card'))notify(e.message||'Не удалось обновить помещения');else list.textContent=e.message||'Не удалось загрузить помещения'}
   };

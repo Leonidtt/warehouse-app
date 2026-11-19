@@ -161,15 +161,27 @@ def register_release(app, get_user, session):
                 FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code
                 LEFT JOIN (SELECT item_code,COUNT(*) qty FROM checkouts WHERE returned_at IS NULL GROUP BY item_code) h ON h.item_code=i.code
                 LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0''').fetchall()
+            printer_locations = conn.execute("""
+                SELECT l.id, l.name, l.type, COALESCE(SUM(CASE WHEN i.code IS NOT NULL
+                    THEN s.quantity ELSE 0 END), 0) AS count
+                FROM locations l
+                LEFT JOIN stock s ON s.location_id=l.id AND s.quantity>0
+                LEFT JOIN items i ON i.code=s.item_code AND i.is_archived=0
+                    AND i.kind='equipment' AND i.category='Принтеры' AND i.needs_repair=0
+                GROUP BY l.id, l.name, l.type
+                ORDER BY l.id
+            """).fetchall()
             yesterday = conn.execute("SELECT date('now','-1 day')").fetchone()[0]
             daily = dict(conn.execute('''SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at)=?) AS taken,
                 ((SELECT COUNT(*) FROM checkouts WHERE date(returned_at)=?) + (SELECT COALESCE(SUM(quantity),0) FROM consumable_returns WHERE date(created_at)=?)) AS returned,
                 (SELECT COALESCE(SUM(quantity),0) FROM writeoffs WHERE date(created_at)=?) AS written_off''', (yesterday,)*4).fetchone())
         counts = dict(stock=0, working=0, repair=0, total=0)
         cats, booked, low = {}, [], []
+        consumables = 0
         for r in rows:
             stock, held = int(r['stock']), int(r['held'])
             if r['kind'] == 'consumable':
+                consumables += 1
                 if r['min_stock'] > 0 and stock <= r['min_stock']:
                     low.append(dict(code=r['code'], name=r['name'], stock=stock, minimum=r['min_stock'], unit=r['unit']))
                 continue
@@ -185,7 +197,15 @@ def register_release(app, get_user, session):
                 else:
                     target['stock'] += stock
                     target['working'] += held
-        return dict(counts=counts, categories=[dict(name=k, **v) for k,v in sorted(cats.items())], booked=booked, low=sorted(low,key=lambda r:r['name'].casefold()), daily=dict(date=yesterday, **daily) if user['role']=='admin' else None)
+        return dict(
+            counts=counts,
+            categories=[dict(name=name, **values) for name, values in sorted(cats.items())],
+            booked=booked,
+            low=sorted(low, key=lambda row: row['name'].casefold()),
+            daily=dict(date=yesterday, **daily) if user['role']=='admin' else None,
+            printer_locations=[dict(row) for row in printer_locations],
+            consumables=consumables,
+        )
 
     with session() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS warehouse_release_meta (version TEXT PRIMARY KEY)')
