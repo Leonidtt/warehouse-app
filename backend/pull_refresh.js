@@ -39,7 +39,7 @@
     let gesture=null,refreshing=false,finishTimer=null;
     let currentVersion=document.querySelector('meta[name="warehouse-app-version"]')?.content||'';
     const screen=()=>typeof currentScreen==='string'?document.getElementById(currentScreen):null;
-    const blocked=()=>!!document.querySelector('.modal-overlay:not(.hidden),dialog[open],.modal-content:not(.hidden)');
+    const blocked=()=>!!document.querySelector('.modal-overlay:not(.hidden),dialog[open]');
     const editing=target=>!!target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"],.bottom-nav,.floating-bar,.modal-content');
     const pageTop=()=>window.scrollY<3&&document.scrollingElement?.scrollTop<3;
     function showRing(distance,loading=false){
@@ -56,13 +56,16 @@
     }
     function translate(el,axis,distance,animate=false){
       if(!el?.isConnected)return;
+      el.dataset.warehouseGestureTick='';
       el.style.transition=animate?'transform 330ms cubic-bezier(.2,.85,.2,1)':'none';
       el.style.transform='translate3d('+(axis==='x'?distance:0)+'px,'+(axis==='y'?distance:0)+'px,0)';
     }
     function springBack(el,axis){
       if(!el?.isConnected)return;
       translate(el,axis,0,true);
-      setTimeout(()=>{if(el.isConnected&&el.style.transform==='translate3d(0px,0px,0)'){el.style.removeProperty('transform');el.style.removeProperty('transition')}},350);
+      const stamp=String(Date.now())+':'+String(Math.random());
+      el.dataset.warehouseGestureTick=stamp;
+      setTimeout(()=>{if(el.isConnected&&el.dataset.warehouseGestureTick===stamp){el.style.removeProperty('transform');el.style.removeProperty('transition');delete el.dataset.warehouseGestureTick;}},350);
     }
     function clearGesture(){
       if(gesture&&gesture.axis!=='none')springBack(gesture.root,gesture.axis);
