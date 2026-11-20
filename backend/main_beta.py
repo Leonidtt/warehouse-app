@@ -40,6 +40,7 @@ from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 from pwa_assets import render_icon_png
+from delivery_schedule import init_delivery_schedule, register_delivery_schedule
 
 import urllib3
 urllib3.disable_warnings()
@@ -1810,6 +1811,9 @@ register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
+with transaction() as conn:
+    init_delivery_schedule(conn)
+register_delivery_schedule(app, get_user, transaction, audit)
 with transaction() as conn:
     budget_migration = "beta-equipment-budgets-2026-11-20"
     if not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (budget_migration,)).fetchone():
