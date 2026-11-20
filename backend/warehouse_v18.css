@@ -401,10 +401,8 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   margin-top:12px;
 }
 .warehouse-room-actions button { margin:0; padding:8px; font-size:13px; }
-.warehouse-room-actions #add-consumable-btn { grid-column:1 / -1; }
 .warehouse-item-code { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
 .warehouse-item-code button { width:auto; min-height:32px; margin:0; padding:3px 9px; }
-.quick-consumable .r182-types, .quick-consumable .warehouse-save-template,
 .warehouse-consumable-form #add-name + button { display:none; }
 .warehouse-consumable-fields { display:grid; grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr); gap:8px; }
 .warehouse-consumable-fields > .input-group:last-child { grid-column:1 / -1; }

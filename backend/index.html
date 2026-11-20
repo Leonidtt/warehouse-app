@@ -191,7 +191,7 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-    <link rel="stylesheet" href="/warehouse-v18.css?v=1899">
+    <link rel="stylesheet" href="/warehouse-v18.css?v=1902">
     <script src="/warehouse-v18.js?v=1898"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=1894"></script>
@@ -200,7 +200,7 @@
     <link rel="stylesheet" href="/release-v184.css?v=1899">
     <script src="/release-v184.js?v=1900"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
-    <script src="/release-v185.js?v=1870"></script>
+    <script src="/release-v185.js?v=1902"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -580,8 +580,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         
         <!-- Кнопка создания товара перенесена сюда -->
         <div class="warehouse-room-actions">
-            <button class="ok" onclick="openAddItemModal('consumable')" id="add-consumable-btn">Добавить расходник</button>
-            <button class="secondary" onclick="openAddItemModal()" id="add-item-btn">Добавить товар</button>
+            <button class="secondary" onclick="openAddItemModal()" id="add-item-btn">Добавить</button>
             <button class="secondary" onclick="chooseConsumableLabels17()" id="consumable-labels-btn">QR расходников</button>
         </div>
         <details id="low-stock-banner" class="hidden">
@@ -2261,7 +2260,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         
         function showAddForm() { openAddItemModal(); }
 
-        function openAddItemModal(kind) {
+        function openAddItemModal() {
             document.getElementById("add-name").value = "";
             document.getElementById("add-code").value = "";
             document.getElementById("qr-preview-box").classList.add("hidden");
@@ -2292,12 +2291,10 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             $('add-supplier').value = '';
             $('add-category').value = '';
             $('add-location').value = '';
-            restoreDraft17(kind);
-            if (kind) $('add-kind').value = kind;
+            restoreDraft17();
             if ($('add-kind').value === 'equipment' && !$('add-location').value && locations.length) {
                 $('add-location').value = String(locations[0].id);
             }
-            modal.classList.toggle('quick-consumable', kind === 'consumable');
             toggleFields();
             syncKitTotal('add');
             modal.querySelectorAll('details[open]').forEach(details => { details.open = false; });
@@ -2551,7 +2548,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         async function showQr(){const code=currentItem.code,name=currentItem.name;const {b}=overlay17('Этикетка · '+name);const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);btn17(b,'Копировать код: '+code,()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));try{if(currentUser.role==='admin'){const path='/api/label/'+encodeURIComponent(code);await image17(img,path);btn17(b,'Скачать PNG · 203 dpi',()=>downloadFile(path,code+'.png'));btn17(b,'Скачать PDF · 50 × 80 мм',()=>downloadFile(path+'?format=pdf',code+'.pdf'));btn17(b,'Скачать PDF · 300 dpi',()=>downloadFile(path+'?format=pdf&dpi=300',code+'.pdf'))}else{await image17(img,'/api/label/'+encodeURIComponent(code))}}catch(e){notify(e.message)}}
         function draftKey17(){return 'warehouse_main_draft_'+(currentUser?.tg_id||'none')}
         function clearDraft17(){try{localStorage.removeItem(draftKey17())}catch(e){}}
-        function restoreDraft17(kind){try{const d=JSON.parse(localStorage.getItem(draftKey17())||'{}');if(kind&&d['add-kind']!==kind)return;for(const [id,v]of Object.entries(d)){const el=$(id);if(el&&el.type!=='file')el.value=v}}catch(e){}}
+        function restoreDraft17(){try{const d=JSON.parse(localStorage.getItem(draftKey17())||'{}');for(const [id,v]of Object.entries(d)){const el=$(id);if(el&&el.type!=='file')el.value=v}}catch(e){}}
         $('create-item-modal').addEventListener('input',()=>{if(!currentUser)return;const data={};$('create-item-modal').querySelectorAll('input,select').forEach(e=>{if(e.type!=='file')data[e.id]=e.value});try{localStorage.setItem(draftKey17(),JSON.stringify(data))}catch(e){}});
         async function loadCategories17(){try{categories17=await api('/api/categories');categories17=categories17.map(c=>typeof c==='string'?c:c.name);for(const id of ['add-category','edit-category','filter-category']){const el=$(id),v=el.value;el.replaceChildren(new Option(id==='filter-category'?'Все категории':'Без категории',''));categories17.forEach(c=>el.add(new Option(c,c)));el.value=v}}catch(e){notify(e.message)}}
         function matchesStatus17(i,status){if(status==='free')return i.kind==='equipment'&&!i.needs_repair&&!i.holders.length&&i.total>0&&!booked17.has(i.code);if(status==='on_hand')return i.holders.length>0;if(status==='repair')return !!i.needs_repair;if(status==='booked_today')return booked17.has(i.code);if(status==='low_stock')return !!i.is_low;return true}

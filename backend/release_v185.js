@@ -87,7 +87,7 @@ function roomCard1851(room){
 function installRooms1851(){
   document.querySelectorAll('.sticky-header').forEach(h=>{if(h.querySelector('.v18-header-left')&&h.querySelector('.v18-header-right'))h.classList.add('r1851-balanced')});
   const detail=$('screen-room-view'),select=detail.querySelector('button[onclick="selectAllInRoom()"]');if(select){const row=document.createElement('div');row.className='r1851-room-actions';detail.querySelector('.sticky-header').after(row);row.append(select)}
-  const section=$('screen-rooms'),list=$('rooms-list'),add=$('add-item-btn');section.querySelector('.sticky-title').textContent='Склад';add.parentElement.classList.add('r1851-add-wrap');add.replaceChildren(icon1851('plus'),document.createTextNode('Добавить товар'));const label=document.createElement('h2');label.className='r1851-rooms-label';label.textContent='ПОМЕЩЕНИЯ';list.before(label);
+  const section=$('screen-rooms'),list=$('rooms-list'),add=$('add-item-btn');section.querySelector('.sticky-title').textContent='Склад';add.parentElement.classList.add('r1851-add-wrap');add.prepend(icon1851('plus'));const label=document.createElement('h2');label.className='r1851-rooms-label';label.textContent='ПОМЕЩЕНИЯ';list.before(label);
   let request=0;showRooms=async()=>{
     if(currentUser?.role!=='admin')return;
     const id=++request;showScreen('screen-rooms');updateNavActive('nav-rooms');$('batch-actions').style.display='none';
