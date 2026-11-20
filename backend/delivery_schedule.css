@@ -19,6 +19,9 @@
 .delivery-person-top strong{min-width:0;overflow-wrap:anywhere}
 .delivery-department{font-size:10px;color:var(--text-muted);font-weight:600;white-space:nowrap}
 .delivery-equipment{margin:7px 0 0;font-size:12px;font-weight:700}
+.delivery-held .delivery-equipment{color:var(--success)}
+.delivery-venue{display:flex;align-items:center;gap:7px;margin-top:5px;font-size:12px;overflow-wrap:anywhere}
+.delivery-venue-dot{flex:0 0 12px;height:12px;border-radius:50%;border:1px solid var(--text-muted)}
 .delivery-note{margin:3px 0 0;color:var(--text-muted);font-size:11px;line-height:1.45;overflow-wrap:anywhere}
 .delivery-review .delivery-person{border-style:dashed}
 .delivery-ignored{padding:8px 0;border-top:1px solid var(--border);font-size:12px}

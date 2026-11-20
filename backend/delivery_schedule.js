@@ -45,18 +45,31 @@ function installDeliverySchedule(){
     const item=el('article','delivery-person');
     const top=el('div','delivery-person-top');
     top.append(el('strong','',row.person),el('span','delivery-department',row.department));
-    const type=el('div','delivery-equipment','Фотоаппарат');
-    const note=el('p','delivery-note');
-    note.textContent=row.venue
-      ?'Площадка: '+row.venue+' · По графику: '+row.assignment
-      :'Площадка не уточнена · В графике: '+row.assignment;
-    item.append(top,type,note);return item;
+    item.append(top);
+    if(row.status==='delivery'){
+      const text=row.camera_count===null?'Уточните получателя':row.camera_count>0?'Фотоаппарат на руках':'Нужен фотоаппарат';
+      item.append(el('div','delivery-equipment',text));
+    }
+    const location=el('div','delivery-venue');
+    if(row.venue&&/^#[0-9a-f]{6}$/i.test(row.venue_color||'')){
+      const dot=el('span','delivery-venue-dot');
+      dot.style.backgroundColor=row.venue_color;
+      dot.setAttribute('aria-hidden','true');
+      location.append(dot);
+    }
+    location.append(el('span','',row.venue?'Площадка: '+row.venue:'Площадка не уточнена'));
+    item.append(location);
+    if(row.assignment&&row.assignment!==row.venue){
+      item.append(el('p','delivery-note','По графику: '+row.assignment));
+    }
+    return item;
   };
   const draw=data=>{
     list.replaceChildren();
     const entries=data.rows||[];
-    const ready=entries.filter(x=>x.status==='delivery');
-    const review=entries.filter(x=>x.status==='review');
+    const ready=entries.filter(x=>x.status==='delivery'&&x.camera_count===0);
+    const held=entries.filter(x=>x.status==='delivery'&&x.camera_count>0);
+    const review=entries.filter(x=>x.status==='review'||(x.status==='delivery'&&x.camera_count===null));
     const ignored=entries.filter(x=>x.status==='excluded');
     count.textContent=ready.length?ready.length+' фотоапп.':'';
     if(!data.meta){
@@ -80,7 +93,8 @@ function installDeliverySchedule(){
       items.forEach(x=>section.append(card(x)));
       list.append(section);
     };
-    group('Нужно подготовить',ready,'delivery-ready');
+    group('Нужно привезти',ready,'delivery-ready');
+    group('Уже есть',held,'delivery-held');
     group('Требует уточнения',review,'delivery-review');
     if(ignored.length){
       const skip=el('details','delivery-ignored');
@@ -141,5 +155,5 @@ function installDeliverySchedule(){
   const initBefore=init;
   init=async()=>{const result=await initBefore();if(toggleAccess()){panel.open=true;await reload();}return result;};
   const loadBefore=loadItems;
-  loadItems=async(...args)=>{const result=await loadBefore(...args);if(panel.open&&permitted())reload();return result;};
+  loadItems=async(...args)=>{const result=await loadBefore(...args);if(panel.open&&permitted())reload(true);return result;};
 }
