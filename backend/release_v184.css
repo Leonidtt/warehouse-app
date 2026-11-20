@@ -126,3 +126,17 @@ details[open] > .r1856-heading .r1856-chevron { transform: rotate(45deg); }
 .r1859-boss-cost-budget.kc{background:rgba(255,59,48,.13);color:var(--danger)}
 .r1859-boss-cost-price{justify-self:end;font-size:12px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
 .r1859-boss-cost-empty{padding:var(--warehouse-table-cell-padding)}
+
+.r1853-person-line.r1853-held-line{grid-template-columns:minmax(0,90px) minmax(34px,53px) minmax(34px,53px) minmax(25px,36px) minmax(32px,1fr) 10px}
+.r1853-total.laptop,.r1853-cell.laptop{color:var(--primary)}
+
+.standalone-flash-form .r182-form-grid:has(input[id$="-kit-body"]),
+.standalone-flash-form .r182-form-grid:has(input[id$="-kit-lens"]),
+.standalone-flash-form .r182-form-grid:has(input[id$="-kit-acc"]),
+.standalone-flash-form .r182-form-grid:has(input[id$="-kit-add"]),
+.standalone-flash-form .input-group:has(#add-price-eq),
+.standalone-flash-form .input-group:has(#edit-price),
+.standalone-flash-form #equipment-fields .r182-form-total{display:none!important}
+
+#item-kit-section{padding:8px}
+#item-kit-section>h3{margin:0 0 8px;font-size:14px}

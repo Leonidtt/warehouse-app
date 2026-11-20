@@ -27,12 +27,12 @@ import tempfile
 import secrets
 import re
 from urllib.parse import urlsplit
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
-from release_v184 import effective_user, register_184
+from release_v184 import effective_user, is_standalone_flash, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
@@ -58,7 +58,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.12"
+APP_VERSION = "18.5.13"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -166,6 +166,23 @@ def backfill_legacy_guest_contacts(conn):
     return created, transferred
 
 
+def clean_camera_names(conn):
+    camera_categories = {"фотокомплекты", "фотоаппараты", "фотокамеры", "камеры"}
+    camera_word = re.compile(r"\b(?:фотоаппарат|фотокамера)\b", re.IGNORECASE)
+    kit_word = re.compile(r"(?<!\w)комплект(?!\w)[ \t]*", re.IGNORECASE)
+    rows = conn.execute(
+        "SELECT id, name, category FROM items WHERE kind='equipment'"
+    ).fetchall()
+    for row in rows:
+        name = row["name"]
+        category = (row["category"] or "").strip().casefold()
+        if category not in camera_categories and not camera_word.search(name):
+            continue
+        new_name = kit_word.sub("", name).strip() if kit_word.search(name) else name
+        if new_name and new_name != name:
+            conn.execute("UPDATE items SET name=? WHERE id=?", (new_name, row["id"]))
+
+
 def init_db(db_path):
     # Создаем директорию для файла базы данных, если ее нет
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -262,6 +279,7 @@ def init_db(db_path):
         c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
     init_telegram_onboarding(conn)
+    clean_camera_names(conn)
     init_return_reminders(conn)
     conn.commit(); conn.close()
 
@@ -377,6 +395,18 @@ def budget_for_equipment_name(name: str) -> str:
     return "ТХ" if actual.casefold().startswith(("т", "t")) else "КЦ"
 
 
+def audit_buyout(conn, actor, code, name, previous, current):
+    if previous == current:
+        return
+    if not previous:
+        action, detail = "Выкуп внесён", current
+    elif not current:
+        action, detail = "Выкуп снят", previous
+    else:
+        action, detail = "Выкуп изменён", f"{previous} → {current}"
+    audit(conn, actor, action, f"{name} ({code})\n{detail}")
+
+
 def active_item(conn, code):
     row=conn.execute("SELECT * FROM items WHERE code=? AND is_archived=0",(code,)).fetchone()
     if not row: raise HTTPException(404,"Товар не найден")
@@ -426,6 +456,7 @@ class BuyoutAmounts(BaseModel):
 
 
 class ItemUpdate(BaseModel):
+    code: Optional[str] = None
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; kit_acc: str; kit_add: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""; price_body: float = 0; price_lens: float = 0; price_flash: float = 0; price_acc: float = 0; price_add: float = 0
     buyout: Optional[BuyoutAmounts] = None
 class ImportTextRequest(BaseModel):
@@ -890,20 +921,57 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
         if buyout_remaining > buyout_total:
             raise HTTPException(400, "Остаток не может быть больше суммы выкупа")
 
+    new_code = code if req.code is None else req.code.strip()
+    if new_code != code and (not re.fullmatch(r"[\w.-]{1,64}", new_code) or new_code in {".", ".."}):
+        raise HTTPException(400, "Недопустимый код")
+
     with transaction() as conn:
         existing = active_item(conn, code)
         if existing["kind"] != req.kind:
             raise HTTPException(409, "Тип существующего товара менять нельзя")
+        if new_code != code:
+            if conn.execute("SELECT 1 FROM items WHERE code=?", (new_code,)).fetchone():
+                raise HTTPException(409, "Этот код уже используется")
+            for table in ("stock", "bookings", "comments", "checkouts", "movements", "writeoffs",
+                          "lost_items", "receipts", "consumable_returns", "equipment_buyout_amounts"):
+                conn.execute(f"UPDATE {table} SET item_code=? WHERE item_code=?", (new_code, code))
+            for table in ("item_metadata", "repair_records"):
+                conn.execute(f"UPDATE {table} SET code=? WHERE code=?", (new_code, code))
+            for profile in conn.execute("SELECT user_id, data FROM v18_profiles").fetchall():
+                data = json.loads(profile["data"])
+                changed = False
+                for field in ("favorites", "recent"):
+                    if code in data.get(field, []):
+                        changed = True
+                        data[field] = list(dict.fromkeys(new_code if value == code else value
+                                                        for value in data[field]))
+                for name, codes in data.get("kits", {}).items():
+                    if code in codes:
+                        changed = True
+                        data["kits"][name] = list(dict.fromkeys(new_code if value == code else value
+                                                               for value in codes))
+                if changed:
+                    conn.execute("UPDATE v18_profiles SET data=? WHERE user_id=?",
+                                 (json.dumps(data, ensure_ascii=False), profile["user_id"]))
+        previous_amounts = conn.execute(
+            "SELECT total_cents, remaining_cents FROM equipment_buyout_amounts WHERE item_code=?", (new_code,)
+        ).fetchone()
         if req.kind == "consumable":
             req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
             req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
+        elif is_standalone_flash(req.category, req.name):
+            # Retain previously stored components when editing a legacy flash.
+            for key in ("body", "lens", "acc", "add"):
+                for prefix in ("kit", "price"):
+                    field = f"{prefix}_{key}"
+                    setattr(req, field, existing[field])
         conn.execute("""UPDATE items SET
-            name=?, kind=?, min_stock=?, price=?,
+            code=?, name=?, kind=?, min_stock=?, price=?,
             kit_body=?, kit_lens=?, kit_flash=?, kit_acc=?, kit_add=?,
             price_body=?, price_lens=?, price_flash=?, price_acc=?, price_add=?,
             budget_tag=?, serial_number=?, buyout_status=?, category=?
             WHERE code=?""", (
-                req.name, req.kind, req.min_stock, req.price,
+                new_code, req.name, req.kind, req.min_stock, req.price,
                 req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
                 req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
                 req.budget_tag, req.serial_number, req.buyout_status, req.category, code
@@ -912,13 +980,22 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
             conn.execute("""INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents)
                 VALUES(?,?,?) ON CONFLICT(item_code) DO UPDATE SET
                 total_cents=excluded.total_cents, remaining_cents=excluded.remaining_cents""",
-                (code, int(buyout_total * 100), int(buyout_remaining * 100)))
+                (new_code, int(buyout_total * 100), int(buyout_remaining * 100)))
         elif req.buyout is not None or not req.buyout_status.strip():
-            conn.execute("DELETE FROM equipment_buyout_amounts WHERE item_code=?", (code,))
+            conn.execute("DELETE FROM equipment_buyout_amounts WHERE item_code=?", (new_code,))
         if req.category:
             conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (req.category,))
-        audit(conn, actor, "Изменение товара", code)
-    return {"status": "ok"}
+        audit_buyout(conn, actor, new_code, req.name, (existing["buyout_status"] or "").strip(),
+                     req.buyout_status.strip())
+        if buyout_total is not None:
+            amounts = (int(buyout_total * 100), int(buyout_remaining * 100))
+            if previous_amounts is None or tuple(previous_amounts) != amounts:
+                audit(conn, actor, "Сумма выкупа изменена",
+                      f"{req.name} ({new_code})\nСумма {buyout_total} ₽, остаток {buyout_remaining} ₽")
+        elif previous_amounts is not None and (req.buyout is not None or not req.buyout_status.strip()):
+            audit(conn, actor, "Сумма выкупа снята", f"{req.name} ({new_code})")
+        audit(conn, actor, "Изменение товара", code if new_code == code else f"{code} → {new_code}")
+    return {"status": "ok", "code": new_code}
 
 @app.post("/api/items/{code}/repair")
 async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
@@ -961,6 +1038,9 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
         metadata = passport_values(ItemMetadata(unit=unit, supplier=supplier, notes=notes))
         kit_body=kit_lens=kit_flash=kit_acc=kit_add=serial_number=buyout_status=""
         price_body=price_lens=price_flash=price_acc=price_add=0
+    elif is_standalone_flash(category, name):
+        kit_body = kit_lens = kit_acc = kit_add = ""
+        price_body = price_lens = price_acc = price_add = 0
     photo_base64=""
     if photo:
         raw=await photo.read(5*1024*1024+1)
@@ -1000,6 +1080,7 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
         if category:
             conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (category,))
         audit(conn, actor, "Создание товара", code)
+        audit_buyout(conn, actor, code, name, "", buyout_status.strip())
     return {"status": "ok", "code": code}
 
 @app.get("/api/checkout/recipients")
@@ -1083,7 +1164,7 @@ def _checkout_one(conn,user,code,taken_for,recipient_id=None):
         INSERT INTO checkouts(item_code,user_id,giver_id,location_id,taken_for)
         VALUES(?,?,?,?,?) RETURNING id,taken_at
     """, (code,target,user["tg_id"],stock["location_id"],taken_for)).fetchone()
-    if target > 0:
+    if target > 0 or user["tg_id"] > 0:
         queue_return_reminder(conn,record["id"],record["taken_at"])
     conn.execute("UPDATE stock SET quantity=quantity-1 WHERE item_code=? AND location_id=?",(code,stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code=? AND quantity=0",(code,))
@@ -1358,6 +1439,50 @@ def administrative_audit(x_init_data: Optional[str] = Header(None)):
     check_owner(x_init_data)
     with transaction() as conn:
         return [dict(r) for r in conn.execute('SELECT a.*,u.full_name FROM audit_log a LEFT JOIN users u ON a.user_id=u.tg_id ORDER BY a.id DESC LIMIT 500')]
+
+@app.get("/api/settings/history/payments")
+def payment_history(x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    with closing(get_conn()) as conn:
+        return [dict(row) for row in conn.execute("""
+            SELECT 'Закупка' AS action, r.item_code AS code, i.name,
+                   r.quantity * r.unit_price AS amount, r.quantity,
+                   u.full_name, r.user_id, l.name AS location, r.created_at AS created_at,
+                   r.id AS record_id
+            FROM receipts r
+            LEFT JOIN items i ON i.code = r.item_code
+            LEFT JOIN users u ON u.tg_id = r.user_id
+            LEFT JOIN locations l ON l.id = r.location_id
+            UNION ALL
+            SELECT 'Ремонт', r.code, i.name, r.cost, NULL, NULL, NULL, NULL,
+                   r.finished_at, r.id
+            FROM repair_records r
+            LEFT JOIN items i ON i.code = r.code
+            WHERE r.finished_at IS NOT NULL AND r.cost > 0
+            ORDER BY created_at DESC, action, record_id DESC LIMIT 500
+        """)]
+
+
+@app.get("/api/settings/history/{section}")
+def settings_history(section: str, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    if section == "additions":
+        actions = ("Создание товара", "Пополнение")
+    elif section == "buyouts":
+        actions = ("Выкуп внесён", "Выкуп изменён", "Выкуп снят", "Сумма выкупа изменена", "Сумма выкупа снята")
+    else:
+        raise HTTPException(404, "Раздел истории не найден")
+    placeholders = ", ".join("?" for _ in actions)
+    with closing(get_conn()) as conn:
+        return [dict(row) for row in conn.execute(f"""
+            SELECT a.action, a.subject, a.created_at, a.user_id, u.full_name, i.name
+            FROM audit_log a
+            LEFT JOIN users u ON u.tg_id = a.user_id
+            LEFT JOIN items i ON i.code = a.subject AND ? = 'additions'
+            WHERE a.action IN ({placeholders})
+            ORDER BY a.id DESC LIMIT 500
+        """, (section, *actions))]
+
 
 @app.get('/api/backup')
 def download_backup(x_init_data: Optional[str] = Header(None)):

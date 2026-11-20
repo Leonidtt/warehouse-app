@@ -348,7 +348,8 @@ function installRelease182(){
     custom.setAttribute('aria-pressed',String(!standardUnits.includes(value)));
     $('add-unit').classList.toggle('hidden',standardUnits.includes(value));
     field('add-price').querySelector('label').textContent='Цена за '+(value||'единицу');
-    eqTotal.replaceChildren(el('span','','Стоимость комплекта'),el('b','',money182(parts.reduce((a,k)=>a+n('add-price-'+k),0)||n('add-price-eq'))));
+    const flashOnly=flashCategoryForm('add');
+    eqTotal.replaceChildren(el('span','',flashOnly?'Стоимость вспышки':'Стоимость комплекта'),el('b','',money182((flashOnly?['flash']:parts).reduce((a,k)=>a+n('add-price-'+k),0)||n('add-price-eq'))));
     cTotal.replaceChildren(el('span','','Стоимость партии'),el('b','',money182(n('add-qty')*n('add-price'))));
     for(const [value,b] of tabs){
       b.classList.toggle('active',kind===value);
@@ -364,6 +365,7 @@ function installRelease182(){
   toggleFields=()=>{oldToggle();formTotals();showDuplicate()};
   $('add-name').addEventListener('input',showDuplicate);
   body.addEventListener('input',formTotals);
+  $('add-category').addEventListener('change',formTotals);
   formTotals();
   const edit=$('screen-edit-item');edit.classList.add('r182-edit');const editBody=$('edit-name').closest('.input-group').parentElement;const oldHeading=editBody.querySelector('h2');oldHeading.classList.add('r182-form-title');for(const k of parts){const a=field('edit-kit-'+k),b=field('edit-price-'+k);const marker=document.createComment('pair');a.before(marker);marker.replaceWith(pair(a,b))}
   const editFooter=el('div','r182-edit-footer');const editSave=edit.querySelector('button[onclick="saveEditItem()"]');editSave.before(editFooter);editFooter.append(editSave);

@@ -56,14 +56,16 @@ def claim_due_reminder(transaction, limited_recipient, now):
     with transaction() as conn:
         owner = limited_recipient(conn)
         row = conn.execute("""
-            SELECT r.token, c.user_id, i.name
+            SELECT r.token, u.tg_id AS user_id, i.name,
+                   CASE WHEN c.user_id < 0 THEN c.taken_for ELSE NULL END AS guest
             FROM checkout_return_reminders r
             JOIN checkouts c ON c.id=r.checkout_id AND c.returned_at IS NULL
             JOIN items i ON i.code=c.item_code AND i.kind='equipment' AND i.is_archived=0
-            JOIN users u ON u.tg_id=c.user_id AND u.is_registered=1 AND u.role!='guest'
+            JOIN users u ON u.tg_id=CASE WHEN c.user_id > 0 THEN c.user_id ELSE c.giver_id END
+                AND u.is_registered=1 AND u.role!='guest'
             WHERE r.sent=0 AND r.plan IS NULL AND r.attempts<3 AND r.retry_at<=?
-                AND c.user_id>0 AND (? IS NULL OR c.user_id=?)
-                AND NOT EXISTS (SELECT 1 FROM blocked_telegram b WHERE b.tg_id=c.user_id)
+                AND u.tg_id>0 AND (? IS NULL OR u.tg_id=?)
+                AND NOT EXISTS (SELECT 1 FROM blocked_telegram b WHERE b.tg_id=u.tg_id)
             ORDER BY r.retry_at, c.id
             LIMIT 1
         """, (now, owner, owner)).fetchone()
@@ -94,12 +96,16 @@ async def send_due_reminders(transaction, limited_recipient, client, bot_token, 
         for plan, label in PLANS.items():
             params = urlencode({'return_reminder': row['token'], 'return_plan': plan})
             buttons.append({'text': label, 'web_app': {'url': f'{public_url}/?{params}'}})
+        if row['guest']:
+            message = f'Гость {row["guest"][:150]} не вернул технику до полуночи: {row["name"][:200]}.'
+        else:
+            message = f'Ты не вернул технику до полуночи: {row["name"][:200]}. Оставил на руках или ночью сдашь?'
         try:
             response = await client.post(
                 f'https://api.telegram.org/bot{bot_token}/sendMessage',
                 json={
                     'chat_id': row['user_id'],
-                    'text': f'Ты не вернул технику до полуночи: {row["name"][:200]}. Оставил на руках или ночью сдашь?',
+                    'text': message,
                     'reply_markup': {'inline_keyboard': [buttons]},
                 },
             )
@@ -125,7 +131,7 @@ def register_return_reminders(app, get_user, transaction, limited_recipient, bot
                 FROM checkout_return_reminders r
                 JOIN checkouts c ON c.id=r.checkout_id AND c.returned_at IS NULL
                 JOIN items i ON i.code=c.item_code AND i.is_archived=0
-                WHERE r.token=? AND r.attempts>0 AND c.user_id=?
+                WHERE r.token=? AND r.attempts>0 AND (CASE WHEN c.user_id > 0 THEN c.user_id ELSE c.giver_id END)=?
             """, (request.token, user['tg_id'])).fetchone()
             if checkout is None:
                 raise HTTPException(404, 'Напоминание недоступно или выдача уже закрыта')

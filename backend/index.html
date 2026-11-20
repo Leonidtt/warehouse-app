@@ -186,13 +186,13 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
     <link rel="stylesheet" href="/warehouse-v18.css?v=1902">
-    <script src="/warehouse-v18.js?v=1901"></script>
+    <script src="/warehouse-v18.js?v=18513"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1877">
-    <script src="/release-v182.js?v=1901"></script>
+    <script src="/release-v182.js?v=18513"></script>
     <link rel="stylesheet" href="/release-v183.css?v=1877">
     <script src="/release-v183.js?v=1877"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1901">
-    <script src="/release-v184.js?v=1901"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=18513">
+    <script src="/release-v184.js?v=18513"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1877">
     <script src="/release-v185.js?v=1902"></script>
 <style>
@@ -590,15 +590,14 @@
             <div id="item-stock-rows" class="beta-item-tiles"></div>
             <div id="actions"></div>
 
-            <details class="beta-item-disclosure hidden" id="item-kit-section" open>
-                <summary>Комплектация</summary>
+            <section class="beta-item-disclosure hidden" id="item-kit-section">
+                <h3>Комплектация</h3>
                 <div id="kit-box" class="beta-item-tiles"></div>
-            </details>
+            </section>
             <details class="beta-item-disclosure" id="item-extra-section">
                 <summary>Дополнительно</summary>
                 <div id="item-facts" class="beta-item-tiles"></div>
                 <div id="beta-item-tools">
-                    <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
                     <button type="button" class="secondary" id="item-qr-details" onclick="showQr()">QR-этикетка</button>
                 </div>
                 <div id="item-additional-actions"></div>
@@ -623,6 +622,7 @@
                 <button class="secondary" onclick="markLost()" id="lost-btn">Не нашёл на месте</button>
             </details>
             <button type="button" class="beta-item-history" onclick="showItemHistory()">История</button>
+            <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
         </article>
     </div>
 
@@ -674,6 +674,7 @@
             <div style="width: 80px;"></div>
         </div>
         <div style="margin-top: 16px;">
+            <div class="input-group"><label for="edit-code">Код товара</label><input id="edit-code"></div>
             <div class="input-group"><label>Название</label><input id="edit-name"></div>
             <div class="input-group"><label>Тип</label><select id="edit-kind" onchange="toggleEditFields()"><option value="equipment">Оборудование</option><option value="consumable">Расходник</option></select></div>
             <div class="input-group"><label>Категория</label><select id="edit-category"></select></div><div class="input-group edit-eq"><label>Серийный номер (S/N)</label><input id="edit-serial-number"></div>
@@ -1766,7 +1767,7 @@
                 const facts = [
                     ['Тип', isEquipment ? 'Оборудование' : 'Расходник'],
                     ['Бюджет', item.budget_tag],
-                    ['Совместимость', isStandaloneFlash1853(item) && (flashSuffixBrand1853(item.kit_flash) || flashSuffixBrand1853(item.name))],
+                    ['Совместимость', isStandaloneFlash1853(item) && flashSuffixBrand1853(item.kit_flash)],
                     ['Серийный номер', isEquipment && item.serial_number],
                     ['На выкупе у', isEquipment && item.buyout_status],
                 ];
@@ -1777,11 +1778,13 @@
                 const kit = $('kit-box');
                 const kitSection = $('item-kit-section');
                 kit.replaceChildren();
+                const standaloneFlash = isStandaloneFlash1853(item);
                 let componentTotal = 0;
                 if (isEquipment) {
                     for (const [key, label] of [['body','Тушка'],['lens','Объектив'],['flash','Вспышка'],['acc','Аксессуары'],['add','Допы']]) {
+                        if (standaloneFlash && key !== 'flash') continue;
                         const name = key==='flash' ? flashModelLabel1853(item.kit_flash) : item['kit_' + key];
-                        const price = canSeePrices ? Number(item['price_' + key]) || 0 : 0;
+                        const price = canSeePrices ? Number(item['price_' + key]) || (standaloneFlash ? Number(item.price) : 0) || 0 : 0;
                         if (!name && !price) continue;
                         const tile = name
                             ? itemTile(label, name)
@@ -1790,10 +1793,11 @@
                         kit.append(tile);
                         componentTotal += price;
                     }
-                    if (componentTotal > 0) kit.append(itemTile('Комплект · админы', money17(componentTotal), true));
+                    if (!standaloneFlash && componentTotal > 0) kit.append(itemTile('Комплект · админы', money17(componentTotal), true));
                 }
+                if (isEquipment && !kit.childElementCount && !standaloneFlash) kit.append(itemTile('Комплектация', 'Не указана'));
                 kitSection.classList.toggle('hidden', !kit.childElementCount);
-                kitSection.open = true;
+
 
                 const status = $('item-status-box');
                 const holder = item.holders[0];
@@ -1840,7 +1844,8 @@
             } catch (e) { if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message); } 
         }
         
-        function showEditForm() { 
+        function showEditForm() {
+            $("edit-code").value = currentItem.code; 
             document.getElementById("edit-name").value = currentItem.name; 
             document.getElementById("edit-kind").value = currentItem.kind; $("edit-kind").disabled=true; $("edit-category").value=currentItem.category||""; 
             const editPrice = $('edit-price');
@@ -1859,7 +1864,7 @@
             document.getElementById("edit-price-lens").value = currentItem.price_lens || 0; 
             
             document.getElementById("edit-kit-flash").value = currentItem.kit_flash || ""; 
-            document.getElementById("edit-price-flash").value = currentItem.price_flash || 0; 
+            document.getElementById("edit-price-flash").value = currentItem.price_flash || (isStandaloneFlash1853(currentItem) ? currentItem.price : 0) || 0; 
 
             document.getElementById("edit-kit-acc").value = currentItem.kit_acc || ""; 
             document.getElementById("edit-price-acc").value = currentItem.price_acc || 0; 
@@ -1885,14 +1890,25 @@
                 $("edit-price-label").textContent="Цена за единицу";
             }else{
                 $("edit-price-add").closest(".input-group").after(priceGroup);
-                syncKitTotal("edit");
             }
+            updateFlashFields("edit");
+        }
+        function flashCategoryForm(prefix) {
+            return isStandaloneFlash1853({
+                kind: $(prefix+'-kind').value, category: $(prefix+'-category').value, name: $(prefix+'-name').value
+            });
+        }
+        function updateFlashFields(prefix) {
+            const flashOnly = flashCategoryForm(prefix);
+            const root = $(prefix==='add'?'create-item-modal':'screen-edit-item');
+            root.classList.toggle('standalone-flash-form', flashOnly);
+            if ($(prefix+'-kind').value==='equipment') syncKitTotal(prefix);
         }
         function syncKitTotal(prefix) {
             const priceInput=$(prefix==="add"?"add-price-eq":"edit-price");
             const label=prefix==="add"?priceInput.closest(".input-group").querySelector("label"):$("edit-price-label");
             let cents=0, hasComponentPrice=false;
-            for(const key of ["body","lens","flash","acc","add"]){
+            for(const key of flashCategoryForm(prefix)?["flash"]:["body","lens","flash","acc","add"]){
                 const amount=Number($(prefix+"-price-"+key).value);
                 if(Number.isFinite(amount)&&amount>0){
                     hasComponentPrice=true;
@@ -1916,6 +1932,7 @@
             if(match && $(match[1]+"-kind").value==="equipment")syncKitTotal(match[1]);
         });
         
+        let syncRenamedItemProfile = () => {};
         async function saveEditItem() { 
             const btn = document.querySelector("#screen-edit-item .ok"); 
             const name = document.getElementById("edit-name").value.trim(); 
@@ -1947,8 +1964,8 @@
             const savedCode=currentItem.code,epoch=screenEpoch184;
             setLoading(btn, true, "Сохранение..."); 
             try { 
-                await api(`/api/items/${encodeURIComponent(savedCode)}/update`, { method: "POST", body: JSON.stringify({ 
-                    name, kind, min_stock: minStock, price, 
+                const result = await api(`/api/items/${encodeURIComponent(savedCode)}/update`, { method: "POST", body: JSON.stringify({ 
+                    code: $("edit-code").value.trim(), name, kind, min_stock: minStock, price, 
                     kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
                     price_body, price_lens, price_flash, price_acc, price_add, 
                     budget_tag, serial_number, buyout_status, category:$("edit-category").value,
@@ -1957,7 +1974,8 @@
                         remaining: $('edit-buyout-remaining').value || null,
                     } : undefined
                 }) }); 
-                showToast("Сохранено"); setLoading(btn,false); loadItems(); if(currentScreen==="screen-edit-item"&&epoch===screenEpoch184){await openItem(savedCode);} 
+                if (savedCode !== result.code) syncRenamedItemProfile(savedCode,result.code);
+                showToast("Сохранено"); setLoading(btn,false); loadItems(); if(currentScreen==="screen-edit-item"&&epoch===screenEpoch184){await openItem(result.code);} 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
         }
         
@@ -2228,7 +2246,7 @@
         }
         
         
-        function toggleFields() { const c=$("add-kind").value==="consumable"; $("consumable-fields").classList.toggle("hidden",!c); $("equipment-fields").classList.toggle("hidden",c); }
+        function toggleFields() { const c=$("add-kind").value==="consumable"; $("consumable-fields").classList.toggle("hidden",!c); $("equipment-fields").classList.toggle("hidden",c); updateFlashFields("add"); }
         
         function showAddForm() { openAddItemModal(); }
 
@@ -2465,6 +2483,11 @@
 
         // Дополнения v17. Один интерфейс, один API для Telegram и браузера.
         const $ = id=>document.getElementById(id);
+        $('add-category').addEventListener('change',()=>updateFlashFields('add'));
+        $('edit-category').addEventListener('change',()=>updateFlashFields('edit'));
+        $('add-name').addEventListener('input',()=>updateFlashFields('add'));
+        $('edit-name').addEventListener('input',()=>updateFlashFields('edit'));
+
         const safe = escapeOwnerText;
         const jsArg17 = v=>safe(JSON.stringify(String(v??'')));
         const authHeaders17=()=>tg.initData?{'X-Init-Data':tg.initData}:{};
@@ -2563,6 +2586,39 @@
             }
             box.append(list);
         }
+        async function showSettingsHistory(section) {
+            const titles = {
+                payments: 'История оплат',
+                additions: 'История добавлений товаров',
+                buyouts: 'История выкупа',
+                audit: 'История администратора'
+            };
+            const title = titles[section];
+            const box = $('extra-content');
+            $('extra-title').textContent = title;
+            showScreen('screen-extra');
+            box.className = 'data-list';
+            box.textContent = 'Загрузка…';
+            try {
+                const rows = await api(section === 'audit' ? '/api/audit' : '/api/settings/history/' + section);
+                if (currentScreen !== 'screen-extra' || $('extra-title').textContent !== title) return;
+                box.replaceChildren();
+                if (!rows.length) box.textContent = 'Записей пока нет';
+                for (const row of rows) {
+                    const date = new Date(row.created_at.replace(' ', 'T') + 'Z').toLocaleString('ru-RU');
+                    const actor = row.full_name || (row.user_id ? 'ID ' + row.user_id : '');
+                    const code = row.code || row.subject;
+                    const item = row.name ? row.name + ' (' + code + ')' : code;
+                    const details = section === 'payments'
+                        ? [item, money17(row.amount), row.quantity && row.quantity + ' шт.', row.location]
+                        : [item];
+                    card17(box, row.action, [...details, date, actor].filter(Boolean).join('\n'));
+                }
+            } catch (e) {
+                if (currentScreen === 'screen-extra' && $('extra-title').textContent === title) box.textContent = e.message;
+            }
+        }
+
         async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await renderCategorySettings(box);}else if(section==='finance'){const [r,items]=await Promise.all([api('/api/dashboard'),api('/api/items')]);box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);renderFinanceEquipment17(box,items);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
         function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}

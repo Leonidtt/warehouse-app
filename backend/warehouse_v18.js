@@ -62,10 +62,18 @@ function installV18(openRoleMenu){
   group('Управление',[action('showUsers()','Пользователи','user'),action("showExtra('categories')",'Категории','grid'),[btn('',showBulk),'Массовое редактирование','edit'],action("showExtra('archive')",'Архив и восстановление','archive'),[btn('',showTemplates),'Шаблоны товаров','file']]);
   const roomsInput=$('new-location-name').closest('.input-group');group('Помещения',[[roomsInput],[byAction('createLocation()'),'Добавить помещение','plus'],[$('locations-list')]]);
   group('Учёт и аналитика',[action("showExtra('finance')",'Финансы','chart'),action("showExtra('purchases')",'Закупки','take'),[btn('',showUsage),'Использование техники','chart'],action('showInventory()','Инвентаризация','scan'),action("showExtra('inventorylog')",'История инвентаризаций','clock')]);
+  const adminHistory=btn('',()=>showSettingsHistory('audit'));
+  adminHistory.classList.add('owner-only','hidden');
+  group('История',[
+    [btn('',()=>showSettingsHistory('payments')),'История оплат','clock'],
+    [btn('',()=>showSettingsHistory('additions')),'История добавлений товаров','clock'],
+    [btn('',()=>showSettingsHistory('buyouts')),'История выкупа','clock'],
+    [adminHistory,'История администратора','clock']
+  ]);
   group('Экспорт и печать',[[ $('export-stock-btn'),'Выгрузить склад в Excel','file'],[btn('',()=>downloadFile('/api/v18/history.xlsx','history.xlsx')),'История в Excel','file'],[$('export-qr-btn'),'Печать QR-этикеток','scan'],[btn('',configureLabels),'Размер этикетки','settings']]);
-  const maintenance=group('Обслуживание',[[$('owner-terminal-btn'),'Терминал','web'],action("showExtra('audit')",'Журнал администратора','clock'),[btn('',sendOwnerBackup182),'Скачать резервную копию базы','file'],[btn('',()=>{if(confirm('Очистить настройки этого браузера?')){Object.keys(localStorage).filter(k=>k.startsWith('warehouse_main_')).forEach(k=>localStorage.removeItem(k));location.reload()}}),'Сбросить настройки браузера','refresh']],true);
+  const maintenance=group('Обслуживание',[[$('owner-terminal-btn'),'Терминал','web'],[btn('',sendOwnerBackup182),'Скачать резервную копию базы','file'],[btn('',()=>{if(confirm('Очистить настройки этого браузера?')){Object.keys(localStorage).filter(k=>k.startsWith('warehouse_main_')).forEach(k=>localStorage.removeItem(k));location.reload()}}),'Сбросить настройки браузера','refresh']],true);
   maintenance.id='beta-maintenance-settings';
-  const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад v18.5.10';settings.replaceChildren(settings_header,groups,footer);
+  const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад v18.5.13';settings.replaceChildren(settings_header,groups,footer);
   $('screen-login').querySelector('.login-card p').textContent='Открой склад в Telegram, выбери «Сайт» в настройках или профиле и введи одноразовый код.';$('screen-login').querySelector('.login-card h1').textContent='Склад · v18.4';
   $('user-info').onclick=()=>{
     const {o,b}=overlay17('Мой профиль');
@@ -93,6 +101,13 @@ function installV18(openRoleMenu){
   let profile={favorites:[],recent:[],kits:{},templates:{}},profileReady=false,profileQueue=Promise.resolve();
   async function loadProfile(){try{profile=await api('/api/v18/profile');cacheSet17('v18_profile',JSON.stringify(profile));profileReady=true}catch(e){try{profile=JSON.parse(cacheGet17('v18_profile')||'null')||profile}catch(_){}profileReady=false;showToast('Настройки профиля недоступны','error')}}
   function saveProfile(){const snapshot=JSON.stringify(profile);cacheSet17('v18_profile',snapshot);if(!profileReady)return;profileQueue=profileQueue.catch(()=>{}).then(()=>api('/api/v18/profile',{method:'PUT',body:snapshot})).catch(e=>notify('Не сохранено на сервере: '+e.message))}
+  syncRenamedItemProfile=(oldCode,newCode)=>{
+    const replace=codes=>[...new Set(codes.map(code=>code===oldCode?newCode:code))];
+    profile.favorites=replace(profile.favorites||[]);
+    profile.recent=replace(profile.recent||[]);
+    for(const [name,codes] of Object.entries(profile.kits||{}))profile.kits[name]=replace(codes);
+    saveProfile();
+  };
   function toggleFavorite(code){const n=profile.favorites.indexOf(code);if(n>=0)profile.favorites.splice(n,1);else profile.favorites.unshift(code);profile.favorites=profile.favorites.slice(0,300);saveProfile();renderFavorite();if(currentScreen==='screen-main')filterItems()}
   function renderFavorite(){const f=$('v18-favorite');if(!f||!currentItem)return;const on=profile.favorites.includes(currentItem.code);f.innerHTML=ico('star')+' '+(on?'В избранном':'В избранное');f.classList.toggle('v18-star',on);f.setAttribute('aria-pressed',String(on))}
   const favorite=btn('В избранное',()=>{if(currentItem)toggleFavorite(currentItem.code)},'star');favorite.id='v18-favorite';$('beta-item-tools').prepend(favorite);

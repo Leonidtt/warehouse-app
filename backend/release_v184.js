@@ -6,14 +6,12 @@ function flashSuffixBrand1853(value){
 }
 
 function flashModelLabel1853(value){
-  const model=String(value??'').trim();
-  const brand=flashSuffixBrand1853(model);
-  return brand ? `${model} (${brand})` : model;
+  return String(value??'').trim().replace(/\s*\((?:canon|sony|к[еэ]нон|канон|сони)\)\s*$/iu,'');
 }
 
 function isStandaloneFlash1853(item){
   const category=String(item.category||'').trim().toLowerCase();
-  return item.kind==='equipment' && (['вспышки','фотовспышки'].includes(category)
+  return item.kind==='equipment' && (['вспышка','вспышки','фотовспышка','фотовспышки'].includes(category)
     || /^(вспышка|фотовспышка)(?:\s|$)/iu.test(String(item.name||'').trim()));
 }
 
@@ -68,11 +66,8 @@ function installRelease184(){
 function compactData1857(i,booked){
   const clean=v=>String(v??'').trim();
   const meaningful=v=>!['','-','—','нет','none','0','n/a','без','не указан','не указана'].includes(clean(v).toLowerCase());
-  const parts=i.kind==='equipment'?[i.kit_body,i.kit_lens,flashModelLabel1853(i.kit_flash)].filter(meaningful).map(clean):[];
-  if(isStandaloneFlash1853(i) && !flashSuffixBrand1853(i.kit_flash)){
-    const brand=flashSuffixBrand1853(i.name);
-    if(brand)parts.push(brand);
-  }
+  const parts=i.kind==='equipment'?(isStandaloneFlash1853(i)
+    ? [flashModelLabel1853(i.kit_flash)] : [i.kit_body,i.kit_lens,flashModelLabel1853(i.kit_flash)]).map(clean).filter(meaningful):[];
   const summary=i.kind==='consumable'?String(i.total??0)+' '+(i.unit||'шт.'):parts.join(' · ');
   const states=[];
   if(i.needs_repair)states.push(['Ремонт','repair']);
@@ -172,15 +167,14 @@ function bossCounts1853(items,kind,standaloneFlash=false){
     if(q<=0)continue;
     const v=String(i[kind]||'').trim();
     const model=['','-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase())?i.name:v;
-    let brand=bossBrand1853(model,kind);
-    if(brand==='?'&&kind==='flash'&&Number(i.camera_count)===0)brand=bossBrand1853(i.name,kind);
+    const brand=bossBrand1853(kind==='flash'?v:model,kind);
     counts[brand]+=q;
   }
   return counts;
 }
 function bossCode1853(kind,brand,count,mode){
   if(!count)return '';
-  const letter=mode==='icons'?(brand==='К'?'C':brand==='С'?'S':'?'):(kind==='camera'?'Ф':'В')+brand;
+  const letter=kind==='flash'||mode==='icons'?(brand==='К'?'C':brand==='С'?'S':'?'):(kind==='camera'?'Ф':'В')+brand;
   return letter+(count>1?'×'+count:'');
 }
 function bossSurname1853(name){
@@ -189,7 +183,7 @@ function bossSurname1853(name){
 
   // Keep all three approved representations. Default: combined.
   const bossMode1853='combined'; // 'icons' | 'letters' | 'combined'
-  const bossIcons1853={camera:'<rect x="3" y="6" width="18" height="15" rx="3"/><path d="M8 6l2-3h4l2 3"/><circle cx="12" cy="13" r="3.5"/>',flash:'<path d="m13 2-9 12h7l-1 8 10-12h-7z"/>',arrow:'<path d="m9 5 7 7-7 7"/>'};
+  const bossIcons1853={laptop:'<rect x="5" y="4" width="14" height="12" rx="1"/><path d="M5 16l-3 4h20l-3-4"/>',camera:'<rect x="3" y="6" width="18" height="15" rx="3"/><path d="M8 6l2-3h4l2 3"/><circle cx="12" cy="13" r="3.5"/>',flash:'<path d="m13 2-9 12h7l-1 8 10-12h-7z"/>',arrow:'<path d="m9 5 7 7-7 7"/>'};
   function bossIcon1853(type){const n=document.createElementNS('http://www.w3.org/2000/svg','svg');n.setAttribute('viewBox','0 0 24 24');n.setAttribute('aria-hidden','true');n.setAttribute('class','r1853-icon');n.innerHTML=bossIcons1853[type];return n}
   function bossCell1853(p,kind,standaloneFlash=false){
     const n=el('span','r1853-cell '+kind),counts=bossCounts1853(p.items,kind,standaloneFlash),labels=el('span','r1853-labels'),total=Object.values(counts).reduce((a,b)=>a+b,0);
@@ -200,17 +194,26 @@ function bossSurname1853(name){
     for(const brand of ['К','С','?']){const q=counts[brand];if(!q)continue;labels.append(el('span','',bossCode1853(kind,brand,q,bossMode1853)));full.push((brand==='К'?'Canon':brand==='С'?'Sony':'бренд не указан')+' '+q)}
     n.append(labels);n.title=type+': '+full.join(', ');n.setAttribute('aria-label',n.title);return n
   }
+  function laptopCell1853(items){
+    const count=(items||[]).reduce((sum,item)=>sum+(Number(item.laptop_count)||0),0);
+    const cell=el('span','r1853-cell laptop');
+    cell.setAttribute('aria-label','Ноутбуки: '+count);
+    cell.title='Ноутбуки: '+count;
+    if(count)cell.append(bossIcon1853('laptop'),el('span','r1853-labels',String(count)));
+    else cell.append(el('span','r1853-empty','—'));
+    return cell;
+  }
   function bossTotal1853(kind,n){
-    const cell=el('span','r1853-total '+kind);cell.append(bossIcon1853(kind),el('strong','',String(n||0)));cell.title=(kind==='camera'?'Фотоаппараты':'Отдельные вспышки')+': '+(n||0);cell.setAttribute('aria-label',cell.title);return cell
+    const cell=el('span','r1853-total '+kind);cell.append(bossIcon1853(kind),el('strong','',String(n||0)));cell.title=(kind==='laptop'?'Ноутбуки':kind==='camera'?'Фотоаппараты':'Отдельные вспышки')+': '+(n||0);cell.setAttribute('aria-label',cell.title);return cell
   }
   function bossPerson1853(p,key,expanded,duplicates){
     const d=el('details','r1853-person');d.dataset.personKey=key;d.open=expanded;
-    const head=el('summary','r1853-person-line'),surname=bossSurname1853(p.name);
+    const head=el('summary','r1853-person-line r1853-held-line'),surname=bossSurname1853(p.name);
     const name=el('span','r1853-name',duplicates.has(surname)?p.name:surname);name.title=p.name;
     const buyout=(p.items||[]).filter(i=>String(i.buyout_status||'').trim());
     const flag=el('span','r1853-buyout',buyout.length?'Выкуп':'');if(buyout.length)flag.title='На выкупе: '+buyout.length;
     const arrow=el('span','r1853-arrow');arrow.append(bossIcon1853('arrow'));
-    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash',true),flag,arrow);d.append(head);
+    head.append(name,bossCell1853(p,'camera'),bossCell1853(p,'flash',true),laptopCell1853(p.items),flag,arrow);d.append(head);
     const content=el('div','r1853-person-details');content.append(el('div','r1853-full-name',p.name));
     for(const i of p.items||[]){
       const item=el('div','r1853-detail-item'),link=button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link');item.append(link);
@@ -297,7 +300,7 @@ function bossSurname1853(name){
       if(currentUser?.role!=='boss')return;
       const expanded=new Set([...bossBox.querySelectorAll('.r1853-person[open]')].map(d=>d.dataset.personKey));
       const held=el('div','card r184-boss-panel held r1853-held'),header=el('div','r1853-held-head');
-      header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.standalone_flashes??r.held.flashes));held.append(header);
+      header.append(el('h3','','На руках'),bossTotal1853('camera',r.held.cameras),bossTotal1853('flash',r.held.standalone_flashes??r.held.flashes),bossTotal1853('laptop',r.held.laptops));held.append(header);
       const list=el('div','r1853-people'),seen=new Set(),duplicates=new Set();
       for(const p of r.people){const s=bossSurname1853(p.name);if(seen.has(s))duplicates.add(s);seen.add(s)}
       let unknown=false;
@@ -359,12 +362,14 @@ function heldPeople1857(items){
   for(const i of items||[]){
     if(i.kind!=='equipment'||i.is_archived)continue;
     const cat=String(i.category||'').trim().toLowerCase(),name=String(i.name||'').trim().toLowerCase();
-    const camera_count=Number(present(i.kit_body)||['фотоаппараты','камеры'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name));
-    const flash_count=Number(present(i.kit_flash)||isStandaloneFlash1853(i));
+    const standaloneFlash=isStandaloneFlash1853(i);
+    const laptop_count=Number(['ноутбук','ноутбуки'].includes(cat)||/^ноутбук(?:\s|$)/iu.test(name));
+    const camera_count=Number(!standaloneFlash&&!laptop_count&&(present(i.kit_body)||['фотоаппараты','камеры','фотокамеры','фотокомплекты'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name)));
+    const flash_count=Number(!laptop_count&&(present(i.kit_flash)||standaloneFlash));
     for(const h of i.holders||[]){
       const person=String(h.taken_for||h.full_name||'Не указан').trim()||'Не указан',key=JSON.stringify([h.user_id??null,person]);
       if(!groups.has(key))groups.set(key,{person_id:h.user_id??null,name:person,items:[]});
-      groups.get(key).items.push({code:i.code,name:i.name,camera:i.kit_body,flash:i.kit_flash,lens:i.kit_lens,camera_count,flash_count,buyout_status:i.buyout_status,taken_at:h.taken_at});
+      groups.get(key).items.push({code:i.code,name:i.name,camera:camera_count?i.kit_body:null,flash:flash_count?i.kit_flash:null,lens:camera_count?i.kit_lens:null,camera_count,flash_count,laptop_count,buyout_status:i.buyout_status,taken_at:h.taken_at});
     }
   }
   return [...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'ru'));
