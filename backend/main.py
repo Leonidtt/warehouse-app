@@ -6,7 +6,7 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import qrcode
@@ -36,6 +36,7 @@ from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_export import register_snapshot_export
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
+from pwa_assets import render_icon_png
 
 import urllib3
 urllib3.disable_warnings()
@@ -1325,6 +1326,7 @@ async def web_session_middleware(request: Request, call_next):
 
 class WebLogin(BaseModel):
     code: str
+    pwa: bool = False
 
 @app.post("/api/web/code")
 def web_code(x_init_data: Optional[str]=Header(None)):
@@ -1342,15 +1344,16 @@ def web_login(req: WebLogin):
     code=re.sub(r"[ -]","",req.code).upper()
     if not re.fullmatch(r"[A-F0-9]{12}",code): raise HTTPException(400,"Введите код из Telegram")
     token=secrets.token_urlsafe(32)
+    session_ttl=2592000 if req.pwa else 43200
     with transaction() as conn:
         row=conn.execute("SELECT c.user_id FROM web_codes c JOIN users u ON u.tg_id=c.user_id WHERE digest=? AND expires>?",(web_digest(code),int(time.time()))).fetchone()
         if not row: raise HTTPException(401,"Код неверный или истёк")
         deny_blocked(conn, row[0], MAIN_ADMIN_ID)
         conn.execute("DELETE FROM web_codes WHERE digest=?",(web_digest(code),))
         conn.execute("DELETE FROM web_sessions WHERE expires<=?",(int(time.time()),))
-        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+43200))
+        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+session_ttl))
     response=JSONResponse({"status":"ok"})
-    response.set_cookie(WEB_COOKIE,token,max_age=43200,httponly=True,secure=True,samesite="strict",path="/")
+    response.set_cookie(WEB_COOKIE,token,max_age=session_ttl,httponly=True,secure=True,samesite="strict",path="/")
     return response
 
 @app.post("/api/web/logout")
@@ -1448,6 +1451,67 @@ register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_
 with transaction() as conn:
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4'), (?)", (APP_VERSION,))
 
+
+
+# PWA is a separate entrance to the SAME Main inventory and user accounts.
+# Render an opt-in HTML variant: leave the regular Telegram index.html untouched.
+_MAIN_PWA_DIR = Path(__file__).resolve().parent
+
+@app.get("/pwa", include_in_schema=False)
+def main_pwa_redirect():
+    return RedirectResponse("/pwa/", status_code=307)
+
+@app.get("/pwa/", include_in_schema=False)
+def main_pwa_home():
+    html=(_MAIN_PWA_DIR / "index.html").read_text(encoding="utf-8")
+    title_marker='<title>Склад</title>'
+    login_marker="JSON.stringify({code:$('web-code').value})"
+    if html.count(title_marker)!=1 or html.count(login_marker)!=1 or html.count('</head>')!=1 or html.count('</body>')!=1:
+        raise HTTPException(500,"Не удалось подготовить PWA")
+    meta='''<link rel="manifest" href="/pwa/manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="/pwa/icon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png">
+    <meta name="theme-color" content="#0e1534">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Склад">'''
+    styles='''<style>
+    @media(display-mode:standalone){body.pwa-mode{padding-top:env(safe-area-inset-top)}}
+    body.pwa-mode .sticky-header{top:env(safe-area-inset-top)}
+    .pwa-install-info{margin:16px 0 6px;padding:14px;border-radius:15px;background:var(--skeleton-bg);font-size:13px;line-height:1.55;text-align:left}
+    .pwa-install-info p{margin:5px 0}
+    .pwa-install-info button{margin:10px 0 0;min-height:40px}
+    </style>'''
+    html=html.replace(title_marker,title_marker+'\n    '+meta,1)
+    html=html.replace(login_marker,"JSON.stringify({code:$('web-code').value,pwa:true})",1)
+    html=html.replace('</head>',styles+'</head>',1)
+    html=html.replace('</body>','<script src="/pwa/client.js?v=1"></script>\n</body>',1)
+    return HTMLResponse(html,headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/manifest.webmanifest", include_in_schema=False)
+def main_pwa_manifest():
+    return FileResponse(_MAIN_PWA_DIR / "pwa_manifest.webmanifest",media_type="application/manifest+json",headers={"Cache-Control":"public,max-age=3600","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/sw.js", include_in_schema=False)
+def main_pwa_sw():
+    return FileResponse(_MAIN_PWA_DIR / "pwa_sw.js",media_type="text/javascript",headers={"Cache-Control":"no-cache,no-store,must-revalidate","Service-Worker-Allowed":"/pwa/","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/client.js", include_in_schema=False)
+def main_pwa_client():
+    return FileResponse(_MAIN_PWA_DIR / "pwa_client.js",media_type="text/javascript",headers={"Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/jsqr.js", include_in_schema=False)
+def main_pwa_jsqr():
+    return FileResponse(_MAIN_PWA_DIR / "pwa_jsqr.js",media_type="text/javascript",headers={"Cache-Control":"public,max-age=86400","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/offline.html", include_in_schema=False)
+def main_pwa_offline():
+    return FileResponse(_MAIN_PWA_DIR / "pwa_offline.html",media_type="text/html",headers={"Cache-Control":"public,max-age=3600","X-Content-Type-Options":"nosniff"})
+
+@app.get("/pwa/icon-{size}.png", include_in_schema=False)
+def main_pwa_icon(size:int):
+    if size not in (180,192,512): raise HTTPException(404,"Иконка не найдена")
+    return Response(content=render_icon_png(size),media_type="image/png",headers={"Cache-Control":"public,max-age=86400","X-Content-Type-Options":"nosniff"})
 
 @app.get("/")
 @app.get("/index.html")
