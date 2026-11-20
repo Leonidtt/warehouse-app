@@ -359,33 +359,30 @@ function heldPeople1857(items){
   }
 
 
-  // Show the shared cost list on Home for the warehouse keeper and Boss.
-  const bossCosts=el('details','card r1859-boss-cost beta-setting-details hidden');
-  bossCosts.id='boss-equipment-costs1859';
-  const bossCostsSummary=el('summary','r1859-boss-cost-summary');
-  const bossCostsTitle=el('strong','', 'Техника и стоимость');
-  const bossCostsCount=el('span','r1859-boss-cost-count','');
-  const bossCostsList=el('div','r1859-boss-cost-list');
-  bossCostsSummary.append(bossCostsTitle,bossCostsCount);
-  bossCosts.append(bossCostsSummary,bossCostsList);
-  const takeActions=main.querySelector('.v18-quick');
-  takeActions.before(bossCosts);
-  const canSeeCosts=()=>!!currentUser?.is_registered
-    &&(currentUser.role==='boss'||(currentUser.role==='admin'&&currentUser.is_owner));
-  let bossCostsJob=null;
-  function refreshBossCosts(){
+  const pricesBox=el('details','card r1856-buyouts beta-setting-details hidden');
+  pricesBox.id='boss-equipment-costs1859';
+  const pricesSummary=el('summary','r1856-heading');
+  const pricesTitle=el('span','r1856-title r1859-prices-title','Цены');
+  const pricesDot=el('span','r1859-prices-dot');
+  pricesDot.title='Только для администраторов';
+  pricesDot.setAttribute('role','img');
+  pricesDot.setAttribute('aria-label',pricesDot.title);
+  pricesTitle.append(pricesDot);
+  const pricesCount=el('span','meta r1856-count','0');
+  const pricesList=el('div','r1856-list r1859-boss-cost-list');
+  pricesSummary.append(pricesTitle,pricesCount,el('span','r1856-chevron'));
+  pricesBox.append(pricesSummary,pricesList);
+  buyoutBox1856.after(pricesBox);
+  const canSeeCosts=()=>!!currentUser?.is_registered&&admin();
+  let pricesJob=null;
+  function refreshPrices(){
     const allowed=canSeeCosts();
-    bossCosts.classList.toggle('hidden',!allowed);
-    if(!allowed){bossCosts.open=false;bossCostsList.replaceChildren();return}
-    if(currentUser.role==='admin'){
-      if(buyoutBox1856.nextElementSibling!==bossCosts)buyoutBox1856.after(bossCosts);
-    }else if(bossCosts.nextElementSibling!==takeActions){
-      takeActions.before(bossCosts);
-    }
-    if(bossCostsJob)return bossCostsJob;
-    bossCostsJob=api('/api/boss/equipment-costs').then(rows=>{
+    pricesBox.classList.toggle('hidden',!allowed);
+    if(!allowed){pricesBox.open=false;pricesCount.textContent='0';pricesList.replaceChildren();return}
+    if(pricesJob)return pricesJob;
+    pricesJob=api('/api/boss/equipment-costs').then(rows=>{
       if(!canSeeCosts())return;
-      bossCostsCount.textContent=String(rows.length)+' поз.';
+      pricesCount.textContent=String(rows.length);
       const fragment=document.createDocumentFragment();
       for(const item of rows){
         const row=button('',()=>openItem(item.code),'r1859-boss-cost-row');
@@ -398,20 +395,24 @@ function heldPeople1857(items){
         row.append(primary,cost);row.title=[item.name,item.budget_tag,model.textContent,cost.textContent].filter(Boolean).join(' · ');fragment.append(row);
       }
       if(!rows.length)fragment.append(el('div','meta r1859-boss-cost-empty','Нет оборудования'));
-      bossCostsList.replaceChildren(fragment);
-    }).catch(error=>{bossCostsList.textContent='Не удалось загрузить стоимость: '+(error?.message||'ошибка');return false}).finally(()=>{bossCostsJob=null});
-    return bossCostsJob;
+      pricesList.replaceChildren(fragment);
+    }).catch(error=>{
+      if(!canSeeCosts())return;
+      pricesList.textContent='Не удалось загрузить цены: '+(error?.message||'ошибка');
+      return false;
+    }).finally(()=>{pricesJob=null});
+    return pricesJob;
   }
   const oldLoad=loadItems;
   loadItems=async()=>{
     const loaded=await oldLoad();
     renderBuyout1856();
     renderHeld1857();
-    const summaries=await Promise.all([refreshBoss(),refreshBossCosts()]);
+    const summaries=await Promise.all([refreshBoss(),refreshPrices()]);
     return loaded&&!summaries.includes(false);
   };
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
-  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss();refreshBossCosts()};
+  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss();refreshPrices()};
   return choosePreview1854;
 }

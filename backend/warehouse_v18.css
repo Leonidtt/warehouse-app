@@ -480,9 +480,9 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   font-size:13px;
   overflow-wrap:anywhere;
 }
-button.secondary.warehouse-handoff {
-  background:var(--skeleton-bg);
-  color:var(--text);
+.warehouse-handoff {
+  background:var(--r182-primary,var(--primary));
+  color:white;
   box-shadow:none;
 }
 .warehouse-my-item-name { flex:1; min-width:0; cursor:pointer; overflow-wrap:anywhere; }

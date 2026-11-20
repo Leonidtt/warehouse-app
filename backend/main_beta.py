@@ -1540,7 +1540,7 @@ def finish_repair(code: str,req: RepairDetails,x_init_data: Optional[str]=Header
 @app.get("/api/boss/equipment-costs")
 def boss_equipment_costs(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
-    if not user.get("is_registered") or user["role"] not in ("boss", "admin"):
+    if not user.get("is_registered") or user["role"] != "admin":
         raise HTTPException(403, "Нет доступа")
     with contextmanager_session() as conn:
         rows = conn.execute("""SELECT code,name,budget_tag,kit_body,kit_lens,kit_flash,

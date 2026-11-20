@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import suppress
 import hashlib
+from html import escape
 import hmac
 
 import httpx
@@ -17,11 +18,16 @@ def register_telegram_app_bot(app, token, public_url, transaction, authorize, is
     endpoint = public_url + WEBHOOK_PATH
     app_url = public_url + "/pwa/"
 
-    def reply(chat_id, text, markup=None):
-        result = {"method": "sendMessage", "chat_id": chat_id, "text": text}
-        if markup:
-            result["reply_markup"] = markup
-        return result
+    def reply(chat_id, text, **options):
+        return {
+            "method": "sendMessage", "chat_id": chat_id, "text": text,
+            "reply_markup": {
+                "keyboard": [[{"text": "Приложение"}]],
+                "resize_keyboard": True,
+                "is_persistent": True,
+            },
+            **options,
+        }
 
     @app.post(WEBHOOK_PATH, include_in_schema=False)
     async def telegram_updates(request: Request):
@@ -45,8 +51,7 @@ def register_telegram_app_bot(app, token, public_url, transaction, authorize, is
             return {}
         command = command[0].split("@", 1)[0].casefold()
         if command in ("/start", "/help"):
-            return reply(chat_id, "Нажмите «Приложение», чтобы получить ссылку и код для входа.",
-                         {"keyboard": [[{"text": "Приложение"}]], "resize_keyboard": True})
+            return reply(chat_id, "Нажмите «Приложение», чтобы получить ссылку и код для входа.")
         if command not in ("приложение", "/app"):
             return {}
 
@@ -67,10 +72,12 @@ def register_telegram_app_bot(app, token, public_url, transaction, authorize, is
         return reply(
             chat_id,
             "Склад Бета — тот же склад в браузере.\n"
+            f'<a href="{escape(app_url, quote=True)}">Открыть приложение</a>\n\n'
             "На iPhone откройте ссылку в Safari и выберите «Поделиться → На экран Домой». "
             "На Android откройте ссылку в Chrome и выберите «Установить приложение».\n\n"
             f"Код для входа: {formatted}\nКод действует 5 минут. Никому его не передавайте.",
-            {"inline_keyboard": [[{"text": "Открыть приложение", "url": app_url}]]},
+            parse_mode="HTML",
+            link_preview_options={"is_disabled": True},
         )
 
     if not auto_configure:
@@ -96,8 +103,9 @@ def register_telegram_app_bot(app, token, public_url, transaction, authorize, is
                     if not current:
                         await telegram("setWebhook", url=endpoint, secret_token=secret, allowed_updates=["message"])
                     commands = await telegram("getMyCommands")
-                    if not any(row.get("command") == "app" for row in commands):
-                        await telegram("setMyCommands", commands=[*commands, {"command": "app", "description": "Ссылка на приложение и код для входа"}])
+                    remaining_commands = [row for row in commands if row.get("command") != "app"]
+                    if remaining_commands != commands:
+                        await telegram("setMyCommands", commands=remaining_commands)
                     print("Beta Telegram: application button webhook ready", flush=True)
                     return
                 except (httpx.HTTPError, RuntimeError, ValueError, TypeError, AttributeError):
