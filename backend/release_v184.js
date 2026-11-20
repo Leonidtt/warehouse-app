@@ -358,8 +358,44 @@ function heldPeople1857(items){
     heldList1857.replaceChildren(list);
   }
 
-  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();renderHeld1857();refreshBoss()};
+
+  // Boss-only cost overview. Keep this last on the Home screen and collapsed by default.
+  const bossCosts=el('details','card r1859-boss-cost hidden');
+  bossCosts.id='boss-equipment-costs1859';
+  const bossCostsSummary=el('summary','r1859-boss-cost-summary');
+  const bossCostsTitle=el('strong','', 'Техника и стоимость');
+  const bossCostsCount=el('span','r1859-boss-cost-count','');
+  const bossCostsList=el('div','r1859-boss-cost-list');
+  bossCostsSummary.append(bossCostsTitle,bossCostsCount);
+  bossCosts.append(bossCostsSummary,bossCostsList);
+  main.append(bossCosts);
+  let bossCostsJob=null;
+  function refreshBossCosts(){
+    const allowed=!!currentUser?.is_registered&&currentUser.role==='boss';
+    bossCosts.classList.toggle('hidden',!allowed);
+    if(!allowed){bossCosts.open=false;bossCostsList.replaceChildren();return}
+    if(bossCostsJob)return bossCostsJob;
+    bossCostsJob=api('/api/boss/equipment-costs').then(rows=>{
+      if(currentUser?.role!=='boss')return;
+      bossCostsCount.textContent=String(rows.length)+' поз.';
+      const fragment=document.createDocumentFragment();
+      for(const item of rows){
+        const row=button('',()=>openItem(item.code),'r1859-boss-cost-row');
+        const primary=el('span','r1859-boss-cost-primary');
+        const name=el('span','r1859-boss-cost-name',item.name);
+        const tag=el('span','r1859-boss-cost-budget '+(item.budget_tag==='ТХ'?'tx':'kc'),item.budget_tag||'КЦ');
+        const model=el('span','r1859-boss-cost-model',item.model||item.code);
+        primary.append(name,tag,model);
+        const cost=el('span','r1859-boss-cost-price',Number(item.price||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽');
+        row.append(primary,cost);row.title='Открыть карточку: '+item.name;fragment.append(row);
+      }
+      if(!rows.length)fragment.append(el('div','meta r1859-boss-cost-empty','Нет оборудования'));
+      bossCostsList.replaceChildren(fragment);
+    }).catch(error=>{bossCostsList.textContent='Не удалось загрузить стоимость: '+(error?.message||'ошибка')}).finally(()=>{bossCostsJob=null});
+    return bossCostsJob;
+  }
+  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();renderHeld1857();refreshBoss();refreshBossCosts()};
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
-  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss()};
+  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss();refreshBossCosts()};
 }

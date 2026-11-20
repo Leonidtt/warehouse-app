@@ -56,7 +56,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-app = FastAPI(title="Склад", version="18.5.8")
+app = FastAPI(title="Склад Бета", version="18.5.9-beta")
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
     try:
@@ -353,6 +353,24 @@ def transaction():
 
 def audit(conn, actor, action, subject):
     conn.execute("INSERT INTO audit_log(user_id,action,subject) VALUES (?,?,?)", (actor["tg_id"],action,str(subject)[:500]))
+
+
+
+def budget_for_equipment_name(name: str) -> str:
+    # "Комплект Т10" belongs to ТХ; other equipment belongs to КЦ.
+    actual = re.sub(r"^(?:\s*комплект\b[\s№#.:–—-]*)+", "", str(name or ""), flags=re.IGNORECASE).lstrip()
+    return "ТХ" if actual.casefold().startswith(("т", "t")) else "КЦ"
+
+
+def apply_equipment_budgets(conn):
+    rows = conn.execute("SELECT code,name,budget_tag FROM items WHERE kind='equipment'").fetchall()
+    updated = 0
+    for item in rows:
+        tag = budget_for_equipment_name(item["name"])
+        if item["budget_tag"] != tag:
+            conn.execute("UPDATE items SET budget_tag=? WHERE code=?", (tag, item["code"]))
+            updated += 1
+    return updated
 
 
 def active_item(conn, code):
@@ -829,6 +847,7 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
     actor=check_admin(x_init_data)
     validate_item_fields(req.name,req.kind,req.min_stock,[req.price,req.price_body,req.price_lens,req.price_flash,req.price_acc,req.price_add])
     req.name=req.name.strip(); req.category=req.category.strip()
+    if req.kind=="equipment" and not req.budget_tag.strip(): req.budget_tag=budget_for_equipment_name(req.name)
     conn = get_conn(x_init_data)
     existing=conn.execute("SELECT kind FROM items WHERE code=? AND is_archived=0",(code,)).fetchone()
     if not existing: conn.close(); raise HTTPException(404,"Товар не найден")
@@ -885,6 +904,7 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
     actor=check_admin(x_init_data)
     validate_item_fields(name,kind,min_stock,[price,price_body,price_lens,price_flash,price_acc,price_add])
     code=code.strip(); name=name.strip(); category=category.strip()
+    if kind=="equipment" and not budget_tag.strip(): budget_tag=budget_for_equipment_name(name)
     if not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
     if quantity<0: raise HTTPException(400,"Количество не может быть отрицательным")
     if kind=="consumable":
@@ -1240,6 +1260,7 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
 def apply_warehouse_snapshot(path, actor):
     with transaction() as conn:
         tables = import_snapshot(conn, path, DB_PATH)
+        apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
         conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
         audit(conn, actor, "Импорт снимка", "Складские данные из Основы")
@@ -1358,6 +1379,30 @@ def finish_repair(code: str,req: RepairDetails,x_init_data: Optional[str]=Header
         if not conn.execute('UPDATE repair_records SET cost=?,finished_at=CURRENT_TIMESTAMP WHERE code=? AND finished_at IS NULL',(req.cost,code)).rowcount: raise HTTPException(409,'Нет открытого ремонта')
         conn.execute('UPDATE items SET needs_repair=0 WHERE code=?',(code,)); audit(conn,actor,'Завершение ремонта',code)
     return {'status':'ok'}
+
+
+@app.get("/api/boss/equipment-costs")
+def boss_equipment_costs(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if not user.get("is_registered") or user["role"] not in ("boss", "admin"):
+        raise HTTPException(403, "Нет доступа")
+    with contextmanager_session() as conn:
+        rows = conn.execute("""SELECT code,name,budget_tag,kit_body,kit_lens,kit_flash,
+            price,price_body,price_lens,price_flash,price_acc,price_add
+            FROM items WHERE kind='equipment' AND is_archived=0 ORDER BY name COLLATE NOCASE""").fetchall()
+        result = []
+        for item in rows:
+            components = sum(float(item[key] or 0) for key in
+                ("price_body","price_lens","price_flash","price_acc","price_add"))
+            amount = components if components > 0 else float(item["price"] or 0)
+            result.append({
+                "code": item["code"], "name": item["name"],
+                "model": (item["kit_body"] or item["kit_lens"] or item["kit_flash"] or "").strip(),
+                "budget_tag": item["budget_tag"] or budget_for_equipment_name(item["name"]),
+                "price": round(amount, 2),
+            })
+        return result
+
 
 @app.get('/api/purchases')
 def purchase_suggestions(x_init_data: Optional[str]=Header(None)):
@@ -1540,6 +1585,11 @@ register_183(app, get_user, check_admin, transaction, active_item, valid_locatio
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
+    budget_migration = "beta-equipment-budgets-2026-11-20"
+    if not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (budget_migration,)).fetchone():
+        changed = apply_equipment_budgets(conn)
+        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES (?)", (budget_migration,))
+        print(f"Beta equipment budgets assigned: {changed}", flush=True)
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4')")
 
 
