@@ -175,7 +175,7 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
 <link rel="stylesheet" href="/warehouse-v18.css?v=1877">
-    <script src="/warehouse-v18.js?v=1884"></script>
+    <script src="/warehouse-v18.js?v=1885"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1877">
     <script src="/release-v182.js?v=1877"></script>
     <link rel="stylesheet" href="/release-v183.css?v=1877">
@@ -2218,7 +2218,37 @@
         async function copyText(text){if(!text)return notify('Нет текста');try{await navigator.clipboard.writeText(text);showToast('Скопировано');haptic()}catch(e){const el=document.createElement('textarea');el.value=text;document.body.append(el);el.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}el.remove();if(ok)showToast('Скопировано');else prompt('Скопируйте текст:',text)}}
         function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
-        async function issueWebCode(){try{const r=await api('/api/web/code',{method:'POST'});const {b}=overlay17('Вход на сайт');const code=r.code.match(/.{1,4}/g).join('-');const p=document.createElement('p');p.textContent=code;p.style.cssText='font-size:27px;font-weight:bold;letter-spacing:2px;text-align:center';b.append(p);btn17(b,'Копировать код',()=>copyText(code));const note=document.createElement('p');note.textContent='Введите код в браузере. Действует 5 минут. Никому не передавайте.';b.append(note); const a=document.createElement('a');a.href=location.origin+'/';a.textContent='Открыть сайт';a.target='_blank';a.rel='noopener';a.onclick=e=>{if(tg.openLink){e.preventDefault();tg.openLink(a.href)}};b.append(a)}catch(e){notify(e.message)}}
+        async function issueWebCode(target='site'){
+            const isApp=target==='app';
+            try{
+                let code='';
+                if(tg.initData){
+                    const r=await api('/api/web/code',{method:'POST'});
+                    code=r.code.match(/.{1,4}/g).join('-');
+                }
+                const {b}=overlay17(isApp?'Приложение «Склад»':'Вход на сайт');
+                if(code){
+                    const p=document.createElement('p');
+                    p.textContent=code;
+                    p.style.cssText='font-size:27px;font-weight:bold;letter-spacing:2px;text-align:center';
+                    b.append(p);
+                    btn17(b,'Копировать код',()=>copyText(code));
+                }
+                const note=document.createElement('p');
+                note.textContent=code
+                    ? (isApp?'Введите этот код в приложении. Действует 5 минут. Никому не передавайте.':'Введите код в браузере. Действует 5 минут. Никому не передавайте.')
+                    : 'Код для входа можно получить только в Telegram: откройте «Склад» → своё имя → «Приложение».';
+                b.append(note);
+                const a=document.createElement('a');
+                a.href=location.origin+(isApp?'/pwa/':'/');
+                a.textContent=isApp?'Открыть приложение «Склад»':'Открыть сайт';
+                a.target='_blank';
+                a.rel='noopener';
+                a.style.cssText='display:inline-block;margin-top:12px;font-weight:600';
+                a.onclick=e=>{if(tg.initData&&typeof tg.openLink==='function'){e.preventDefault();tg.openLink(a.href)}};
+                b.append(a);
+            }catch(e){notify(e.message)}
+        }
         async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
         async function webLogout(){try{await api('/api/web/logout',{method:'POST'});try{localStorage.removeItem(cacheKey17('platforms'));localStorage.removeItem(cacheKey17('ships'));clearDraft17()}catch(e){}location.reload()}catch(e){notify(e.message)}}
         async function blob17(url){const r=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.detail||'Не удалось загрузить файл')}return r.blob()}
