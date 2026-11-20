@@ -149,7 +149,7 @@ def venues_by_color(venues,fills,columns):
     for column in columns:
         choices=defaultdict(set)
         for row,name in venues.items():
-            for legend in ('A','B','C',column):
+            for legend in ('A','C',column):
                 color=fills.get(legend+str(row))
                 if color:
                     choices[color].add(name)
@@ -192,7 +192,8 @@ def parse_xlsx_schedule(raw):
                 continue
             if department not in DEPARTMENTS or not person:
                 continue
-            if not any(PHOTO.search(cells.get(col+str(row),'')) for col in 'BCK'):
+            # Column B ("Неделя") uses Ф for a different purpose.
+            if not any(PHOTO.search(cells.get(col+str(row),'')) for col in 'CK'):
                 continue
             for col,day in days.items():
                 address=col+str(row)
