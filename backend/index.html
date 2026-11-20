@@ -191,7 +191,7 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-    <link rel="stylesheet" href="/warehouse-v18.css?v=1902">
+    <link rel="stylesheet" href="/warehouse-v18.css?v=1904">
     <script src="/warehouse-v18.js?v=1903"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=1894"></script>
@@ -628,7 +628,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 <summary>Дополнительно</summary>
                 <div id="item-facts" class="beta-item-tiles"></div>
                 <div id="beta-item-tools">
-                    <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
+                    <button type="button" class="secondary hidden" onclick="showEditForm()" id="edit-btn">Редактировать</button>
                     <button type="button" class="secondary" id="item-qr-details" onclick="showQr()">QR-этикетка</button>
                 </div>
                 <div id="item-additional-actions"></div>
@@ -1784,7 +1784,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 document.getElementById("item-title").textContent = currentItem.name; 
                 
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
-                document.getElementById("edit-btn").style.display = currentUser.role === 'admin' ? 'block' : 'none'; 
+                $('edit-btn').classList.toggle('hidden', currentUser.role !== 'admin');
                 
                 const item = currentItem;
                 const isEquipment = item.kind === 'equipment';
