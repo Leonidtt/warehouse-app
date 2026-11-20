@@ -316,7 +316,6 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             <div class="input-group"><label>Локация (Комната)</label><select id="add-location"></select></div><div class="input-group"><label>Категория</label><select id="add-category"></select></div><div class="input-group"><label>Фото (необязательно)</label><input id="add-photo" type="file" accept="image/*"></div><div id="equipment-fields">
                 
                 <div class="input-group"><label>Серийный номер (S/N)</label><input id="add-serial-number"></div>
-                <div class="input-group"><label>Стоимость (общая)</label><input id="add-price-eq" type="number" placeholder="0" value="0"></div>
                 <div class="input-group">
                     <label>Бюджет</label>
                     <select id="add-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ</option><option value="ТХ">ТХ</option></select>
@@ -334,6 +333,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 <div class="input-group"><label>Цена аксессуаров</label><input id="add-price-acc" type="number" placeholder="0"></div>
                 <div class="input-group"><label>Допы</label><input id="add-kit-add"></div>
                 <div class="input-group"><label>Цена допов</label><input id="add-price-add" type="number" placeholder="0"></div>
+                <div class="input-group"><label>Общая стоимость</label><input id="add-price-eq" type="number" min="0" step="0.01" placeholder="0" value="0"></div>
             </div>
 
             <button class="ok" id="save-item-btn" onclick="saveNewItem()" style="margin-top:20px;">Сохранить</button>
@@ -1772,12 +1772,54 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             toggleEditFields(); showScreen("screen-edit-item"); 
         }
         
-        function toggleEditFields() { const c=$("edit-kind").value==="consumable"; $("edit-consumable-fields").classList.toggle("hidden",!c); for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c); $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c); $("edit-price-label").textContent=c?"Цена за единицу":"Стоимость оборудования"; }
+        function toggleEditFields() {
+            const c=$("edit-kind").value==="consumable";
+            $("edit-consumable-fields").classList.toggle("hidden",!c);
+            for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c);
+            $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c);
+            const priceGroup=$("edit-price").closest(".input-group");
+            if(c){
+                $("edit-budget-tag").closest(".input-group").before(priceGroup);
+                $("edit-price").readOnly=false;
+                $("edit-price-label").textContent="Цена за единицу";
+            }else{
+                $("edit-price-add").closest(".input-group").after(priceGroup);
+                syncKitTotal("edit");
+            }
+        }
+        function syncKitTotal(prefix) {
+            const priceInput=$(prefix==="add"?"add-price-eq":"edit-price");
+            const label=prefix==="add"?priceInput.closest(".input-group").querySelector("label"):$("edit-price-label");
+            let cents=0, hasComponentPrice=false;
+            for(const key of ["body","lens","flash","acc","add"]){
+                const amount=Number($(prefix+"-price-"+key).value);
+                if(Number.isFinite(amount)&&amount>0){
+                    hasComponentPrice=true;
+                    cents+=Math.round(amount*100);
+                }
+            }
+            if(hasComponentPrice){
+                priceInput.value=String(cents/100);
+                priceInput.readOnly=true;
+                priceInput.dataset.kitCalculated="1";
+                label.textContent="Общая стоимость (автоматически)";
+            }else{
+                if(priceInput.dataset.kitCalculated==="1")priceInput.value="0";
+                delete priceInput.dataset.kitCalculated;
+                priceInput.readOnly=false;
+                label.textContent="Общая стоимость";
+            }
+        }
+        document.addEventListener("input", event=>{
+            const match=/^(add|edit)-price-(body|lens|flash|acc|add)$/.exec(event.target.id||"");
+            if(match && $(match[1]+"-kind").value==="equipment")syncKitTotal(match[1]);
+        });
         
         async function saveEditItem() { 
             const btn = document.querySelector("#screen-edit-item .ok"); 
             const name = document.getElementById("edit-name").value.trim(); 
             const kind = document.getElementById("edit-kind").value; 
+            if(kind==="equipment")syncKitTotal("edit");
             const price = parseFloat(document.getElementById("edit-price").value) || 0; 
             const budget_tag = document.getElementById("edit-budget-tag").value; 
             const serial_number = document.getElementById("edit-serial-number").value.trim(); 
@@ -2048,6 +2090,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             document.getElementById("add-location-desc").value = "";
             document.getElementById("add-serial-number").value = "";
             document.getElementById("add-price-eq").value = "0";
+            delete document.getElementById("add-price-eq").dataset.kitCalculated;
             document.getElementById("add-budget-tag").value = "";
             document.getElementById("add-buyout-status").value = "";
             document.getElementById("add-kit-body").value = "";
@@ -2061,7 +2104,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             document.getElementById("add-kit-add").value = "";
             document.getElementById("add-price-add").value = "0";
             toggleFields();
-            $("add-photo").value=""; $("add-unit").value="шт."; $("add-supplier").value=""; $("add-category").value=""; restoreDraft17(); toggleFields(); document.getElementById("create-item-modal").classList.remove("hidden");
+            $("add-photo").value=""; $("add-unit").value="шт."; $("add-supplier").value=""; $("add-category").value=""; restoreDraft17(); toggleFields(); syncKitTotal("add"); document.getElementById("create-item-modal").classList.remove("hidden");
         }
 
         function closeAddItemModal() {
@@ -2094,6 +2137,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         }
 
         async function saveNewItem() { 
+            if($("add-kind").value==="equipment")syncKitTotal("add");
             const btn = document.getElementById("save-item-btn"); 
             const code = document.getElementById("add-code").value.trim(); 
             const name = document.getElementById("add-name").value.trim(); 
