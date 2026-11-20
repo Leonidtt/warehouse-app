@@ -37,7 +37,7 @@ from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_export import register_snapshot_export
-from telegram_app_bot import register_telegram_app_bot
+from telegram_app_bot import init_telegram_onboarding, queue_telegram_onboarding, register_telegram_app_bot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 from pwa_assets import render_icon_png
 
@@ -58,7 +58,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.11"
+APP_VERSION = "18.5.12"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -261,6 +261,7 @@ def init_db(db_path):
         c.execute("ALTER TABLE employee_preview ADD COLUMN preview_role TEXT NOT NULL DEFAULT 'employee'")
         c.execute("DELETE FROM employee_preview")
     c.execute("CREATE TABLE IF NOT EXISTS blocked_telegram (tg_id INTEGER PRIMARY KEY CHECK(tg_id>0), blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blocked_by INTEGER NOT NULL)")
+    init_telegram_onboarding(conn)
     init_return_reminders(conn)
     conn.commit(); conn.close()
 
@@ -635,7 +636,12 @@ def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] 
 def register(req: RegisterRequest, x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if not 3<=len(req.full_name.strip())<=150: raise HTTPException(400,"Укажите имя от 3 до 150 символов")
-    conn = get_conn(x_init_data); conn.execute("UPDATE users SET full_name = ?, is_registered = 1 WHERE tg_id = ?", (req.full_name.strip(), user["tg_id"])); conn.commit(); conn.close(); return {"status": "ok"}
+    with transaction() as conn:
+        conn.execute("UPDATE users SET full_name=?, is_registered=1 WHERE tg_id=?",
+                     (req.full_name.strip(), user["tg_id"]))
+        if not user["is_registered"]:
+            queue_telegram_onboarding(conn, user["tg_id"])
+    return {"status": "ok"}
 
 @app.get("/api/users")
 def list_users(x_init_data: Optional[str] = Header(None)):
@@ -671,6 +677,10 @@ def delete_user(tg_id: int, x_init_data: Optional[str] = Header(None)):
         if conn.execute("SELECT 1 FROM checkouts WHERE (user_id=? OR giver_id=?) AND returned_at IS NULL",(tg_id,tg_id)).fetchone(): raise HTTPException(409,"Сначала верните оборудование")
         conn.execute("DELETE FROM web_sessions WHERE user_id=?",(tg_id,))
         conn.execute("DELETE FROM web_codes WHERE user_id=?",(tg_id,))
+        conn.execute("""
+            DELETE FROM telegram_onboarding
+            WHERE chat_id=? AND (memo_sent=0 OR application_pinned=0)
+        """, (tg_id,))
         conn.execute("DELETE FROM users WHERE tg_id=?",(tg_id,))
         audit(conn,actor,"Удаление пользователя",tg_id)
     return {"status":"ok"}
@@ -1716,7 +1726,6 @@ register_snapshot_export(app, DB_PATH)
 register_telegram_app_bot(
     app, BOT_TOKEN, "https://warehouse-app-production-3e9d62c2.up.railway.app", transaction,
     authorize_telegram_app_user, issue_web_login_code,
-    owner_chat_id=MAIN_ADMIN_ID,
     auto_configure=os.environ.get("RAILWAY_SERVICE_ID") == "07cb1e8f-fbf7-4ecf-955b-243625619fad",
 )
 register_return_reminders(
