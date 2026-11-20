@@ -11,6 +11,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Склад Бета">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/pull-refresh.js?v=1" defer></script>
     <style>
         :root {
             --bg: #f5f5f7; --card-bg: #ffffff; --text: #1d1d1f; --text-muted: #86868b;
@@ -217,6 +218,20 @@
 .beta-simple #items-list .r1857-top .name{font-size:15px}
 .beta-simple #items-list .r1857-summary{display:none}
 .beta-simple #my-items-list .my-item-btn{min-height:44px}
+
+#take-items-list{display:grid;gap:7px;margin-top:8px}
+#take-items-list .take-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border-radius:12px;margin:0;box-shadow:none;background:var(--card-bg);border:1px solid var(--border);min-width:0}
+#take-items-list .take-row.selected{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card-bg))}
+#take-items-list .take-row.unavailable{opacity:.63}
+#take-items-list .take-checkbox{width:19px;height:19px;margin:0;accent-color:var(--primary);cursor:pointer;justify-self:center}
+#take-items-list .take-row-main{min-width:0;cursor:pointer}
+#take-items-list .take-row-name{font-size:13px;line-height:1.25;font-weight:650;overflow-wrap:anywhere}
+#take-items-list .take-row-meta{font-size:11px;line-height:1.35;color:var(--text-muted);margin-top:3px;overflow-wrap:anywhere}
+#take-items-list .take-row-side{display:flex;align-items:flex-end;flex-direction:column;gap:4px;min-width:66px}
+#take-items-list .take-row-state{font-size:10px;font-weight:650;color:var(--success);text-align:right;max-width:106px;overflow-wrap:anywhere}
+#take-items-list .take-row-state.busy{color:var(--text-muted)}
+#take-items-list .take-row-price{font-size:11px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
+#take-items-list .take-row-price.beta-admin-price{color:var(--text)}
 </style><script>
 async function betaCopyMainData(button) {
     if (!currentUser?.is_owner ||
@@ -907,13 +922,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         async function api(path, options = {}, retries = 0) {
             try {
                 const res = await fetch(path, {
-                    headers: { ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }), "X-Init-Data": tg.initData || "" },
+                    headers: { ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }), "X-Init-Data": tg.initData || "", "X-Warehouse-PWA":location.pathname.startsWith("/pwa/")?"1":"0" },
                     ...options,
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Проверьте заполнение полей");
+                if (!res.ok) {const error=new Error(typeof data.detail === "string" ? data.detail : "Ошибка сервера");error.status=res.status;throw error;}
                 return data;
             } catch (err) {
+                if(err.name==='TypeError')err.networkError=true;
                 if (err.name === 'TypeError' && retries > 0 && (!options.method || options.method==='GET')) {
                     await new Promise(r => setTimeout(r, 1000));
                     return api(path, options, retries - 1);
@@ -922,9 +938,16 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             }
         }
 
+        let initReconnectTimer=null;
+        function clearConnectionWait(){
+            if(initReconnectTimer){clearTimeout(initReconnectTimer);initReconnectTimer=null;}
+            document.getElementById('connection-wait-notice')?.remove();
+            document.querySelector('#screen-login .login-card').style.removeProperty('display');
+        }
         async function init() {
             try {
                 currentUser = await api("/api/me");
+                clearConnectionWait();
                 document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!currentUser.is_owner));
                 document.getElementById("web-login-btn").classList.toggle("hidden",!tg.initData); document.getElementById("web-logout-btn").classList.toggle("hidden",!!tg.initData);
                 document.getElementById("owner-terminal-btn").classList.toggle("hidden", !currentUser.is_owner);
@@ -965,7 +988,28 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 if (autoRefreshInterval) clearInterval(autoRefreshInterval);
                 autoRefreshInterval = setInterval(() => { if(document.visibilityState!=="hidden"){ loadItems(); loadLowStock(); loadStats(); loadDashboard17(); loadMyBookings(); } }, 15000);
 
-            } catch (e) { if(!tg.initData){showScreen("screen-login"); document.querySelector(".bottom-nav").classList.add("hidden");} else {notify("Ошибка инициализации: " + e.message); showScreen("screen-login"); document.querySelector("#screen-login .login-card").textContent="Не удалось войти. Закройте и снова откройте приложение в Telegram. "+e.message;} }
+            } catch (e) {
+                if(!tg.initData){
+                    showScreen("screen-login");
+                    document.querySelector(".bottom-nav").classList.add("hidden");
+                    if(e.networkError || [502,503,504].includes(e.status)){
+                        const card=document.querySelector("#screen-login .login-card");
+                        card.style.display="none";
+                        let notice=document.getElementById("connection-wait-notice");
+                        if(!notice){notice=document.createElement("div");notice.id="connection-wait-notice";notice.className="card";card.before(notice);}
+                        notice.textContent="Нет соединения с сервером. Пытаемся подключиться снова…";
+                        if(!initReconnectTimer)initReconnectTimer=setTimeout(()=>{initReconnectTimer=null;init()},4000);
+                    }else{
+                        clearConnectionWait();
+                        if(e.status===403)document.querySelector("#screen-login .login-card").textContent="Доступ к приложению запрещён. Обратитесь к администратору.";
+                        else if(e.status!==401)notify("Ошибка загрузки: "+e.message);
+                    }
+                }else{
+                    notify("Ошибка инициализации: "+e.message);
+                    showScreen("screen-login");
+                    document.querySelector("#screen-login .login-card").textContent="Не удалось войти. Закройте и снова откройте приложение в Telegram. "+e.message;
+                }
+            }
         }
 
         async function loadLowStock() {
@@ -1375,44 +1419,26 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         }
 
         function renderTakeItems() {
-            const list = document.getElementById("take-items-list");
-            const query = document.getElementById("take-search-input").value.toLowerCase();
-            
-            let available = allItems.filter(i => i.kind === 'equipment' && !i.needs_repair).sort((a,b)=>Number(!!a.holders.length)-Number(!!b.holders.length)||a.name.localeCompare(b.name,'ru'));
-            if (query) available = available.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
-
-            if (!available.length) { list.innerHTML = "<p style='text-align:center; color:var(--text-muted); padding: 20px;'>Нет доступной техники</p>"; return; }
-
-            list.innerHTML = available.map(i => {
-                let placesHtml = (i.stocks || []).map(s => `<div class="meta" style="font-size:12px; color:var(--text-muted); margin-top:2px;">📍 ${escapeOwnerText(s.location_name)}</div>`).join(""); 
-                
-                let brokenBadge = i.needs_repair ? `<span class="badge repair">🔧 Ремонт</span>` : ""; 
-                let priceBadge = currentUser.role === "admin" && i.price ? `<span class="badge price beta-admin-price" title="Только для администраторов">${i.price} ₽</span>` : "";
-                let budgetBadge = i.kind==="equipment" && i.budget_tag === 'КЦ' ? `<span class="badge budget-kc">КЦ</span>` : (i.budget_tag === 'ТХ' ? `<span class="badge budget-tx">ТХ</span>` : ""); 
-                let buyoutBadge = i.kind==="equipment" && i.buyout_status ? `<span class="badge buyout">💸 ${escapeOwnerText(i.buyout_status)}</span>` : ""; 
-                let catBadge = i.category ? `<span class="badge category">${escapeOwnerText(i.category)}</span>` : "";
-                let snText = i.serial_number ? `<span style="font-size:12px; color:var(--text-muted);">S/N: ${escapeOwnerText(i.serial_number)}</span>` : "";
-
-                let isOnHand = i.holders && i.holders.length > 0;
-                let onHandBadge = isOnHand ? `<span class="badge on-hand">У ${escapeOwnerText(i.holders[0].full_name)} ${i.holders[0].taken_for ? `(Кому: ${escapeOwnerText(i.holders[0].taken_for)})` : ""}</span>` : "";
-                
-                const isChecked = selectedTakeItems.includes(i.code) ? "checked" : "";
-                const isDisabled = (isOnHand||i.total<=0) ? "disabled" : "";
-                const dimmedClass = isOnHand ? "dimmed" : "";
-
-                return `
-                <div class="card room-item-card ${dimmedClass}">
-                    <input type="checkbox" class="room-item-checkbox" ${isChecked} ${isDisabled} onchange="toggleTakeSelect(${jsArg17(i.code)}, this)">
-                    <div class="room-item-content" onclick="openItem(${jsArg17(i.code)})">
-                        <div class="room-item-name">${escapeOwnerText(i.name)}</div>
-                        <div class="room-item-meta">${escapeOwnerText(i.code)} · Всего: ${i.total} шт ${snText ? `· ${snText}` : ""}</div>
-                        ${placesHtml}
-                        <div style="margin-top:8px;">
-                            <span class="badge eq">Оборуд.</span>
-                            ${catBadge} ${priceBadge} ${budgetBadge} ${buyoutBadge} ${brokenBadge} ${onHandBadge}
-                        </div>
-                    </div>
-                </div>`;
+            const list=$("take-items-list");
+            const query=$("take-search-input").value.trim().toLowerCase();
+            let available=allItems.filter(i=>i.kind==="equipment" && !i.needs_repair).sort((a,b)=>Number(!!a.holders.length)-Number(!!b.holders.length)||a.name.localeCompare(b.name,"ru"));
+            if(query)available=available.filter(i=>[i.name,i.code,i.category,i.kit_body,i.kit_lens].some(v=>String(v||"").toLowerCase().includes(query)));
+            if(!available.length){list.innerHTML="<p class='meta' style='text-align:center;padding:18px'>Техника не найдена</p>";return;}
+            list.innerHTML=available.map(i=>{
+                const holder=i.holders?.[0];
+                const disabled=!!holder||i.total<=0;
+                const selected=selectedTakeItems.includes(i.code)&&!disabled;
+                const location=(i.stocks||[]).map(s=>s.location_name).filter(Boolean).join(", ");
+                const model=String(i.kit_body||i.kit_lens||i.kit_flash||"").trim();
+                const metadata=[i.code,model,i.category,i.budget_tag,location].filter(Boolean).map(escapeOwnerText).join(" · ");
+                const state=holder?"У "+escapeOwnerText(holder.taken_for||holder.full_name||"сотрудника"):i.total<=0?"Нет на складе":"Свободно";
+                const components=["body","lens","flash","acc","add"].reduce((sum,key)=>sum+(Number(i["price_"+key])||0),0);
+                const amount=components>0?components:Number(i.price)||0;
+                const price=currentUser.role==="admin"&&amount>0?'<span class="take-row-price beta-admin-price">'+money17(amount)+'</span>':"";
+                return '<div class="take-row card'+(disabled?' unavailable':'')+(selected?' selected':'')+'">'+
+                    '<input type="checkbox" class="take-checkbox" aria-label="Выбрать '+escapeOwnerText(i.name)+'" '+(selected?'checked ':'')+(disabled?'disabled ':'')+'onchange="toggleTakeSelect('+jsArg17(i.code)+', this)">'+
+                    '<div class="take-row-main" onclick="openItem('+jsArg17(i.code)+')"><div class="take-row-name">'+escapeOwnerText(i.name)+'</div><div class="take-row-meta">'+metadata+'</div></div>'+
+                    '<div class="take-row-side"><span class="take-row-state'+(disabled?' busy':'')+'">'+state+'</span>'+price+'</div></div>';
             }).join("");
         }
 
@@ -1426,6 +1452,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             }
             if (cb.checked) { if(!selectedTakeItems.includes(code)) selectedTakeItems.push(code); }
             else { selectedTakeItems = selectedTakeItems.filter(c => c !== code); }
+            cb.closest(".take-row")?.classList.toggle("selected",cb.checked);
             updateTakeBatchUI();
         }
 
@@ -1437,7 +1464,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
         function deselectAllTakeItems() {
             selectedTakeItems = [];
-            document.querySelectorAll('#take-items-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+            renderTakeItems();
             updateTakeBatchUI();
         }
 

@@ -83,7 +83,7 @@ function compactData1857(i,booked){
   const oldExecute=executeMoveItem;let moving=false;executeMoveItem=async()=>{const n=Number($('move-qty').value);if(moving||!Number.isInteger(n)||n<=0||n>Number($('move-qty').max))return notify('Некорректное количество');moving=true;try{await oldExecute()}finally{moving=false}};
   // Real permissions follow the selected role. Account role stays unchanged.
   const setting=$('beta-maintenance-settings');
-  const roleNames1854={admin:'Администратор',boss:'Босс',employee:'Сотрудник',simple:'Сотрудник — простой режим'};
+  const roleNames1854={admin:'Администратор',boss:'Босс',employee:'Сотрудник'};
   let switching1854=false;
   async function changePreview1854(role){
     if(!currentUser?.can_preview||switching1854)return;
@@ -98,7 +98,7 @@ function compactData1857(i,booked){
     const {o,b}=overlay17('Тестирование интерфейса');
     const note=el('p','meta','Действия реальные и сохраняются в рабочей базе. Ваша роль в аккаунте не меняется.');
     b.append(note);
-    for(const role of ['admin','boss','employee','simple']){
+    for(const role of ['admin','boss','employee']){
       const label=roleNames1854[role]+((currentUser.preview_role||currentUser.role)===role?' · Сейчас':'');
       const btn=btn17(b,label,()=>changePreview1854(role),(currentUser.preview_role||currentUser.role)===role?'secondary':'primary');
       if((currentUser.preview_role||currentUser.role)===role)btn.disabled=true;
@@ -114,8 +114,8 @@ function compactData1857(i,booked){
   window.betaMyPhoto=photoFor;
   function renderPreview(){
     preview.classList.toggle('hidden',!currentUser?.can_preview);
-    const active=!!currentUser?.can_preview&&['employee','boss','simple'].includes(currentUser.preview_role);
-    previewBanner.classList.toggle('hidden',!active);document.body.classList.toggle('beta-simple',currentUser?.preview_role==='simple');
+    const active=!!currentUser?.can_preview&&['employee','boss'].includes(currentUser.preview_role);
+    previewBanner.classList.toggle('hidden',!active);document.body.classList.remove('beta-simple');
     document.body.classList.toggle('r184-preview-active',active);
     previewLabel.textContent=active?'Тест: '+roleNames1854[currentUser.preview_role]:'';
   }

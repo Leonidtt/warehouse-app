@@ -11,7 +11,7 @@ from collections import defaultdict
 
 
 class PreviewRequest(BaseModel):
-    role: Literal["admin", "boss", "employee", "simple"]
+    role: Literal["admin", "boss", "employee"]
 
 
 def effective_user(user, raw, digest, session):
@@ -21,7 +21,8 @@ def effective_user(user, raw, digest, session):
     with session() as conn:
         row = conn.execute('SELECT preview_role FROM employee_preview WHERE digest=? AND user_id=?', (digest(raw), user['tg_id'])).fetchone()
     if row and row[0] in ('employee', 'boss', 'simple'):
-        return {**user, 'role': 'employee' if row[0] == 'simple' else row[0], 'is_owner': False, 'preview_role': row[0]}
+        preview_role = 'employee' if row[0] == 'simple' else row[0]
+        return {**user, 'role': preview_role, 'is_owner': False, 'preview_role': preview_role}
     return user
 
 
