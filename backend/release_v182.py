@@ -2,7 +2,8 @@
 import os
 import sqlite3
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
 from contextlib import closing
@@ -12,6 +13,8 @@ from PIL import Image, ImageDraw
 from fastapi import Header, HTTPException
 from fastapi.responses import FileResponse
 from warehouse_v18 import label_font, label_dimensions
+
+MOSCOW = ZoneInfo("Europe/Moscow")
 
 
 def prepare_migration(path, version="18.2"):
@@ -171,10 +174,21 @@ def register_release(app, get_user, session):
                 GROUP BY l.id, l.name, l.type
                 ORDER BY l.id
             """).fetchall()
-            yesterday = conn.execute("SELECT date('now','-1 day')").fetchone()[0]
-            daily = dict(conn.execute('''SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at)=?) AS taken,
-                ((SELECT COUNT(*) FROM checkouts WHERE date(returned_at)=?) + (SELECT COALESCE(SUM(quantity),0) FROM consumable_returns WHERE date(created_at)=?)) AS returned,
-                (SELECT COALESCE(SUM(quantity),0) FROM writeoffs WHERE date(created_at)=?) AS written_off''', (yesterday,)*4).fetchone())
+            today = datetime.now(MOSCOW).date()
+            yesterday = today - timedelta(days=1)
+            start, end = (
+                datetime.combine(day, time.min, tzinfo=MOSCOW).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                for day in (yesterday, today)
+            )
+            daily = dict(conn.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM checkouts WHERE datetime(taken_at) >= :start AND datetime(taken_at) < :end) AS taken,
+                    (SELECT COUNT(*) FROM checkouts WHERE datetime(returned_at) >= :start AND datetime(returned_at) < :end)
+                        + (SELECT COALESCE(SUM(quantity), 0) FROM consumable_returns
+                           WHERE datetime(created_at) >= :start AND datetime(created_at) < :end) AS returned,
+                    (SELECT COALESCE(SUM(quantity), 0) FROM writeoffs
+                     WHERE datetime(created_at) >= :start AND datetime(created_at) < :end) AS written_off
+            """, {"start": start, "end": end}).fetchone())
         counts = dict(stock=0, working=0, repair=0, total=0)
         cats, booked, low = {}, [], []
         consumables = 0
@@ -202,7 +216,7 @@ def register_release(app, get_user, session):
             categories=[dict(name=name, **values) for name, values in sorted(cats.items())],
             booked=booked,
             low=sorted(low, key=lambda row: row['name'].casefold()),
-            daily=dict(date=yesterday, **daily) if user['role']=='admin' else None,
+            daily=dict(date=yesterday.isoformat(), **daily) if user['role']=='admin' else None,
             printer_locations=[dict(row) for row in printer_locations],
             consumables=consumables,
         )

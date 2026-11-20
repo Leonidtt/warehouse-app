@@ -218,7 +218,7 @@ function bossSurname1853(name){
     d.append(detail);return d
   }
   function bossExtraPanel1855(title,groups,type,expanded,open=false){
-    const collapsible=false;
+    const collapsible=type==='buyout';
     const card=el(collapsible?'details':'div','card r184-boss-panel r1855-panel'+(collapsible?' beta-setting-details r1856-boss-buyouts':''));
     const head=el(collapsible?'summary':'div',collapsible?'r1856-heading':'r1853-held-head');
     head.append(el(collapsible?'span':'h3',collapsible?'r1856-title':'',title),el('span','meta',String(groups.length)));
@@ -264,7 +264,7 @@ function bossSurname1853(name){
   }
 
   async function refreshBoss(){
-    if(currentUser?.role!=='boss')return;if(bossJob)return bossJob;
+    if(currentUser?.role!=='boss')return true;if(bossJob)return bossJob;
     bossJob=api('/api/v184/boss').then(r=>{
       if(currentUser?.role!=='boss')return;
       const expanded=new Set([...bossBox.querySelectorAll('.r1853-person[open]')].map(d=>d.dataset.personKey));
@@ -276,9 +276,14 @@ function bossSurname1853(name){
       for(const p of r.people){const key=JSON.stringify([p.person_id??null,p.name]);list.append(bossPerson1853(p,key,expanded.has(key),duplicates));unknown=unknown||!!(bossCounts1853(p.items,'camera')['?']+bossCounts1853(p.items,'flash',true)['?'])}
       if(!r.people.length)list.append(el('p','meta r1853-no-people','Нет выданной техники'));
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
-      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
+      const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded,$('boss-buyouts1856')?.open);
       bossBox.replaceChildren(held,buyouts);bossBox.classList.remove('hidden');
-    }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
+      return true;
+    }).catch(()=>{
+      if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));
+      bossBox.classList.remove('hidden');
+      return false;
+    }).finally(()=>bossJob=null);
     return bossJob
   }
 function buyoutRows1856(items){
@@ -358,7 +363,14 @@ function heldPeople1857(items){
     heldList1857.replaceChildren(list);
   }
 
-  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();renderHeld1857();refreshBoss()};
+  const oldLoad=loadItems;
+  loadItems=async()=>{
+    const inventoryLoaded=await oldLoad();
+    renderBuyout1856();
+    renderHeld1857();
+    const bossLoaded=await refreshBoss();
+    return inventoryLoaded && bossLoaded;
+  };
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
   const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss()};

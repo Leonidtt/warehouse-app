@@ -113,7 +113,19 @@ function installRelease182(){
     filterItems();
   }
   let pendingOverview=null,lastOverview=0;
-  const loadOverview=()=>{if(pendingOverview)return pendingOverview;if(Date.now()-lastOverview<700)return Promise.resolve();pendingOverview=api('/api/v18/overview').then(data=>{renderOverview(data);lastOverview=Date.now()}).catch(e=>console.warn('Обзор:',e.message)).finally(()=>pendingOverview=null);return pendingOverview};
+  const loadOverview=({force=false}={})=>{
+    if(pendingOverview)return pendingOverview;
+    if(!force&&Date.now()-lastOverview<700)return Promise.resolve(true);
+    pendingOverview=api('/api/v18/overview').then(data=>{
+      renderOverview(data);
+      lastOverview=Date.now();
+      return true;
+    }).catch(error=>{
+      console.warn('Обзор:',error.message);
+      return false;
+    }).finally(()=>pendingOverview=null);
+    return pendingOverview;
+  };
   loadDashboard17=loadOverview;loadStats=loadOverview;loadDailyReport=loadOverview;loadLowStock=loadOverview;
   // Correct status classification, including negative phrases like «не хватает».
   const classify=value=>{const s=String(value??'').toLowerCase().trim().replace(/ё/g,'е');if(!s)return 'unknown';if(/не\s*хватает|недостат|не\s*доста|нет\s+|нужн|требу|не\s*ок/.test(s))return 'issue';if(/^(?:[✓✅\s]*)(?:всего\s+хватает|все\s+хватает|хватает|все\s+есть|ок|все\s+в\s+наличии)[.!\s]*$/.test(s))return 'ok';return 'issue'};
@@ -209,7 +221,31 @@ function installRelease182(){
     list.replaceChildren(...filtered.map(row=>eventCard(key,row)));
   }
   renderPlatformsList=()=>renderEvent('site');renderTHList=()=>renderEvent('vessel');
-  const syncJobs=new Map();syncGoogle=sheet=>{const key=sheet==='кц'?'site':'vessel',cfg=sections[key];if(syncJobs.has(key))return syncJobs.get(key);const b=$(cfg.sync);setLoading(b,true,'Обновляем…');const job=api('/api/sync_google?sheet_name='+encodeURIComponent(cfg.sheet)+'&t='+Date.now(),{cache:'no-store'},0).then(r=>{if(r.status==='error'||!Array.isArray(r.data))throw Error(r.message||'Не удалось обновить данные');if(key==='site')cachedPlatforms=r.data;else cachedTH=r.data;cacheSet17(cfg.cache,JSON.stringify(r.data));cacheSet17('sync182_'+cfg.cache,String(Date.now()));renderEvent(key);if(currentScreen===cfg.id)showToast('Данные обновлены')}).catch(e=>{if(currentScreen===cfg.id)notify('Не удалось обновить. Сохранены прежние данные: '+e.message)}).finally(()=>{setLoading(b,false);syncJobs.delete(key)});syncJobs.set(key,job);return job};
+  const syncJobs=new Map();
+  syncGoogle=(sheet,{silent=false}={})=>{
+    const key=sheet==='кц'?'site':'vessel',cfg=sections[key];
+    if(syncJobs.has(key))return syncJobs.get(key);
+    const button=$(cfg.sync);
+    setLoading(button,true,'Обновляем…');
+    const job=api('/api/sync_google?sheet_name='+encodeURIComponent(cfg.sheet)+'&t='+Date.now(),{cache:'no-store'},0).then(result=>{
+      if(result.status==='error'||!Array.isArray(result.data))throw Error(result.message||'Не удалось обновить данные');
+      if(key==='site')cachedPlatforms=result.data;
+      else cachedTH=result.data;
+      cacheSet17(cfg.cache,JSON.stringify(result.data));
+      cacheSet17('sync182_'+cfg.cache,String(Date.now()));
+      renderEvent(key);
+      if(!silent&&currentScreen===cfg.id)showToast('Данные обновлены');
+      return true;
+    }).catch(error=>{
+      if(!silent&&currentScreen===cfg.id)notify('Не удалось обновить. Сохранены прежние данные: '+error.message);
+      return false;
+    }).finally(()=>{
+      setLoading(button,false);
+      syncJobs.delete(key);
+    });
+    syncJobs.set(key,job);
+    return job;
+  };
   const maybeSync=key=>{const cfg=sections[key],last=Number(cacheGet17('sync182_'+cfg.cache)||0);if(Date.now()-last>300000&&!syncJobs.has(key))syncGoogle(cfg.sheet)};
   showPlatforms=()=>{updateNavActive('nav-platforms');renderEvent('site');showScreen('screen-platforms');syncGoogle(sections.site.sheet)};showTH=()=>{updateNavActive('nav-th');renderEvent('vessel');showScreen('screen-th');syncGoogle(sections.vessel.sheet)};setInterval(()=>{if(document.visibilityState==='visible'&&currentUser){if(currentScreen==='screen-platforms')maybeSync('site');if(currentScreen==='screen-th')maybeSync('vessel')}},60000);
   // Selection panel: keep clear of the floating navigation and format badges.

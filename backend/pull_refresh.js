@@ -55,20 +55,15 @@
           return;
         }
         initialVersion=version;
-        if(typeof api==='function')await api('/api/me');
-        const tasks=[];
-        for(const fn of ['loadItems','loadLocations','loadLowStock','loadStats','loadDashboard17','loadMyBookings']){
-          const f=window[fn];
-          if(typeof f==='function')tasks.push(Promise.resolve().then(()=>f()));
-        }
-        await Promise.all(tasks);
-        if(typeof currentScreen!=='undefined'&&currentScreen==='screen-take'&&typeof renderTakeItems==='function')renderTakeItems();
-        if(typeof currentScreen!=='undefined'&&currentScreen==='screen-platforms'&&typeof syncGoogle==='function')await syncGoogle('кц');
-        if(typeof currentScreen!=='undefined'&&currentScreen==='screen-th'&&typeof syncGoogle==='function')await syncGoogle('тх мск');
-        show('Данные обновлены');
+        await api('/api/me');
+        const tasks=[loadItems(), loadLocations(), loadDashboard17({force:true}), loadMyBookings()];
+        if(currentScreen==='screen-platforms')tasks.push(syncGoogle('кц',{silent:true}));
+        if(currentScreen==='screen-th')tasks.push(syncGoogle('тх мск',{silent:true}));
+        const results=await Promise.all(tasks);
+        show(results.includes(false)?'Не удалось обновить данные':'Данные обновлены');
       }catch(error){
         if(error?.status===401||error?.status===403){location.reload();return;}
-        show('Нет соединения');
+        show(navigator.onLine?'Не удалось обновить данные':'Нет соединения');
       }finally{
         setTimeout(()=>{refreshing=false;hide()},850);
       }
