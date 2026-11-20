@@ -198,7 +198,7 @@
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1873"></script>
     <link rel="stylesheet" href="/release-v184.css?v=1899">
-    <script src="/release-v184.js?v=1899"></script>
+    <script src="/release-v184.js?v=1900"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1870"></script>
 <style>
@@ -1177,7 +1177,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 let kitArr = [];
                 if (i.kit_body) kitArr.push(`📷 ${i.kit_body}`);
                 if (i.kit_lens) kitArr.push(`🔭 ${i.kit_lens}`);
-                if (i.kit_flash) kitArr.push(`⚡ ${i.kit_flash}`);
+                if (i.kit_flash) kitArr.push(`⚡ ${escapeOwnerText(flashModelLabel1853(i.kit_flash))}`);
                 if (i.kit_acc) kitArr.push(`🔋 ${i.kit_acc}`);
                 if (i.kit_add) kitArr.push(`📦 ${i.kit_add}`);
                 const kitHtml = kitArr.length ? `<div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height: 1.4;">${kitArr.join('<br>')}</div>` : '';
@@ -1795,6 +1795,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 const facts = [
                     ['Тип', isEquipment ? 'Оборудование' : 'Расходник'],
                     ['Бюджет', item.budget_tag],
+                    ['Совместимость', isStandaloneFlash1853(item) && (flashSuffixBrand1853(item.kit_flash) || flashSuffixBrand1853(item.name))],
                     ['Серийный номер', isEquipment && item.serial_number],
                     ['На выкупе у', isEquipment && item.buyout_status],
                 ];
@@ -1808,7 +1809,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 let componentTotal = 0;
                 if (isEquipment) {
                     for (const [key, label] of [['body','Тушка'],['lens','Объектив'],['flash','Вспышка'],['acc','Аксессуары'],['add','Допы']]) {
-                        const name = item['kit_' + key];
+                        const name = key==='flash' ? flashModelLabel1853(item.kit_flash) : item['kit_' + key];
                         const price = canSeePrices ? Number(item['price_' + key]) || 0 : 0;
                         if (!name && !price) continue;
                         const tile = name

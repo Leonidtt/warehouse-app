@@ -1,4 +1,22 @@
 /* v18.4 — Beta UI; no credentials or live stock in client code. */
+function flashSuffixBrand1853(value){
+  const model=String(value??'').normalize('NFKC').trim();
+  const suffix=model.match(/(?:^|[\s_.‐‑–—-]|\p{N}[\p{L}\p{N}]*)([cсs])$/iu)?.[1];
+  return suffix ? (suffix.toLowerCase()==='s' ? 'Sony' : 'Canon') : '';
+}
+
+function flashModelLabel1853(value){
+  const model=String(value??'').trim();
+  const brand=flashSuffixBrand1853(model);
+  return brand ? `${model} (${brand})` : model;
+}
+
+function isStandaloneFlash1853(item){
+  const category=String(item.category||'').trim().toLowerCase();
+  return item.kind==='equipment' && (['вспышки','фотовспышки'].includes(category)
+    || /^(вспышка|фотовспышка)(?:\s|$)/iu.test(String(item.name||'').trim()));
+}
+
 function installRelease184(){
   const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
   const button=(txt,fn,cls='secondary')=>{const n=el('button',cls,txt);n.type='button';n.onclick=async e=>{if(n.disabled)return;try{await fn(e)}catch(err){notify(err.message||String(err))}};return n};
@@ -50,7 +68,11 @@ function installRelease184(){
 function compactData1857(i,booked){
   const clean=v=>String(v??'').trim();
   const meaningful=v=>!['','-','—','нет','none','0','n/a','без','не указан','не указана'].includes(clean(v).toLowerCase());
-  const parts=i.kind==='equipment'?[i.kit_body,i.kit_lens,i.kit_flash].filter(meaningful).map(clean):[];
+  const parts=i.kind==='equipment'?[i.kit_body,i.kit_lens,flashModelLabel1853(i.kit_flash)].filter(meaningful).map(clean):[];
+  if(isStandaloneFlash1853(i) && !flashSuffixBrand1853(i.kit_flash)){
+    const brand=flashSuffixBrand1853(i.name);
+    if(brand)parts.push(brand);
+  }
   const summary=i.kind==='consumable'?String(i.total??0)+' '+(i.unit||'шт.'):parts.join(' · ');
   const states=[];
   if(i.needs_repair)states.push(['Ремонт','repair']);
@@ -123,6 +145,10 @@ function compactData1857(i,booked){
   const bossBox=el('section','r184-boss hidden');main.querySelector('.v18-quick').before(bossBox);let bossJob=null;
   function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Отдельные вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
 function bossBrand1853(value,kind){
+  if(kind==='flash'){
+    const brand=flashSuffixBrand1853(value);
+    if(brand)return brand==='Canon'?'К':'С';
+  }
   const s=String(value||'').normalize('NFKC').toLowerCase().replace(/[‐‑–—]/g,'-');
   const canon=/(?:^|[^\p{L}\p{N}])(?:canon|к[еэ]нон|канон)(?=$|[^\p{L}\p{N}])/u.test(s);
   const sony=/(?:^|[^\p{L}\p{N}])(?:sony|сони)(?=$|[^\p{L}\p{N}])/u.test(s);
@@ -146,7 +172,9 @@ function bossCounts1853(items,kind,standaloneFlash=false){
     if(q<=0)continue;
     const v=String(i[kind]||'').trim();
     const model=['','-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase())?i.name:v;
-    counts[bossBrand1853(model,kind)]+=q;
+    let brand=bossBrand1853(model,kind);
+    if(brand==='?'&&kind==='flash'&&Number(i.camera_count)===0)brand=bossBrand1853(i.name,kind);
+    counts[brand]+=q;
   }
   return counts;
 }
@@ -186,7 +214,7 @@ function bossSurname1853(name){
     const content=el('div','r1853-person-details');content.append(el('div','r1853-full-name',p.name));
     for(const i of p.items||[]){
       const item=el('div','r1853-detail-item'),link=button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link');item.append(link);
-      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash'],['На выкупе у','buyout_status']]){const v=String(i[k]||'').trim();if(v&&!['-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase()))item.append(el('div','meta',label+': '+v))}
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash'],['На выкупе у','buyout_status']]){const v=String(i[k]||'').trim();if(v&&!['-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase()))item.append(el('div','meta',label+': '+(k==='flash'?flashModelLabel1853(v):v)))}
       if(i.taken_at){const raw=String(i.taken_at),match=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);item.append(el('div','meta','Выдано: '+(match?[match[3],match[2],match[1]].join('.'):raw)))}
       content.append(item)
     }
@@ -209,7 +237,7 @@ function bossSurname1853(name){
       const item=el('div','r1853-detail-item');
       if(i.archived)item.append(el('div','r1853-full-name',i.name+' · '+i.code+' (архив)'));
       else item.append(button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link'));
-      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash']])if(String(i[k]||'').trim())item.append(el('div','meta',label+': '+i[k]));
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash']])if(String(i[k]||'').trim())item.append(el('div','meta',label+': '+(k==='flash'?flashModelLabel1853(i[k]):i[k])));
       if(type==='rental'){
         item.append(el('div','meta','Выдал: '+(i.giver||'Не указан')),el('div','meta',i.returned_at?'Возвращено: '+bossDate1855(i.returned_at):'На руках'));
       }else item.append(el('div','meta',i.holders?.length?'На руках: '+i.holders.join(', '):'Нет активной выдачи'));
@@ -327,7 +355,7 @@ function heldPeople1857(items){
     if(i.kind!=='equipment'||i.is_archived)continue;
     const cat=String(i.category||'').trim().toLowerCase(),name=String(i.name||'').trim().toLowerCase();
     const camera_count=Number(present(i.kit_body)||['фотоаппараты','камеры'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name));
-    const flash_count=Number(present(i.kit_flash)||['вспышки','фотовспышки'].includes(cat)||/^(вспышка|фотовспышка)(?:\s|$)/u.test(name));
+    const flash_count=Number(present(i.kit_flash)||isStandaloneFlash1853(i));
     for(const h of i.holders||[]){
       const person=String(h.taken_for||h.full_name||'Не указан').trim()||'Не указан',key=JSON.stringify([h.user_id??null,person]);
       if(!groups.has(key))groups.set(key,{person_id:h.user_id??null,name:person,items:[]});
