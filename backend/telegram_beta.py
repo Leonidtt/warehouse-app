@@ -93,17 +93,24 @@ def register_telegram_app_bot(app, token, public_url, transaction, authorize, is
                 code = issue_code(conn, chat_id, rate_limit=True)
             except HTTPException as error:
                 return reply(chat_id, error.detail)
-        formatted = "-".join(code[n:n + 4] for n in (0, 4, 8))
-        return reply(
+        link = reply(
             chat_id,
             "Склад Бета — тот же склад в браузере.\n"
             f'<a href="{escape(app_url, quote=True)}">Открыть приложение</a>\n\n'
             "На iPhone откройте ссылку в Safari и выберите «Поделиться → На экран Домой». "
             "На Android откройте ссылку в Chrome и выберите «Установить приложение».\n\n"
-            f"Код для входа: {formatted}\nКод действует 5 минут. Никому его не передавайте.",
+            "Код действует 5 минут. Никому его не передавайте.",
             parse_mode="HTML",
             link_preview_options={"is_disabled": True},
         )
+        formatted = "-".join(code[n:n + 4] for n in (0, 4, 8))
+        buttons = [[{"text": "Скопировать код", "copy_text": {"text": formatted}}]]
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                await telegram(client, **link)
+        except TELEGRAM_ERRORS:
+            buttons.append([{"text": "Открыть приложение", "url": app_url}])
+        return reply(chat_id, formatted, reply_markup={"inline_keyboard": buttons})
 
     if not auto_configure:
         return
