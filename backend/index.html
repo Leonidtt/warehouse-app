@@ -176,10 +176,10 @@
     
         .room-card, .room-card.card {flex-direction:row;align-items:center;gap:12px;text-align:left}.room-info{min-width:0}.room-title{font-size:16px}.room-arrow-circle{flex-shrink:0}.compact{width:auto;min-height:36px;padding:9px 12px;font-size:13px;margin:0}.header-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 15px}.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.metric{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;color:var(--text);text-align:left;box-shadow:none;margin:0;padding:14px}.metric b{display:block;font-size:25px;margin-top:6px}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.settings-grid button{margin:0;font-size:13px;min-width:0;overflow-wrap:anywhere}.login-card{max-width:440px;margin:12vh auto;padding:24px}.login-card input{margin:14px 0}.login-card p{line-height:1.5}#net-state{position:fixed;top:0;left:0;right:0;z-index:3000;padding:10px;background:#9a3412;color:white;text-align:center}.field-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.field-row>*{flex:1;min-width:90px}.copy-line{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.label-img{width:175px;max-width:100%;height:auto;border:1px solid #bbb;background:white;display:block;margin:12px auto}.data-list{display:grid;gap:10px}.extra-card{margin:0;padding:14px}
 .finance-equipment-card{padding:12px}
-.finance-equipment-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.finance-equipment-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--warehouse-table-gap);min-height:var(--warehouse-table-row);padding:0 var(--warehouse-table-inset);margin-bottom:var(--warehouse-table-space)}
 .finance-equipment-count{font-size:11px;color:var(--text-muted)}
 .finance-equipment-list{display:grid}
-.finance-equipment-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) max-content;gap:8px;align-items:start;padding:7px 0;border-top:1px solid var(--border);font-size:12px;line-height:1.3}
+.finance-equipment-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) max-content;gap:var(--warehouse-table-gap);align-items:center;min-height:var(--warehouse-table-row);padding:var(--warehouse-table-cell-padding);border-top:1px solid var(--border);font-size:12px;line-height:1.3}
 .finance-equipment-row span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .finance-equipment-row .finance-equipment-model{color:var(--text-muted)}
 .finance-equipment-row .finance-equipment-price{text-align:right;white-space:nowrap;font-weight:650;font-variant-numeric:tabular-nums}
@@ -191,14 +191,14 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css?v=1897">
-    <script src="/warehouse-v18.js?v=1896"></script>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1898">
+    <script src="/warehouse-v18.js?v=1898"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=1894"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1873"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1896">
-    <script src="/release-v184.js?v=1895"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=1897">
+    <script src="/release-v184.js?v=1897"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1870"></script>
 <style>
@@ -631,15 +631,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                     <button type="button" class="secondary" id="item-qr-details" onclick="showQr()">QR-этикетка</button>
                 </div>
                 <div id="item-additional-actions"></div>
-                <div id="passport-v17"></div>
                 <div id="repairs-v17"></div>
 
                 <div id="booking-section">
                     <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
                     <div id="bookings-list"></div>
                     <div class="date-row">
-                        <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
-                        <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+                        <div class="input-group"><label for="book-from">От</label><input type="date" id="book-from"></div>
+                        <div class="input-group"><label for="book-to">До</label><input type="date" id="book-to"></div>
                     </div>
                     <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
                 </div>
@@ -712,7 +711,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 <label>Бюджет (для админа)</label>
                 <select id="edit-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ (Красный)</option><option value="ТХ">ТХ (Зеленый)</option></select>
             </div>
-            <div class="input-group"><label>На выкупе у</label><input id="edit-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label for="edit-buyout-status">На выкупе у</label><input id="edit-buyout-status" placeholder="Например, Мартемьянов"></div>
+            <div class="warehouse-buyout-fields" id="edit-buyout-amounts">
+                <div class="input-group"><label for="edit-buyout-total">Сумма выкупа, ₽</label><input type="number" id="edit-buyout-total" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="input-group"><label for="edit-buyout-remaining">Осталось выплатить, ₽</label><input type="number" id="edit-buyout-remaining" min="0" step="0.01" inputmode="decimal"></div>
+            </div>
             
             <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
             <div class="input-group"><label>Тушка</label><input id="edit-kit-body"></div>
@@ -1162,12 +1165,12 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 return;
             }
 
-            let html = `<div style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
-                <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left; min-width: 400px;">
-                <tr style="border-bottom: 2px solid var(--border); background: var(--skeleton-bg);">
-                    <th style="padding: 10px; font-weight: 600;">Товар / Комплект</th>
-                    <th style="padding: 10px; font-weight: 600;">Где</th>
-                    <th style="padding: 10px; font-weight: 600;">У кого</th>
+            let html = `<div class="warehouse-table-scroll">
+                <table class="warehouse-table warehouse-table--category">
+                <tr>
+                    <th>Товар / Комплект</th>
+                    <th>Где</th>
+                    <th>У кого</th>
                 </tr>`;
 
             filtered.forEach(i => {
@@ -1185,14 +1188,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 let rowBg = i.holders.length > 0 ? 'rgba(255, 149, 0, 0.08)' : 'transparent';
                 let holderColor = i.holders.length > 0 ? 'var(--warning)' : 'var(--text)';
 
-                html += `<tr style="border-bottom: 1px solid var(--border); background: ${rowBg};">
-                    <td style="padding: 10px; vertical-align: top; max-width: 150px;">
+                html += `<tr style="background: ${rowBg};">
+                    <td style="max-width: 150px;">
                         <div style="font-weight: 600; color: var(--primary);">${escapeOwnerText(i.name)}</div>
                         <div style="font-size: 11px; color: var(--text-muted);">${escapeOwnerText(i.code)}</div>
                         ${kitHtml}
                     </td>
-                    <td style="padding: 10px; vertical-align: top; font-weight: 500;">${escapeOwnerText(locations)}</td>
-                    <td style="padding: 10px; vertical-align: top; color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${escapeOwnerText(holders)}</td>
+                    <td style="font-weight: 500;">${escapeOwnerText(locations)}</td>
+                    <td style="color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${escapeOwnerText(holders)}</td>
                 </tr>`;
             });
 
@@ -1843,6 +1846,13 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 }
                 if (holder?.return_plan) stocks.append(itemTile('Ответ о возврате', holder.return_plan));
                 if (canSeePrices && item.price) stocks.append(itemTile('Цена · админы', money17(item.price), true));
+                if (canSeePrices && item.buyout) {
+                    for (const [label, value] of [
+                        ['Сумма выкупа', item.buyout.total],
+                        ['Выплачено', item.buyout.paid],
+                        ['Осталось выплатить', item.buyout.remaining],
+                    ]) stocks.append(itemTile(label, money17(value), true));
+                }
 
                 const bookingSection = $('booking-section');
                 bookingSection.classList.toggle('hidden', !isEquipment);
@@ -1852,7 +1862,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                     loadBookings(item.code);
                 }
 
-                renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
+                renderActions(); loadRepairs17(currentItem.code);
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
             } catch (e) { if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message); } 
@@ -1861,10 +1871,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function showEditForm() { 
             document.getElementById("edit-name").value = currentItem.name; 
             document.getElementById("edit-kind").value = currentItem.kind; $("edit-kind").disabled=true; $("edit-category").value=currentItem.category||""; 
-            document.getElementById("edit-price").value = currentItem.price || 0; 
+            const editPrice = $('edit-price');
+            delete editPrice.dataset.kitCalculated;
+            editPrice.value = currentItem.price || 0;
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
             document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
-            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; 
+            $('edit-buyout-status').value = currentItem.buyout_status || '';
+            $('edit-buyout-total').value = currentItem.buyout?.total ?? '';
+            $('edit-buyout-remaining').value = currentItem.buyout?.remaining ?? '';
             
             document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
             document.getElementById("edit-price-body").value = currentItem.price_body || 0; 
@@ -1889,6 +1903,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function toggleEditFields() {
             const c=$("edit-kind").value==="consumable";
             $("edit-consumable-fields").classList.toggle("hidden",!c);
+            $("edit-buyout-amounts").classList.toggle("hidden",c);
             for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c);
             $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c);
             const priceGroup=$("edit-price").closest(".input-group");
@@ -1964,7 +1979,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                     name, kind, min_stock: minStock, price, 
                     kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
                     price_body, price_lens, price_flash, price_acc, price_add, 
-                    budget_tag, serial_number, buyout_status, category:$("edit-category").value 
+                    budget_tag, serial_number, buyout_status, category:$("edit-category").value,
+                    buyout: kind === 'equipment' ? {
+                        total: $('edit-buyout-total').value || null,
+                        remaining: $('edit-buyout-remaining').value || null,
+                    } : undefined
                 }) }); 
                 showToast("Сохранено"); setLoading(btn,false); loadItems(); if(currentScreen==="screen-edit-item"&&epoch===screenEpoch184){await openItem(savedCode);} 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
@@ -2418,9 +2437,9 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 if (res.type === "select") {
                     if (!res.data.length) resBox.innerHTML = "<p>Запрос выполнен. Данных нет.</p>";
                     else {
-                        let html = `<div style="overflow-x: auto; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 10px;"><table style="width: 100%; border-collapse: collapse;">`;
-                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th style="text-align: left; border-bottom: 1px solid var(--border); padding: 4px;">${escapeOwnerText(k)}</th>`).join("") + `</tr>`;
-                        res.data.forEach(row => { html += `<tr>` + Object.values(row).map(v => `<td style="border-bottom: 1px solid var(--border); padding: 4px;">${escapeOwnerText(v)}</td>`).join("") + `</tr>`; });
+                        let html = `<div class="warehouse-table-scroll"><table class="warehouse-table">`;
+                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th>${escapeOwnerText(k)}</th>`).join("") + `</tr>`;
+                        res.data.forEach(row => { html += `<tr>` + Object.values(row).map(v => `<td>${escapeOwnerText(v)}</td>`).join("") + `</tr>`; });
                         html += `</table></div>`; resBox.innerHTML = html;
                     }
                 } else { resBox.innerHTML = `<div class="status-badge status-free">${escapeOwnerText(res.message)}</div>`; loadStats(); }
@@ -2494,66 +2513,35 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
         async function issueWebCode(target='site'){
-            const isApp = target === 'app';
-            const {b} = overlay17(isApp ? 'Приложение «Склад Бета»' : 'Вход на сайт');
-            if (isApp) {
-                const description = document.createElement('p');
-                description.textContent = 'Это тот же склад в браузере. Его можно добавить на главный экран телефона.';
-                const steps = document.createElement('ul');
-                steps.className = 'warehouse-install-steps';
-                for (const line of [
-                    'iPhone: откройте ссылку в Safari и выберите «Поделиться → На экран Домой».',
-                    'Android: откройте ссылку в Chrome и выберите «Установить приложение» или «На главный экран».',
-                    'Откройте приложение и введите одноразовый код из бота.',
-                ]) {
-                    const step = document.createElement('li');
-                    step.textContent = line;
-                    steps.append(step);
+            const isApp=target==='app';
+            try{
+                let code='';
+                if(tg.initData){
+                    const r=await api('/api/web/code',{method:'POST'});
+                    code=r.code.match(/.{1,4}/g).join('-');
                 }
-                b.append(description, steps);
-            }
-            const link = document.createElement('a');
-            link.href = location.origin + (isApp ? '/pwa/' : '/');
-            link.textContent = isApp ? 'Открыть приложение' : 'Открыть сайт';
-            link.target = '_blank';
-            link.rel = 'noopener';
-            link.className = 'warehouse-install-link';
-            link.onclick = event => {
-                if (tg.initData && typeof tg.openLink === 'function') {
-                    event.preventDefault();
-                    tg.openLink(link.href);
+                const {b}=overlay17(isApp?'Приложение «Склад Бета»':'Вход на сайт');
+                if(code){
+                    const p=document.createElement('p');
+                    p.textContent=code;
+                    p.style.cssText='font-size:27px;font-weight:bold;letter-spacing:2px;text-align:center';
+                    b.append(p);
+                    btn17(b,'Копировать код',()=>copyText(code));
                 }
-            };
-            b.append(link);
-            if (isApp) btn17(b,'Копировать ссылку',()=>copyText(link.href));
-            const status = document.createElement('div');
-            status.setAttribute('aria-live','polite');
-            b.append(status);
-            const getCode = async () => {
-                const result = await api('/api/web/code', {
-                    method:'POST',
-                    body:JSON.stringify({send_to_bot:isApp}),
-                });
-                const code = result.code.match(/.{1,4}/g).join('-');
-                const value = document.createElement('p');
-                value.className = 'warehouse-login-code';
-                value.textContent = code;
-                const note = document.createElement('p');
-                note.className = 'meta';
-                note.textContent = isApp
-                    ? (result.delivered ? 'Код отправлен в чат бота. Он действует 5 минут.'
-                        : 'Код доступен здесь. Чтобы получать код в чате, откройте бота и нажмите «Старт».')
-                    : 'Введите код в браузере. Он действует 5 минут.';
-                status.replaceChildren(value,note);
-                btn17(status,'Копировать код',()=>copyText(code));
-            };
-            if (!tg.initData) {
-                status.textContent = 'Код можно запросить в Telegram через своё имя и пункт «Приложение».';
-            } else if (isApp) {
-                btn17(b,'Запросить код в боте',getCode,'ok');
-            } else {
-                try { await getCode(); } catch (error) { status.textContent = error.message; }
-            }
+                const note=document.createElement('p');
+                note.textContent=code
+                    ? (isApp?'Введите этот код в приложении. Действует 5 минут. Никому не передавайте.':'Введите код в браузере. Действует 5 минут. Никому не передавайте.')
+                    : 'Код для входа можно получить только в Telegram: откройте «Склад Бета» → своё имя → «Приложение».';
+                b.append(note);
+                const a=document.createElement('a');
+                a.href=location.origin+(isApp?'/pwa/':'/');
+                a.textContent=isApp?'Открыть приложение «Склад Бета»':'Открыть сайт';
+                a.target='_blank';
+                a.rel='noopener';
+                a.style.cssText='display:inline-block;margin-top:12px;font-weight:600';
+                a.onclick=e=>{if(tg.initData&&typeof tg.openLink==='function'){e.preventDefault();tg.openLink(a.href)}};
+                b.append(a);
+            }catch(e){notify(e.message)}
         }
         async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value,pwa:location.pathname.startsWith('/pwa/')})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
         async function blob17(url){const r=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.detail||'Не удалось загрузить файл')}return r.blob()}
@@ -2607,9 +2595,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         }
         async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await renderCategorySettings(box);}else if(section==='finance'){const [r,items]=await Promise.all([api('/api/dashboard'),api('/api/items')]);box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);renderFinanceEquipment17(box,items);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
         function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
-        async function loadPassport17(code){const box=$('passport-v17');box.replaceChildren();try{const m=await api(itemPath17(code,'/passport'));if(currentItem?.code!==code)return;const c=card17(box,'Паспорт товара',[m.notes,m.site?'Площадка: '+m.site:'',m.vessel?'Теплоход: '+m.vessel:'',currentItem.kind==='consumable'?'Единица: '+m.unit:'',m.supplier?'Поставщик: '+m.supplier:''].filter(Boolean).join('\n'));if(m.has_photo){const im=document.createElement('img');im.style.cssText='max-width:100%;max-height:220px;object-fit:contain;border-radius:12px';im.alt='Фото товара';c.prepend(im);image17(im,itemPath17(code,'/photo')).catch(e=>im.remove())}btn17(c,'Копировать название',()=>copyText(currentItem.name));btn17(c,'Копировать код',()=>copyText(code));if(currentUser.role==='admin')btn17(c,'Редактировать паспорт',()=>editPassport17(code,m))}catch(e){box.textContent=e.message}}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}
-        function editPassport17(code,m){const {b,o}=overlay17('Паспорт товара');const unit=field17(b,'Единица измерения',m.unit),supplier=field17(b,'Поставщик',m.supplier),site=field17(b,'Площадка',m.site),vessel=field17(b,'Теплоход',m.vessel);populateSuggestions17(b,site,'site',cachedPlatforms.map(r=>r['Площадка']));populateSuggestions17(b,vessel,'vessel',cachedTH.map(r=>r['Название']||Object.values(r)[0]));const notes=field17(b,'Описание и место хранения',m.notes,'textarea'),photo=field17(b,'Заменить фото','','file');photo.accept='image/*';btn17(b,'Сохранить',async()=>{await api(itemPath17(code,'/passport'),{method:'PUT',body:JSON.stringify({unit:unit.value,supplier:supplier.value,site:site.value,vessel:vessel.value,notes:notes.value})});if(photo.files[0]){let f=new FormData();f.append('photo',photo.files[0]);await api(itemPath17(code,'/photo'),{method:'PUT',body:f})}o.remove();loadPassport17(code);loadItems();showToast('Сохранено')},'ok')}
         async function loadRepairs17(code){const box=$('repairs-v17');box.replaceChildren();if(currentItem?.kind!=='equipment')return;try{const rows=await api(itemPath17(code,'/repairs'));if(currentItem?.code!==code)return;for(const r of rows){const c=card17(box,r.finished_at?'Завершённый ремонт':'Ремонт',`${r.description}\n${r.started_at}${r.finished_at?' — '+r.finished_at:''}`);if(currentUser.role==='admin'&&r.cost!==undefined)c.append(adminPrice(r.cost));if(r.has_photo){const im=document.createElement('img');im.alt='Фото ремонта';im.style.cssText='max-width:100%;max-height:220px;object-fit:contain';c.append(im);image17(im,'/api/repairs/'+r.id+'/photo').catch(()=>im.remove())}if(currentUser.role==='admin'||currentUser.tg_id===r.user_id){const f=field17(c,'Фото поломки','','file');f.accept='image/*';btn17(c,'Сохранить фото',async()=>{if(!f.files[0])throw Error('Выберите фото');const data=new FormData();data.append('photo',f.files[0]);await api('/api/repairs/'+r.id+'/photo',{method:'PUT',body:data});loadRepairs17(code);showToast('Фото сохранено')})}}}catch(e){console.log(e)}}
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
@@ -2865,7 +2851,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         // Load installability and iOS camera support exclusively for the PWA entry point.
         if(!tg.initData && location.pathname.startsWith('/pwa/')){
           const pwaScript=document.createElement('script');
-          pwaScript.src='/pwa/client.js?v=2';
+          pwaScript.src='/pwa/client.js?v=3';
           document.body.append(pwaScript);
         }
         (async () => { await init(); await openReturnReminder(); })();

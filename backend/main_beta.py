@@ -16,6 +16,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime, timedelta
+from decimal import Decimal
 import os
 import traceback
 import pandas as pd
@@ -35,6 +36,7 @@ from release_v184 import effective_user, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
+from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 from pwa_assets import render_icon_png
@@ -210,6 +212,11 @@ def init_db(db_path):
         checkout_id INTEGER PRIMARY KEY,
         handed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS equipment_buyout_amounts (
+        item_code TEXT PRIMARY KEY,
+        total_cents INTEGER NOT NULL CHECK(total_cents>=0),
+        remaining_cents INTEGER NOT NULL CHECK(remaining_cents BETWEEN 0 AND total_cents)
+    )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_checkouts_code_return ON checkouts(item_code,returned_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(item_code,date_from,date_to)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_location ON stock(location_id)")
@@ -218,6 +225,10 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS repair_photos (repair_id INTEGER PRIMARY KEY, photo TEXT NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS inventory_runs (id INTEGER PRIMARY KEY, location_id INTEGER NOT NULL, user_id INTEGER NOT NULL, report TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    c.execute("""CREATE TABLE IF NOT EXISTS telegram_bot_updates (
+        update_id INTEGER PRIMARY KEY,
+        received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     if "preview_role" not in {row[1] for row in c.execute("PRAGMA table_info(employee_preview)")}:
@@ -445,8 +456,16 @@ class LocationCreate(BaseModel):
     name: str
 class LocationUpdate(BaseModel):
     id: int; name: str
+class BuyoutAmounts(BaseModel):
+    total: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    remaining: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
 class ItemUpdate(BaseModel):
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; kit_acc: str; kit_add: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""; price_body: float = 0; price_lens: float = 0; price_flash: float = 0; price_acc: float = 0; price_add: float = 0
+    buyout: Optional[BuyoutAmounts] = None
+
+
 class ImportTextRequest(BaseModel):
     text: str
 class UserUpdate(BaseModel):
@@ -857,6 +876,11 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
         LEFT JOIN checkout_handoffs handoff ON handoff.checkout_id = c.id
         WHERE c.item_code = ? AND c.returned_at IS NULL
     """, (code,)).fetchall()
+    buyout = None
+    if is_admin and str(item["buyout_status"] or "").strip():
+        buyout = conn.execute(
+            "SELECT total_cents,remaining_cents FROM equipment_buyout_amounts WHERE item_code=?", (code,)
+        ).fetchone()
     conn.close()
     
     c_at = item["created_at"] if "created_at" in item.keys() else ""
@@ -871,6 +895,12 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
         result["price_acc"] = item["price_acc"]
         result["price_add"] = item["price_add"]
         
+        if buyout:
+            result["buyout"] = {
+                "total": buyout["total_cents"] / 100,
+                "remaining": buyout["remaining_cents"] / 100,
+                "paid": (buyout["total_cents"] - buyout["remaining_cents"]) / 100,
+            }
     return result
 
 @app.post("/api/items/{code}/update")
@@ -879,27 +909,46 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
     validate_item_fields(req.name,req.kind,req.min_stock,[req.price,req.price_body,req.price_lens,req.price_flash,req.price_acc,req.price_add])
     req.name=req.name.strip(); req.category=req.category.strip()
     if req.kind=="equipment" and not req.budget_tag.strip(): req.budget_tag=budget_for_equipment_name(req.name)
-    conn = get_conn(x_init_data)
-    existing=conn.execute("SELECT kind FROM items WHERE code=? AND is_archived=0",(code,)).fetchone()
-    if not existing: conn.close(); raise HTTPException(404,"Товар не найден")
-    if existing["kind"]!=req.kind: conn.close(); raise HTTPException(409,"Тип существующего товара менять нельзя")
-    if req.kind=="consumable":
-        req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
-        req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
-    conn.execute("""UPDATE items SET 
-        name=?, kind=?, min_stock=?, price=?, 
-        kit_body=?, kit_lens=?, kit_flash=?, kit_acc=?, kit_add=?, 
-        price_body=?, price_lens=?, price_flash=?, price_acc=?, price_add=?, 
-        budget_tag=?, serial_number=?, buyout_status=?, category=? 
-        WHERE code=?""", (
-            req.name, req.kind, req.min_stock, req.price, 
-            req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
-            req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
-            req.budget_tag, req.serial_number, req.buyout_status, req.category, code
-        ))
-    if req.category.strip(): conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)",(req.category.strip(),))
-    audit(conn,actor,"Изменение товара",code)
-    conn.commit(); conn.close(); return {"status": "ok"}
+    buyout_total = buyout_remaining = None
+    if req.buyout is not None and (req.buyout.total is not None or req.buyout.remaining is not None):
+        if req.kind != "equipment" or not req.buyout_status.strip():
+            raise HTTPException(400, "Укажите, у кого техника на выкупе")
+        if req.buyout.total is None:
+            raise HTTPException(400, "Укажите полную сумму выкупа")
+        buyout_total = req.buyout.total
+        buyout_remaining = req.buyout.remaining if req.buyout.remaining is not None else buyout_total
+        if buyout_remaining > buyout_total:
+            raise HTTPException(400, "Остаток не может быть больше суммы выкупа")
+
+    with transaction() as conn:
+        existing = active_item(conn, code)
+        if existing["kind"] != req.kind:
+            raise HTTPException(409, "Тип существующего товара менять нельзя")
+        if req.kind == "consumable":
+            req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
+            req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
+        conn.execute("""UPDATE items SET
+            name=?, kind=?, min_stock=?, price=?,
+            kit_body=?, kit_lens=?, kit_flash=?, kit_acc=?, kit_add=?,
+            price_body=?, price_lens=?, price_flash=?, price_acc=?, price_add=?,
+            budget_tag=?, serial_number=?, buyout_status=?, category=?
+            WHERE code=?""", (
+                req.name, req.kind, req.min_stock, req.price,
+                req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
+                req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
+                req.budget_tag, req.serial_number, req.buyout_status, req.category, code
+            ))
+        if buyout_total is not None:
+            conn.execute("""INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents)
+                VALUES(?,?,?) ON CONFLICT(item_code) DO UPDATE SET
+                total_cents=excluded.total_cents, remaining_cents=excluded.remaining_cents""",
+                (code, int(buyout_total * 100), int(buyout_remaining * 100)))
+        elif req.buyout is not None or not req.buyout_status.strip():
+            conn.execute("DELETE FROM equipment_buyout_amounts WHERE item_code=?", (code,))
+        if req.category:
+            conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (req.category,))
+        audit(conn, actor, "Изменение товара", code)
+    return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
 async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
@@ -1362,6 +1411,7 @@ def apply_warehouse_snapshot(path, actor):
         apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
         conn.execute("DELETE FROM checkout_handoffs")
+        conn.execute("DELETE FROM equipment_buyout_amounts")
         conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
         audit(conn, actor, "Импорт снимка", "Складские данные из Основы")
     return {"status": "ok", "tables": tables}
@@ -1570,52 +1620,34 @@ class WebLogin(BaseModel):
     code: str
     pwa: bool = False
 
-class WebCodeRequest(BaseModel):
-    send_to_bot: bool = False
+def issue_web_login_code(conn, user_id, rate_limit=False):
+    code = secrets.token_hex(6).upper()
+    now = int(time.time())
+    if rate_limit and conn.execute("SELECT 1 FROM web_codes WHERE user_id=? AND expires>?", (user_id, now + 290)).fetchone():
+        raise HTTPException(429, "Новый код можно запросить через несколько секунд")
+    conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?", (now, user_id))
+    conn.execute("INSERT INTO web_codes VALUES(?,?,?)", (web_digest(code), user_id, now + 300))
+    return code
+
+
+def authorize_telegram_app_user(conn, user_id):
+    check_snapshot_access(conn, user_id)
+    deny_blocked(conn, user_id, MAIN_ADMIN_ID)
+    user = conn.execute("SELECT is_registered FROM users WHERE tg_id=?", (user_id,)).fetchone()
+    if not user or not user["is_registered"]:
+        raise HTTPException(403, "Сначала откройте Склад Бета в Telegram и завершите регистрацию.")
 
 
 @app.post("/api/web/code")
-async def web_code(req: Optional[WebCodeRequest] = None, x_init_data: Optional[str] = Header(None)):
+def web_code(x_init_data: Optional[str] = Header(None)):
     if not x_init_data or x_init_data.startswith("web:"):
         raise HTTPException(403, "Код можно получить только внутри Telegram")
     user = get_user(x_init_data)
-    if not user['is_registered']:
+    if not user["is_registered"]:
         raise HTTPException(403, "Сначала завершите регистрацию")
-    code = secrets.token_hex(6).upper()
-    now = int(time.time())
-    send_to_bot = bool(req and req.send_to_bot)
     with transaction() as conn:
-        if send_to_bot and conn.execute("SELECT 1 FROM web_codes WHERE user_id=? AND expires>?", (user["tg_id"], now + 290)).fetchone():
-            raise HTTPException(429, "Новый код можно запросить через несколько секунд")
-        conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?", (now, user["tg_id"]))
-        conn.execute("INSERT INTO web_codes VALUES(?,?,?)", (web_digest(code), user["tg_id"], now + 300))
-    delivered = False
-    if send_to_bot:
-        domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+", domain, re.I):
-            domain = "determined-fascination-production.up.railway.app"
-        public_url = f"https://{domain}/pwa/"
-        formatted = "-".join(code[n:n+4] for n in (0, 4, 8))
-        text = (
-            "Склад Бета — это тот же склад в браузере.\n"
-            "На iPhone откройте ссылку в Safari и выберите «Поделиться → На экран Домой». "
-            "На Android откройте её в Chrome и выберите «Установить приложение».\n\n"
-            f"Код для входа: {formatted}\nКод действует 5 минут. Никому его не передавайте."
-        )
-        try:
-            async with httpx.AsyncClient(timeout=6) as client:
-                response = await client.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": user["tg_id"],
-                        "text": text,
-                        "reply_markup": {"inline_keyboard": [[{"text": "Открыть Склад Бета", "url": public_url}]]},
-                    },
-                )
-                delivered = response.is_success and response.json().get("ok") is True
-        except (httpx.HTTPError, ValueError):
-            pass
-    return {"code": code, "expires_in": 300, "delivered": delivered}
+        code = issue_web_login_code(conn, user["tg_id"])
+    return {"code": code, "expires_in": 300}
 
 
 @app.post("/api/web/login")
@@ -1758,6 +1790,14 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
+beta_bot_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+", beta_bot_domain, re.I):
+    beta_bot_domain = "determined-fascination-production.up.railway.app"
+register_telegram_app_bot(
+    app, BOT_TOKEN, f"https://{beta_bot_domain}", transaction,
+    authorize_telegram_app_user, issue_web_login_code,
+    auto_configure=os.environ.get("RAILWAY_SERVICE_ID") == "e298de8e-18fb-4446-9133-38e217d4e473",
+)
 register_return_reminders(
     app, get_user, transaction, snapshot_recipient_limit, BOT_TOKEN,
     os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip(),

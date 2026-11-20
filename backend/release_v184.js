@@ -359,8 +359,8 @@ function heldPeople1857(items){
   }
 
 
-  // Boss-only cost overview. Keep this last on the Home screen and collapsed by default.
-  const bossCosts=el('details','card r1859-boss-cost hidden');
+  // Show the shared cost list on Home for the warehouse keeper and Boss.
+  const bossCosts=el('details','card r1859-boss-cost beta-setting-details hidden');
   bossCosts.id='boss-equipment-costs1859';
   const bossCostsSummary=el('summary','r1859-boss-cost-summary');
   const bossCostsTitle=el('strong','', 'Техника и стоимость');
@@ -368,15 +368,23 @@ function heldPeople1857(items){
   const bossCostsList=el('div','r1859-boss-cost-list');
   bossCostsSummary.append(bossCostsTitle,bossCostsCount);
   bossCosts.append(bossCostsSummary,bossCostsList);
-  main.querySelector('.v18-quick').before(bossCosts);
+  const takeActions=main.querySelector('.v18-quick');
+  takeActions.before(bossCosts);
+  const canSeeCosts=()=>!!currentUser?.is_registered
+    &&(currentUser.role==='boss'||(currentUser.role==='admin'&&currentUser.is_owner));
   let bossCostsJob=null;
   function refreshBossCosts(){
-    const allowed=!!currentUser?.is_registered&&currentUser.role==='boss';
+    const allowed=canSeeCosts();
     bossCosts.classList.toggle('hidden',!allowed);
     if(!allowed){bossCosts.open=false;bossCostsList.replaceChildren();return}
+    if(currentUser.role==='admin'){
+      if(buyoutBox1856.nextElementSibling!==bossCosts)buyoutBox1856.after(bossCosts);
+    }else if(bossCosts.nextElementSibling!==takeActions){
+      takeActions.before(bossCosts);
+    }
     if(bossCostsJob)return bossCostsJob;
     bossCostsJob=api('/api/boss/equipment-costs').then(rows=>{
-      if(currentUser?.role!=='boss')return;
+      if(!canSeeCosts())return;
       bossCostsCount.textContent=String(rows.length)+' поз.';
       const fragment=document.createDocumentFragment();
       for(const item of rows){
