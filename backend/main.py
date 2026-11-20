@@ -58,7 +58,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.10"
+APP_VERSION = "18.5.11"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -135,6 +135,36 @@ def resolve_recipient(conn, name, recipient_id):
     guest_id = conn.execute("SELECT COALESCE(MIN(tg_id),0)-1 FROM users WHERE tg_id<0").fetchone()[0]
     conn.execute("INSERT INTO users(tg_id,full_name,role,is_registered) VALUES(?,?,'guest',1)", (guest_id, name))
     return guest_id, name
+
+
+def backfill_legacy_guest_contacts(conn):
+    # These historical checkouts have a confirmed person in the free-text recipient field.
+    rows = conn.execute("""
+        SELECT id, taken_for FROM checkouts
+        WHERE id IN (32, 34, 35, 41) AND user_id=giver_id
+          AND date(taken_at)='2026-11-15'
+        ORDER BY id
+    """).fetchall()
+    created = transferred = 0
+    for row in rows:
+        name = recipient_name(row["taken_for"])
+        if not name:
+            continue
+        before = conn.total_changes
+        try:
+            recipient_id, _ = resolve_recipient(conn, name, None)
+        except HTTPException as error:
+            if error.status_code not in (403, 409):
+                raise
+            continue
+        created += conn.total_changes - before
+        if recipient_id < 0:
+            transferred += conn.execute(
+                "UPDATE checkouts SET user_id=? WHERE id=? AND user_id=giver_id",
+                (recipient_id, row["id"]),
+            ).rowcount
+    return created, transferred
+
 
 def init_db(db_path):
     # Создаем директорию для файла базы данных, если ее нет
@@ -1698,6 +1728,11 @@ register_183(app, get_user, check_admin, transaction, active_item, valid_locatio
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
+    migration = 'legacy-guest-contacts-2026-11-20'
+    if not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (migration,)).fetchone():
+        created_guests, transferred = backfill_legacy_guest_contacts(conn)
+        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES (?)", (migration,))
+        print("Legacy guest contacts created:", created_guests, "checkouts reassigned:", transferred, flush=True)
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES ('18.5.4'), (?)", (APP_VERSION,))
 
 
