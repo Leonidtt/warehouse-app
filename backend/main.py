@@ -28,6 +28,7 @@ import re
 from urllib.parse import urlsplit
 from contextlib import contextmanager
 from datetime import date
+from pathlib import Path
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import effective_user, register_184
