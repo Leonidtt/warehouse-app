@@ -1,5 +1,5 @@
 /* Beta v18 — mobile shell, desktop workspace and optional tools. */
-function installV18(){
+function installV18(openRoleMenu){
   'use strict';
   const paths={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',pin:'<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',ship:'<path d="M3 13 12 9l9 4-3 6H6zM7 11V5h10v6M12 5V2M2 22q2-3 5 0 3-3 5 0 3-3 5 0 3-3 5 0"/>',box:'<path d="m3 7 9-4 9 4v13H3zM8 20V10h8v10M8 15h8"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="m10 2-.5 3L7 6l-2-1.5-2 3L5 10v4l-2 2.5 2 3L7 18l2.5 1 .5 3h4l.5-3 2.5-1 2 1.5 2-3-2-2.5v-4l2-2.5-2-3L17 6l-2.5-1L14 2z"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',moon:'<path d="M20 15A9 9 0 0 1 9 4 9 9 0 1 0 20 15Z"/>',scan:'<path d="M3 8V3h5m8 0h5v5m0 8v5h-5m-8 0H3v-5M3 12h18"/>',take:'<path d="M4 5h16v15H4zM4 10h16m-8-7v7m-4 5 4 4 4-4"/>',star:'<path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3L3 9.6l6.2-.9z"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',bell:'<path d="M5 17h14l-2-4V8a5 5 0 0 0-10 0v5zm5 3h4"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6M17 2v6M3 10h18"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',edit:'<path d="m4 16 12-12 4 4L8 20H4zm10-10 4 4"/>',user:'<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',chart:'<path d="M3 3v18h18M7 16v-5m5 5V7m5 9V3"/>',web:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6m-3-4v4"/>',file:'<path d="M6 2h8l4 4v16H6zM14 2v5h4M9 12h6m-6 4h6"/>',refresh:'<path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',archive:'<path d="M4 7h16v14H4zM3 3h18v4H3zm6 9h6"/>',plus:'<path d="M12 4v16M4 12h16"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>'};
   const ico=k=>'<svg class="v18-icon" viewBox="0 0 24 24" aria-hidden="true">'+(paths[k]||paths.grid)+'</svg>';
@@ -73,7 +73,25 @@ function installV18(){
   maintenance.id='beta-maintenance-settings';
   const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад Бета v18.5.9';settings.replaceChildren(settings_header,groups,footer);
   $('screen-login').querySelector('.login-card p').textContent='Открой склад в Telegram, выбери «Сайт» в настройках или профиле и введи одноразовый код.';$('screen-login').querySelector('.login-card h1').textContent='Склад · v18.4';
-  $('user-info').onclick=()=>{const {o,b}=overlay17('Мой профиль');const p=document.createElement('p');p.textContent=currentUser?.full_name||'';b.append(p);btn17(b,'Изменить имя',()=>{o.remove();editMyName()});if(tg.initData){btn17(b,'Сайт',()=>{o.remove();return issueWebCode()});btn17(b,'Приложение',()=>{o.remove();return issueWebCode('app')});}btn17(b,'Активные сеансы сайта',()=>{o.remove();showSessions()});btn17(b,'Акцентный цвет',()=>{o.remove();showAccent()})};
+  $('user-info').onclick=()=>{
+    const {o,b}=overlay17('Мой профиль');
+    const name=document.createElement('p');
+    name.textContent=currentUser?.full_name||'';
+    b.append(name);
+    if(currentUser?.can_preview){
+      btn17(b,'Сменить роль',()=>{
+        o.remove();
+        openRoleMenu();
+      });
+    }
+    btn17(b,'Изменить имя',()=>{o.remove();editMyName()});
+    if(tg.initData){
+      btn17(b,'Сайт',()=>{o.remove();return issueWebCode()});
+      btn17(b,'Приложение',()=>{o.remove();return issueWebCode('app')});
+    }
+    btn17(b,'Активные сеансы сайта',()=>{o.remove();showSessions()});
+    btn17(b,'Акцентный цвет',()=>{o.remove();showAccent()});
+  };
   const cleanButtons=root=>root.querySelectorAll('button').forEach(b=>{if(b.children.length||b.classList.contains('v18-icon-btn'))return;const old=b.textContent,txt=old.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu,'').trim();if(txt&&txt!==old.trim())b.textContent=txt});cleanButtons(document);
   const oldLoadLocations=loadLocations;loadLocations=async()=>{await oldLoadLocations();$('locations-list').querySelectorAll('.card').forEach(c=>{c.classList.add('v18-place-row');const b=c.querySelector('button');if(b){b.innerHTML=ico('edit');b.title='Переименовать';b.setAttribute('aria-label',b.title)}})};
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();$('rooms-list').querySelectorAll('.room-arrow-circle').forEach(e=>e.innerHTML=ico('right'))};
