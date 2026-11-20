@@ -47,7 +47,9 @@ function installDeliverySchedule(){
     top.append(el('strong','',row.person),el('span','delivery-department',row.department));
     item.append(top);
     if(row.status==='delivery'){
-      const text=row.camera_count===null?'Уточните получателя':row.camera_count>0?'Фотоаппарат на руках':'Нужен фотоаппарат';
+      let text='Нужен фотоаппарат';
+      if(row.camera_count===null)text='Уточните получателя';
+      else if(row.camera_count>0)text='Нужен по графику · на руках, не везти';
       item.append(el('div','delivery-equipment',text));
     }
     const location=el('div','delivery-venue');
