@@ -1633,6 +1633,9 @@ def issue_web_login_code(conn, user_id, rate_limit=False):
 def authorize_telegram_app_user(conn, user_id):
     check_snapshot_access(conn, user_id)
     deny_blocked(conn, user_id, MAIN_ADMIN_ID)
+    if user_id == MAIN_ADMIN_ID:
+        conn.execute("INSERT OR IGNORE INTO users(tg_id,role,is_registered) VALUES (?,'admin',0)", (user_id,))
+        return
     user = conn.execute("SELECT is_registered FROM users WHERE tg_id=?", (user_id,)).fetchone()
     if not user or not user["is_registered"]:
         raise HTTPException(403, "Сначала откройте Склад Бета в Telegram и завершите регистрацию.")
@@ -1796,6 +1799,7 @@ if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+", beta_bot_domain, re.I):
 register_telegram_app_bot(
     app, BOT_TOKEN, f"https://{beta_bot_domain}", transaction,
     authorize_telegram_app_user, issue_web_login_code,
+    owner_chat_id=MAIN_ADMIN_ID,
     auto_configure=os.environ.get("RAILWAY_SERVICE_ID") == "e298de8e-18fb-4446-9133-38e217d4e473",
 )
 register_return_reminders(
