@@ -29,7 +29,16 @@ function installRelease184(){
   let sort='default';
   const from=el('input'),to=el('input'),priceWrap=el('div','r184-price-range'),fav=el('input');from.type=to.type='number';from.min=to.min='0';from.placeholder='От';to.placeholder='До';from.setAttribute('aria-label','Цена от');to.setAttribute('aria-label','Цена до');priceWrap.append(el('span','','Стоимость, ₽'),from,to);panels.append(priceWrap);fav.type='checkbox';const favlabel=el('label','r184-favorite-filter');favlabel.append(fav,el('span','','Только избранное'));panels.append(favlabel);
   const sortSelect=el('select');for(const [v,t]of [['default','По статусу'],['name-asc','Название: А–Я'],['name-desc','Название: Я–А'],['price-asc','Цена: от меньшей'],['price-desc','Цена: от большей'],['qty-asc','Количество: от меньшего'],['qty-desc','Количество: от большего'],['date-desc','Сначала новые'],['date-asc','Сначала старые']])sortSelect.add(new Option(t,v));sortPanel.append(sortSelect);
-  function refreshFilterButtons(){for(const b of segments.children)b.classList.toggle('active',b.dataset.value===$('filter-kind').value);filterBtn.classList.toggle('active',!!($('filter-location').value||$('filter-category').value||opts.value||fav.checked||(admin()&&(from.value||to.value))));sortBtn.classList.toggle('active',sort!=='default');priceWrap.classList.toggle('hidden',!admin());for(const o of sortSelect.options)if(o.value.startsWith('price'))o.disabled=o.hidden=!admin()}
+  function refreshFilterButtons(){
+    const kind=$('filter-kind').value;
+    const advanced=!!($('filter-location').value||$('filter-category').value||opts.value||fav.checked||(admin()&&(from.value||to.value)));
+    for(const button of segments.children)button.classList.toggle('active',button.dataset.value===kind);
+    filterBtn.classList.toggle('active',advanced);
+    resetBtn.disabled=!kind&&!advanced;
+    sortBtn.classList.toggle('active',sort!=='default');
+    priceWrap.classList.toggle('hidden',!admin());
+    for(const option of sortSelect.options)if(option.value.startsWith('price'))option.disabled=option.hidden=!admin();
+  }
   for(const [v,t]of [['','Все'],['equipment','Техника'],['consumable','Расходники']]){const b=button(t,()=>{$('filter-kind').value=v;filterItems()},'r184-segment');b.dataset.value=v;segments.append(b)}
   const filterBtn=button('',()=>{panels.classList.toggle('hidden');sortPanel.classList.add('hidden')},'r184-icon'),sortBtn=button('',()=>{sortPanel.classList.toggle('hidden');panels.classList.add('hidden')},'r184-icon');
   filterBtn.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>';sortBtn.innerHTML='<svg viewBox="0 0 24 24"><path d="M7 4v16m-4-4 4 4 4-4M17 20V4m-4 4 4-4 4 4"/></svg>';filterBtn.title=filterBtn.ariaLabel='Фильтры';sortBtn.title=sortBtn.ariaLabel='Сортировка';toolbar.append(filterBtn,sortBtn);
@@ -48,7 +57,9 @@ function installRelease184(){
     sortPanel.classList.add('hidden');
     filterItems();
   }
-  panels.append(button('Сбросить фильтры',()=>{resetFilters();filterItems()}));
+  const resetBtn=button('Сбросить фильтры',()=>{resetFilters();filterItems()},'secondary compact');
+  resetBtn.disabled=true;
+  sortPanel.after(resetBtn);
   panels.append(button('Показать товары',()=>panels.classList.add('hidden'),'ok'));
   window.addEventListener('pageshow',event=>{if(event.persisted&&currentUser?.is_registered)resetInventoryView()});
   [from,to].forEach(x=>x.oninput=()=>filterItems());fav.onchange=()=>filterItems();sortSelect.onchange=()=>{sort=sortSelect.value;filterItems();sortPanel.classList.add('hidden')};
