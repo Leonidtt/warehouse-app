@@ -9,14 +9,14 @@ import zipfile
 import zlib
 from datetime import date, datetime, timedelta
 from xml.etree import ElementTree as ET
-from fastapi import File, Header, HTTPException, UploadFile
+from fastapi import File, Header, HTTPException, Query, UploadFile
 
 N='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 PN='{http://schemas.openxmlformats.org/package/2006/relationships}'
 DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
-ABSENCE=re.compile(r'\b(БОЛЕЕТ|БОЛЬНИЧ|ОТПУСК|ВЫХ|ОТГУЛ)\b',re.I)
+ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
 
 def plain(value):
     return ' '.join(str(value or '').split()).strip()
@@ -43,6 +43,9 @@ def sheets_from_xlsx(raw):
             if target.startswith('xl/worksheets/') and target in names:
                 targets[rel.get('Id')]=target
         book=ET.fromstring(z.read('xl/workbook.xml'))
+        settings=book.find(N+'workbookPr')
+        uses_1904=settings is not None and settings.get('date1904') in ('1','true')
+        epoch=datetime(1904,1,1) if uses_1904 else datetime(1899,12,30)
         for sheet in book.findall('.//'+N+'sheet'):
             rid=sheet.get(RN+'id')
             if rid not in targets:
@@ -63,13 +66,25 @@ def sheets_from_xlsx(raw):
                     text=''.join(t.text or '' for t in inline.iter(N+'t'))
                 if address and text:
                     cells[address]=plain(text)
-            yield sheet.get('name',''),cells
+            yield sheet.get('name',''),cells,epoch
+
+def excel_date(value,epoch):
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        pass
+    for pattern in ('%d.%m.%Y','%d.%m.%y'):
+        try:
+            return datetime.strptime(value,pattern).date()
+        except ValueError:
+            continue
+    return (epoch+timedelta(days=float(value))).date()
 
 def guess_venue(assignment,names):
     note=plain(assignment).casefold().replace('ё','е')
     for name in sorted(names,key=len,reverse=True):
         label=name.casefold().replace('ё','е')
-        if len(label)>=4 and (note==label or re.search(r'(?<!\w)'+re.escape(label)+r'(?!\w)',note)):
+        if note==label or (len(label)>=4 and re.search(r'(?<!\w)'+re.escape(label)+r'(?!\w)',note)):
             return name
     return ''
 
@@ -85,12 +100,12 @@ def parse_xlsx_schedule(raw):
         raise ValueError('Нужен файл Excel .xlsx не больше 8 МБ')
     rows,coverage=[],set()
     count=0
-    for sheet,cells in sheets_from_xlsx(raw):
+    for sheet,cells,epoch in sheets_from_xlsx(raw):
         count+=1
         days={}
         for col in 'DEFGHIJ':
             try:
-                date_obj=(datetime(1899,12,30)+timedelta(days=float(cells.get(col+'2','')))).date()
+                date_obj=excel_date(cells.get(col+'2',''),epoch)
                 if date(2020,1,1)<=date_obj<=date(2040,12,31):
                     days[col]=date_obj.isoformat()
                     coverage.add(date_obj.isoformat())
@@ -120,22 +135,26 @@ def parse_xlsx_schedule(raw):
                     })
     if count<1 or len(coverage)<7 or len(rows)>12000:
         raise ValueError('Не удалось прочитать недельный график')
+    if not rows:
+        raise ValueError('В файле нет записей с отметкой «Ф»')
     return {'rows':rows,'first_date':min(coverage),'last_date':max(coverage)}
 
 def save_schedule(conn,data,source):
     rows=data['rows']
     if not isinstance(rows,list) or not 0<len(rows)<=12000:
         raise ValueError('В файле нет записей с отметкой Ф')
+    entries=[(r['work_date'],r['person'],r['department'],r['assignment'],
+              r.get('venue',''),r['status'],r.get('sheet','')) for r in rows]
+    first_date,last_date=data['first_date'],data['last_date']
     conn.execute('DELETE FROM delivery_schedule')
     conn.executemany("""INSERT INTO delivery_schedule
         (work_date,person,department,assignment,venue,status,sheet) VALUES (?,?,?,?,?,?,?)""",
-        [(r['work_date'],r['person'],r['department'],r['assignment'],
-          r.get('venue',''),r['status'],r.get('sheet','')) for r in rows])
+        entries)
     conn.execute("""INSERT INTO delivery_schedule_meta(id,source,updated_at,first_date,last_date)
         VALUES(1,?,datetime('now'),?,?) ON CONFLICT(id) DO UPDATE SET
         source=excluded.source,updated_at=excluded.updated_at,
         first_date=excluded.first_date,last_date=excluded.last_date""",
-        (source,data['first_date'],data['last_date']))
+        (source,first_date,last_date))
 
 def init_delivery_schedule(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule(
@@ -148,6 +167,7 @@ def init_delivery_schedule(conn):
         updated_at TEXT NOT NULL,first_date TEXT NOT NULL,last_date TEXT NOT NULL)""")
     seed=os.environ.get('DELIVERY_SCHEDULE_BOOTSTRAP_Z64','').strip()
     if seed and not conn.execute('SELECT 1 FROM delivery_schedule_meta WHERE id=1').fetchone():
+        conn.execute('SAVEPOINT delivery_schedule_seed')
         try:
             if len(seed)>128000:
                 raise ValueError('Seed too large')
@@ -158,20 +178,23 @@ def init_delivery_schedule(conn):
             save_schedule(conn,dataset,'График МСК · исходная копия')
             print('Beta delivery schedule seeded:',len(dataset['rows']),flush=True)
         except Exception as exc:
+            conn.execute('ROLLBACK TO delivery_schedule_seed')
             print('Beta delivery schedule seed error:',type(exc).__name__,str(exc)[:130],flush=True)
+        finally:
+            conn.execute('RELEASE delivery_schedule_seed')
 
 def register_delivery_schedule(app,get_user,transaction,audit):
-    def require_read(init_data):
+    def require_admin(init_data):
         user=get_user(init_data)
-        if not user.get('is_registered') or (user.get('role') not in ('admin','boss') and not user.get('is_owner')):
+        if not user.get('is_registered') or user.get('role')!='admin':
             raise HTTPException(403,'Недоступно для этой роли')
         return user
 
     @app.get('/api/delivery-schedule')
-    def delivery_on_date(date:str,x_init_data:str=Header(None)):
-        require_read(x_init_data)
+    def delivery_on_date(work_date:str=Query(alias='date'),x_init_data:str=Header(None)):
+        require_admin(x_init_data)
         try:
-            if date.__len__()!=10 or __import__('datetime').date.fromisoformat(date).isoformat()!=date:
+            if date.fromisoformat(work_date).isoformat()!=work_date:
                 raise ValueError
         except ValueError:
             raise HTTPException(400,'Некорректная дата')
@@ -179,21 +202,21 @@ def register_delivery_schedule(app,get_user,transaction,audit):
             meta=conn.execute('SELECT * FROM delivery_schedule_meta WHERE id=1').fetchone()
             rows=[dict(row) for row in conn.execute("""SELECT person,department,assignment,venue,status
                 FROM delivery_schedule WHERE work_date=? ORDER BY
-                CASE status WHEN 'delivery' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,department,person""",(date,))]
-        return {'date':date,'rows':rows,'meta':dict(meta) if meta else None}
+                CASE status WHEN 'delivery' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,department,person""",(work_date,))]
+        return {'date':work_date,'rows':rows,'meta':dict(meta) if meta else None}
 
     @app.post('/api/delivery-schedule/upload')
-    async def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
-        user=require_read(x_init_data)
-        if user.get('role')!='admin' and not user.get('is_owner'):
-            raise HTTPException(403,'Загрузка графика разрешена только администратору')
+    def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
+        user=require_admin(x_init_data)
         if not file.filename or not file.filename.lower().endswith('.xlsx'):
             raise HTTPException(400,'Выберите файл .xlsx')
-        raw=await file.read(8000001)
+        raw=file.file.read(8000001)
         try:
             data=parse_xlsx_schedule(raw)
-        except (ValueError,zipfile.BadZipFile,ET.ParseError,KeyError,IndexError) as error:
-            raise HTTPException(400,str(error) or 'Не удалось прочитать Excel')
+        except ValueError as error:
+            raise HTTPException(400,str(error)) from None
+        except (zipfile.BadZipFile,ET.ParseError,KeyError,IndexError,OSError,RuntimeError,zlib.error):
+            raise HTTPException(400,'Не удалось прочитать Excel') from None
         with transaction() as conn:
             save_schedule(conn,data,'Загружен Excel: '+os.path.basename(file.filename)[:100])
             audit(conn,user,'Обновление графика доставок',str(len(data['rows']))+' записей')

@@ -16,6 +16,7 @@
 .delivery-group h4{margin:2px 0;font-size:13px;font-weight:700}
 .delivery-person{border:1px solid var(--border);background:var(--skeleton-bg);border-radius:12px;padding:10px 12px}
 .delivery-person-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.delivery-person-top strong{min-width:0;overflow-wrap:anywhere}
 .delivery-department{font-size:10px;color:var(--text-muted);font-weight:600;white-space:nowrap}
 .delivery-equipment{margin:7px 0 0;font-size:12px;font-weight:700}
 .delivery-note{margin:3px 0 0;color:var(--text-muted);font-size:11px;line-height:1.45;overflow-wrap:anywhere}

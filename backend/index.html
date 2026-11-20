@@ -192,7 +192,7 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
     <link rel="stylesheet" href="/warehouse-v18.css?v=1902">
-    <script src="/warehouse-v18.js?v=1898"></script>
+    <script src="/warehouse-v18.js?v=1903"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=1894"></script>
     <link rel="stylesheet" href="/release-v183.css">
@@ -201,8 +201,8 @@
     <script src="/release-v184.js?v=1900"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1902"></script>
-    <link rel="stylesheet" href="/delivery_schedule.css?v=1">
-    <script src="/delivery_schedule.js?v=1"></script>
+    <link rel="stylesheet" href="/delivery_schedule.css?v=2">
+    <script src="/delivery_schedule.js?v=2"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -2671,7 +2671,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         installRelease183();
         const openRoleMenu=installRelease184();
         installRelease185();
-        installDeliverySchedule();
+        if (typeof installDeliverySchedule === 'function') installDeliverySchedule();
 
 (function installBetaMotion(){
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;

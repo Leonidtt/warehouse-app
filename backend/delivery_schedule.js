@@ -1,4 +1,4 @@
-/* Beta: Excel rota delivery preview for Boss/Admin. */
+/* Beta: Excel rota and camera deliveries for administrators. */
 function installDeliverySchedule(){
   const main=document.getElementById('screen-main');
   if(!main||document.getElementById('delivery-schedule-panel'))return;
@@ -26,7 +26,7 @@ function installDeliverySchedule(){
   bar.append(prev,day,next,today,tomorrow);
   const source=el('div','delivery-source'),list=el('div','delivery-list'),actions=el('div','delivery-actions');
   const refresh=el('button','secondary compact','Обновить список');
-  const upload=el('button','secondary compact hidden','Загрузить новый Excel');
+  const upload=el('button','secondary compact','Загрузить новый Excel');
   const file=el('input','hidden');file.type='file';file.accept='.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   refresh.type='button';upload.type='button';
   actions.append(refresh,upload,file);
@@ -34,12 +34,11 @@ function installDeliverySchedule(){
   const activity=main.querySelector('#main-activity');
   if(activity)activity.after(panel);else main.querySelector('#items-list')?.before(panel);
   panel.classList.add('hidden');
-  let revision=0;
-  const permitted=()=>!!currentUser?.is_registered&&(['admin','boss'].includes(currentUser.role)||currentUser.is_owner);
-  const canUpload=()=>!!currentUser?.is_registered&&(currentUser.role==='admin'||currentUser.is_owner);
+  let revision=0,pending=null,rendered=null;
+  const permitted=()=>!!currentUser?.is_registered&&currentUser.role==='admin';
   const toggleAccess=()=>{
-    const show=permitted();panel.classList.toggle('hidden',!show);upload.classList.toggle('hidden',!canUpload());
-    if(!show){panel.open=false;count.textContent='';list.replaceChildren();}
+    const show=permitted();panel.classList.toggle('hidden',!show);
+    if(!show){panel.open=false;count.textContent='';source.textContent='';list.replaceChildren();rendered=null;}
     return show;
   };
   const card=row=>{
@@ -71,7 +70,7 @@ function installDeliverySchedule(){
       return;
     }
     if(!entries.length){
-      list.append(el('p','delivery-muted','На эту дату нет записей с отметкой «Ф».'));
+      list.append(el('p','delivery-muted','В графике нет записей на эту дату.'));
       return;
     }
     const group=(title,items,css)=>{
@@ -89,33 +88,52 @@ function installDeliverySchedule(){
       ignored.forEach(x=>skip.append(card(x)));list.append(skip);
     }
   };
-  const reload=async()=>{
+  const reload=(force=false)=>{
     if(!toggleAccess())return;
+    const selected=day.value||localDate();
+    day.value=selected;
+    if(!force&&pending?.date===selected)return pending.promise;
     const id=++revision;
-    count.textContent='…';list.replaceChildren(el('p','delivery-muted','Загрузка графика…'));
-    try{
-      const result=await api('/api/delivery-schedule?date='+encodeURIComponent(day.value),{cache:'no-store'});
-      if(id===revision&&permitted())draw(result);
-    }catch(err){
-      if(id===revision){count.textContent='';list.replaceChildren(el('p','delivery-error','Не удалось получить график: '+err.message));}
+    if(rendered?.date!==selected){
+      rendered=null;
+      count.textContent='…';source.textContent='';
+      list.replaceChildren(el('p','delivery-muted','Загрузка графика…'));
     }
+    const promise=api('/api/delivery-schedule?date='+encodeURIComponent(selected),{cache:'no-store'})
+      .then(result=>{
+        if(id!==revision||!permitted())return;
+        const signature=JSON.stringify(result);
+        if(signature===rendered?.signature)return;
+        const ignoredOpen=list.querySelector('.delivery-ignored')?.open;
+        draw(result);
+        const ignored=list.querySelector('.delivery-ignored');
+        if(ignored&&ignoredOpen)ignored.open=true;
+        rendered={date:selected,signature};
+      }).catch(err=>{
+        if(id!==revision||!permitted())return;
+        rendered=null;
+        count.textContent='';source.textContent='';
+        list.replaceChildren(el('p','delivery-error','Не удалось получить график: '+err.message));
+      }).finally(()=>{if(id===revision)pending=null;});
+    pending={date:selected,promise};
+    return promise;
   };
   const select=iso=>{day.value=iso;reload();};
-  prev.onclick=()=>select(offset(day.value,-1));
-  next.onclick=()=>select(offset(day.value,1));
+  prev.onclick=()=>select(offset(day.value||localDate(),-1));
+  next.onclick=()=>select(offset(day.value||localDate(),1));
   today.onclick=()=>select(localDate());
   tomorrow.onclick=()=>select(offset(localDate(),1));
-  day.onchange=reload;
-  refresh.onclick=reload;
+  day.onchange=()=>reload();
+  refresh.onclick=()=>reload();
   upload.onclick=()=>file.click();
   file.onchange=async()=>{
-    const selected=file.files?.[0];if(!selected||!canUpload())return;
+    const selected=file.files?.[0];if(!selected||!permitted())return;
     upload.disabled=true;upload.textContent='Загружаем…';
     try{
       const form=new FormData();form.append('file',selected,selected.name);
       const result=await api('/api/delivery-schedule/upload',{method:'POST',body:form});
       if(typeof showToast==='function')showToast('График обновлён: '+result.rows+' записей');
-      await reload();
+      await reload(true);
     }catch(error){if(typeof notify==='function')notify(error.message);else alert(error.message);}
     finally{file.value='';upload.disabled=false;upload.textContent='Загрузить новый Excel';}
   };
