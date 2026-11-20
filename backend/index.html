@@ -191,13 +191,13 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css?v=1894">
-    <script src="/warehouse-v18.js?v=1895"></script>
+<link rel="stylesheet" href="/warehouse-v18.css?v=1896">
+    <script src="/warehouse-v18.js?v=1896"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=1894"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1873"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1894">
+    <link rel="stylesheet" href="/release-v184.css?v=1896">
     <script src="/release-v184.js?v=1895"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1870"></script>
@@ -660,8 +660,9 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         <form method="dialog">
             <h2 id="item-recipient-title">Для кого взять технику?</h2>
             <div class="input-group">
-                <label for="item-recipient-name">Фамилия</label>
-                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" required>
+                <label for="item-recipient-name">Фамилия или имя</label>
+                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" autocomplete="off" maxlength="150" required>
+                <div id="item-recipients" class="warehouse-recipient-options" aria-label="Получатели"></div>
             </div>
             <div class="beta-checkout-actions">
                 <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
@@ -1350,7 +1351,23 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 activity.classList.toggle('has-items', hasItems);
                 activity.querySelector('.beta-activity-title').setAttribute('aria-hidden', String(!hasItems));
                 section.classList.toggle('hidden', !hasItems);
-                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div class="beta-my-thumb"></div><div style="flex:1; min-width:0; cursor:pointer;" onclick="openItem(${jsArg17(i.item_code)})"><div style="font-weight:bold;">${escapeOwnerText(i.name)}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${escapeOwnerText(i.item_code)} ${i.taken_for ? `(Кому: ${escapeOwnerText(i.taken_for.trim().split(/\s+/)[0])})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain(${jsArg17(i.item_code)})">Вернуть</div></div>`).join("");
+                list.innerHTML = myItems.map(item => {
+                    const surname = recipientSurname(item.taken_for);
+                    const handoff = item.can_handoff
+                        ? `<button type="button" class="secondary warehouse-handoff" onclick="confirmHandoff(${Number(item.checkout_id)},this)">Отдал · ${escapeOwnerText(surname)}</button>`
+                        : '';
+                    return `<div class="my-item-card">
+                        <div class="beta-my-thumb"></div>
+                        <div class="warehouse-my-item-name" onclick="openItem(${jsArg17(item.item_code)})">
+                            <b>${escapeOwnerText(item.name)}</b>
+                            <div class="meta">${escapeOwnerText(item.item_code)}${surname ? ' · Кому ' + escapeOwnerText(surname) : ''}</div>
+                        </div>
+                        <div class="warehouse-my-item-actions">
+                            ${handoff}
+                            <button type="button" class="my-item-btn" onclick="doReturnFromMain(${jsArg17(item.item_code)})">Вернуть</button>
+                        </div>
+                    </div>`;
+                }).join('');
                 if(window.betaMyPhoto) list.querySelectorAll('.beta-my-thumb').forEach((node,k)=>node.replaceWith(window.betaMyPhoto({...myItems[k],code:myItems[k].item_code})));
 
                 return true;
@@ -1360,6 +1377,27 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             }
         }
         
+        function recipientSurname(name) {
+            return String(name || '').trim().split(/\s+/)[0];
+        }
+
+        async function confirmHandoff(checkoutId, button) {
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                const result = await api('/api/checkout/'+checkoutId+'/handoff', {method:'POST'});
+                showToast('Передано · '+recipientSurname(result.recipient));
+                await Promise.all([
+                    loadItems(),
+                    currentScreen === 'screen-item' && currentItem?.code === result.code ? openItem(result.code) : null,
+                ]);
+            } catch (error) {
+                notify(error.message);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
         async function doReturnFromMain(code) { 
             haptic('medium');
             try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); await Promise.all([loadItems(), loadDashboard17()]); } catch (e) { notify(e.message); }
@@ -1787,7 +1825,8 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                     status.textContent = 'В ремонте';
                     status.className = 'status-badge status-broken';
                 } else if (holder) {
-                    status.textContent = 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
+                    status.textContent = holder.taken_for && !holder.handed_at
+                        ? 'К передаче' : 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
                     status.className = 'status-badge status-taken';
                 } else {
                     status.textContent = item.stocks.length ? (isEquipment ? 'Свободно' : 'В наличии') : 'Нет в наличии';
@@ -1798,6 +1837,9 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 const unit = isEquipment ? 'шт.' : item.unit;
                 stocks.replaceChildren(...item.stocks.map(stock => itemTile(stock.location_name, stock.quantity + ' ' + unit)));
                 if (!isEquipment) stocks.append(itemTile('Минимальный остаток', item.min_stock + ' ' + unit));
+                if (holder?.taken_for) {
+                    stocks.append(itemTile(holder.handed_at ? 'Передано' : 'Получатель', holder.taken_for));
+                }
                 if (holder?.return_plan) stocks.append(itemTile('Ответ о возврате', holder.return_plan));
                 if (canSeePrices && item.price) stocks.append(itemTile('Цена · админы', money17(item.price), true));
 
@@ -1970,7 +2012,12 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
                 } else if (otherCheckout) {
-                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
+                    if (otherCheckout.giver_id === myId && otherCheckout.taken_for && !otherCheckout.handed_at) {
+                        const id = Number(otherCheckout.id);
+                        const surname = escapeOwnerText(recipientSurname(otherCheckout.taken_for));
+                        html += `<button type="button" class="ok" onclick="confirmHandoff(${id},this)">Отдал · ${surname}</button>`;
+                    }
+                    html += `<button class="secondary" onclick="doReturn()">Вернуть за сотрудника</button>`;
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
                         html += `<div class="beta-checkout-actions">
@@ -2026,7 +2073,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         let checkoutPending = false;
-        async function doCheckout(takenFor = "") {
+        async function doCheckout(takenFor = "", recipientId = null) {
             if (checkoutPending) return;
             const {code} = currentItem;
             const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
@@ -2035,7 +2082,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             try {
                 await api('/api/checkout', {
                     method: 'POST',
-                    body: JSON.stringify({code, taken_for: takenFor}),
+                    body: JSON.stringify({code, taken_for: takenFor, recipient_id: recipientId}),
                 });
                 showToast('Выдано');
                 const refresh = Promise.all([loadItems(), loadDashboard17()]);
@@ -2051,16 +2098,58 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
         const recipientDialog = document.getElementById('item-recipient-dialog');
         const recipientName = document.getElementById('item-recipient-name');
-        function doCheckoutFor() {
+        const recipientOptions = document.getElementById('item-recipients');
+        let recipientRows = [], selectedRecipient = null, recipientRequest = 0;
+
+        function showRecipientOptions() {
+            const normalize = name => name.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
+            const query = normalize(recipientName.value);
+            const matches = recipientRows.filter(row => normalize(row.name).includes(query)).slice(0,8);
+            recipientOptions.replaceChildren();
+            for (const row of matches) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'secondary';
+                button.textContent = row.name;
+                button.onclick = () => {
+                    selectedRecipient = row.id;
+                    recipientName.value = row.name;
+                    recipientName.setCustomValidity('');
+                    recipientOptions.replaceChildren();
+                    recipientName.focus();
+                };
+                recipientOptions.append(button);
+            }
+        }
+
+        async function doCheckoutFor() {
             if (checkoutPending || recipientDialog.open) return;
+            const request = ++recipientRequest;
             recipientDialog.returnValue = '';
             recipientDialog.dataset.itemCode = currentItem.code;
+            recipientRows = [];
+            selectedRecipient = null;
             recipientName.value = '';
             recipientName.setCustomValidity('');
+            recipientOptions.textContent = 'Загрузка получателей…';
             recipientDialog.showModal();
             recipientName.focus();
+            try {
+                const rows = await api('/api/checkout/recipients');
+                if (request !== recipientRequest || !recipientDialog.open) return;
+                recipientRows = rows;
+                showRecipientOptions();
+            } catch (error) {
+                if (request === recipientRequest && recipientDialog.open) {
+                    recipientOptions.textContent = 'Список временно недоступен. Введите фамилию вручную.';
+                }
+            }
         }
-        recipientName.addEventListener('input', () => recipientName.setCustomValidity(''));
+        recipientName.addEventListener('input', () => {
+            selectedRecipient = null;
+            recipientName.setCustomValidity('');
+            showRecipientOptions();
+        });
         recipientDialog.querySelector('form').addEventListener('submit', event => {
             if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
             event.preventDefault();
@@ -2068,9 +2157,10 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             recipientName.reportValidity();
         });
         recipientDialog.addEventListener('close', () => {
+            ++recipientRequest;
             if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
                 currentItem?.code === recipientDialog.dataset.itemCode) {
-                doCheckout(recipientName.value.trim());
+                doCheckout(recipientName.value.trim(), selectedRecipient);
             }
         });
         async function doReturn() {
@@ -2403,35 +2493,66 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
         async function issueWebCode(target='site'){
-            const isApp=target==='app';
-            try{
-                let code='';
-                if(tg.initData){
-                    const r=await api('/api/web/code',{method:'POST'});
-                    code=r.code.match(/.{1,4}/g).join('-');
+            const isApp = target === 'app';
+            const {b} = overlay17(isApp ? 'Приложение «Склад Бета»' : 'Вход на сайт');
+            if (isApp) {
+                const description = document.createElement('p');
+                description.textContent = 'Это тот же склад в браузере. Его можно добавить на главный экран телефона.';
+                const steps = document.createElement('ul');
+                steps.className = 'warehouse-install-steps';
+                for (const line of [
+                    'iPhone: откройте ссылку в Safari и выберите «Поделиться → На экран Домой».',
+                    'Android: откройте ссылку в Chrome и выберите «Установить приложение» или «На главный экран».',
+                    'Откройте приложение и введите одноразовый код из бота.',
+                ]) {
+                    const step = document.createElement('li');
+                    step.textContent = line;
+                    steps.append(step);
                 }
-                const {b}=overlay17(isApp?'Приложение «Склад Бета»':'Вход на сайт');
-                if(code){
-                    const p=document.createElement('p');
-                    p.textContent=code;
-                    p.style.cssText='font-size:27px;font-weight:bold;letter-spacing:2px;text-align:center';
-                    b.append(p);
-                    btn17(b,'Копировать код',()=>copyText(code));
+                b.append(description, steps);
+            }
+            const link = document.createElement('a');
+            link.href = location.origin + (isApp ? '/pwa/' : '/');
+            link.textContent = isApp ? 'Открыть приложение' : 'Открыть сайт';
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.className = 'warehouse-install-link';
+            link.onclick = event => {
+                if (tg.initData && typeof tg.openLink === 'function') {
+                    event.preventDefault();
+                    tg.openLink(link.href);
                 }
-                const note=document.createElement('p');
-                note.textContent=code
-                    ? (isApp?'Введите этот код в приложении. Действует 5 минут. Никому не передавайте.':'Введите код в браузере. Действует 5 минут. Никому не передавайте.')
-                    : 'Код для входа можно получить только в Telegram: откройте «Склад Бета» → своё имя → «Приложение».';
-                b.append(note);
-                const a=document.createElement('a');
-                a.href=location.origin+(isApp?'/pwa/':'/');
-                a.textContent=isApp?'Открыть приложение «Склад Бета»':'Открыть сайт';
-                a.target='_blank';
-                a.rel='noopener';
-                a.style.cssText='display:inline-block;margin-top:12px;font-weight:600';
-                a.onclick=e=>{if(tg.initData&&typeof tg.openLink==='function'){e.preventDefault();tg.openLink(a.href)}};
-                b.append(a);
-            }catch(e){notify(e.message)}
+            };
+            b.append(link);
+            if (isApp) btn17(b,'Копировать ссылку',()=>copyText(link.href));
+            const status = document.createElement('div');
+            status.setAttribute('aria-live','polite');
+            b.append(status);
+            const getCode = async () => {
+                const result = await api('/api/web/code', {
+                    method:'POST',
+                    body:JSON.stringify({send_to_bot:isApp}),
+                });
+                const code = result.code.match(/.{1,4}/g).join('-');
+                const value = document.createElement('p');
+                value.className = 'warehouse-login-code';
+                value.textContent = code;
+                const note = document.createElement('p');
+                note.className = 'meta';
+                note.textContent = isApp
+                    ? (result.delivered ? 'Код отправлен в чат бота. Он действует 5 минут.'
+                        : 'Код доступен здесь. Чтобы получать код в чате, откройте бота и нажмите «Старт».')
+                    : 'Введите код в браузере. Он действует 5 минут.';
+                status.replaceChildren(value,note);
+                btn17(status,'Копировать код',()=>copyText(code));
+            };
+            if (!tg.initData) {
+                status.textContent = 'Код можно запросить в Telegram через своё имя и пункт «Приложение».';
+            } else if (isApp) {
+                btn17(b,'Запросить код в боте',getCode,'ok');
+            } else {
+                try { await getCode(); } catch (error) { status.textContent = error.message; }
+            }
         }
         async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value,pwa:location.pathname.startsWith('/pwa/')})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
         async function blob17(url){const r=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.detail||'Не удалось загрузить файл')}return r.blob()}
@@ -2743,7 +2864,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         // Load installability and iOS camera support exclusively for the PWA entry point.
         if(!tg.initData && location.pathname.startsWith('/pwa/')){
           const pwaScript=document.createElement('script');
-          pwaScript.src='/pwa/client.js?v=1';
+          pwaScript.src='/pwa/client.js?v=2';
           document.body.append(pwaScript);
         }
         (async () => { await init(); await openReturnReminder(); })();

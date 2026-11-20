@@ -179,6 +179,7 @@ async function chooseConsumableLabels17(){
     const shown=items.filter(item=>(item.name+' '+item.code).toLocaleLowerCase('ru-RU').includes(query));
     list.replaceChildren(...shown.map(item=>{
       const row=document.createElement('label');
+      row.className='warehouse-label-row';
       const checkbox=document.createElement('input');
       checkbox.type='checkbox';
       checkbox.checked=selected.has(item.code);
@@ -187,12 +188,15 @@ async function chooseConsumableLabels17(){
         else selected.delete(item.code);
         updateSelection();
       };
+      const text=document.createElement('span');
+      text.className='warehouse-label-info';
       const name=document.createElement('span');
       name.textContent=item.name;
       const code=document.createElement('small');
       code.className='meta';
       code.textContent=item.code;
-      row.append(checkbox,name,code);
+      text.append(name,code);
+      row.append(checkbox,text);
       return row;
     }));
     if(!shown.length)list.textContent=items.length?'Ничего не найдено':'На складе нет расходников';

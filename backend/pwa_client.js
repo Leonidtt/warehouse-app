@@ -7,7 +7,7 @@
   const card = document.querySelector('#screen-login .login-card');
   if (card) {
     const description = card.querySelector('p');
-    if (description) description.textContent = 'Откройте Бета-бота в Telegram, на Главной выберите «Вход на сайт» и введите полученный код здесь.';
+    if (description) description.textContent = 'В Telegram откройте «Склад Бета», нажмите на своё имя и выберите «Приложение → Запросить код в боте». Введите полученный код здесь.';
     const help = document.createElement('div');
     help.className = 'pwa-install-info';
     const heading = document.createElement('strong');

@@ -105,13 +105,34 @@ details[open] > .r1856-heading .r1856-chevron { transform: rotate(45deg); }
 #items-list .r1857-state.booked{color:var(--r185-purple,#884ac5)}
 @media(min-width:900px){.web-mode #items-list .r183-items{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:5px}}
 
-/* Collapsible cost overview for Boss on Home: deliberately last in the page. */
-.r1859-boss-cost{margin:8px 0 12px;padding:0;overflow:hidden}
-.r1859-boss-cost-summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer;font-size:14px}
-.r1859-boss-cost-summary::-webkit-details-marker{display:none}
-.r1859-boss-cost-summary::after{content:'⌄';font-size:19px;color:var(--text-muted);transition:transform .2s}
-.r1859-boss-cost[open] .r1859-boss-cost-summary::after{transform:rotate(180deg)}
-.r1859-boss-cost-count{color:var(--text-muted);font-size:12px;margin-left:auto}
+#screen-main .r1859-boss-cost { margin:6px 0 9px; padding:0; overflow:hidden; }
+.r1859-boss-cost-summary {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:30px;
+  padding:3px 10px;
+  cursor:pointer;
+  list-style:none;
+  font-size:12px;
+  line-height:1.25;
+  color:var(--text-muted);
+}
+.r1859-boss-cost-summary strong { font-weight:500; }
+.r1859-boss-cost[open] > .r1859-boss-cost-summary { min-height:36px; color:var(--text); }
+.r1859-boss-cost-summary::-webkit-details-marker { display:none; }
+.r1859-boss-cost-summary::after {
+  content:'';
+  flex:0 0 6px;
+  height:6px;
+  margin:-3px 1px 0 0;
+  border:solid currentColor;
+  border-width:0 1px 1px 0;
+  transform:rotate(45deg);
+  transition:transform .2s;
+}
+.r1859-boss-cost[open] > .r1859-boss-cost-summary::after { transform:rotate(225deg); }
+.r1859-boss-cost-count { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums; }
 .r1859-boss-cost-list{padding:0 10px 12px;display:grid;gap:5px}
 .r1859-boss-cost-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--skeleton-bg);border:0;border-radius:11px;padding:7px 9px;box-shadow:none;color:var(--text);cursor:pointer;margin:0;min-height:36px}
 .r1859-boss-cost-row:active{opacity:.75}

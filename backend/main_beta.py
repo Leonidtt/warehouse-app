@@ -100,18 +100,43 @@ def get_conn(x_init_data: Optional[str] = None):
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
-def find_or_create_guest(full_name, conn):
-    name = full_name.strip()
-    if not name: return None
-    row = conn.execute("SELECT tg_id FROM users WHERE full_name = ?", (name,)).fetchone()
-    if row: return row["tg_id"]
-    
-    min_id_row = conn.execute("SELECT MIN(tg_id) FROM users WHERE tg_id < 0").fetchone()
-    min_id = min_id_row[0] if min_id_row and min_id_row[0] is not None else 0
-    new_id = min_id - 1
-    
-    conn.execute("INSERT INTO users (tg_id, full_name, role, is_registered) VALUES (?, ?, 'guest', 1)", (new_id, name))
-    return new_id
+def recipient_name(value):
+    return " ".join((value or "").split())
+
+
+def recipient_key(value):
+    return recipient_name(value).casefold().replace("ё", "е")
+
+
+def resolve_recipient(conn, name, recipient_id):
+    if recipient_id is not None:
+        row = conn.execute("SELECT tg_id,full_name FROM users WHERE tg_id=?", (recipient_id,)).fetchone()
+        if not row or not recipient_name(row["full_name"]):
+            raise HTTPException(404, "Получатель не найден")
+        deny_blocked(conn, row["tg_id"], MAIN_ADMIN_ID)
+        return row["tg_id"], recipient_name(row["full_name"])
+
+    key = recipient_key(name)
+    rows = conn.execute("SELECT tg_id,full_name FROM users WHERE TRIM(COALESCE(full_name,''))<>''").fetchall()
+    matches = [row for row in rows if recipient_key(row["full_name"]) == key]
+    if not matches and " " not in key:
+        matches = [row for row in rows if recipient_key(row["full_name"]).split(" ", 1)[0] == key]
+    # A registered account takes precedence over a guest spelling of the same full name.
+    if len({recipient_key(row["full_name"]) for row in matches}) == 1:
+        accounts = [row for row in matches if row["tg_id"] > 0]
+        if accounts:
+            matches = accounts
+    if len(matches) > 1:
+        raise HTTPException(409, "Есть несколько получателей. Выберите нужного из списка")
+    if matches:
+        row = matches[0]
+        deny_blocked(conn, row["tg_id"], MAIN_ADMIN_ID)
+        return row["tg_id"], recipient_name(row["full_name"])
+
+    guest_id = conn.execute("SELECT COALESCE(MIN(tg_id),0)-1 FROM users WHERE tg_id<0").fetchone()[0]
+    conn.execute("INSERT INTO users(tg_id,full_name,role,is_registered) VALUES(?,?,'guest',1)", (guest_id, name))
+    return guest_id, name
+
 
 def init_db(db_path):
     # Создаем директорию для файла базы данных, если ее нет
@@ -181,6 +206,10 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS item_metadata (code TEXT PRIMARY KEY, unit TEXT DEFAULT 'шт.', supplier TEXT DEFAULT '', site TEXT DEFAULT '', vessel TEXT DEFAULT '', notes TEXT DEFAULT '')")
     c.execute("CREATE TABLE IF NOT EXISTS repair_records (id INTEGER PRIMARY KEY, code TEXT NOT NULL, description TEXT NOT NULL, cost REAL DEFAULT 0, user_id INTEGER NOT NULL, started_at TEXT DEFAULT CURRENT_TIMESTAMP, finished_at TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+    c.execute("""CREATE TABLE IF NOT EXISTS checkout_handoffs (
+        checkout_id INTEGER PRIMARY KEY,
+        handed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_checkouts_code_return ON checkouts(item_code,returned_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(item_code,date_from,date_to)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_location ON stock(location_id)")
@@ -407,7 +436,9 @@ class BookingRequest(BaseModel):
 class CommentRequest(BaseModel):
     code: str; text: str
 class CheckoutRequest(BaseModel):
-    code: str; taken_for: str = ""
+    code: str
+    taken_for: str = ""
+    recipient_id: Optional[int] = None
 class RegisterRequest(BaseModel):
     full_name: str
 class LocationCreate(BaseModel):
@@ -509,13 +540,16 @@ def my_bookings(x_init_data: Optional[str] = Header(None)):
 def my_items(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data)
     rows = conn.execute("""
-        SELECT c.item_code, i.name, i.kind, i.category, i.kit_body, i.kit_lens, i.kit_flash, CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name
-        FROM checkouts c 
-        JOIN items i ON i.code = c.item_code 
+        SELECT c.item_code, i.name, i.kind, i.category, i.kit_body, i.kit_lens, i.kit_flash, CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name,
+               c.id AS checkout_id, h.handed_at,
+               (c.giver_id=? AND c.user_id!=c.giver_id AND TRIM(COALESCE(c.taken_for,''))<>'' AND h.checkout_id IS NULL) AS can_handoff
+        FROM checkouts c
+        JOIN items i ON i.code = c.item_code
         LEFT JOIN users u ON u.tg_id = c.user_id
-        WHERE (c.user_id = ? OR c.giver_id = ?) AND c.returned_at IS NULL 
+        LEFT JOIN checkout_handoffs h ON h.checkout_id = c.id
+        WHERE (c.user_id = ? OR (c.giver_id = ? AND h.checkout_id IS NULL)) AND c.returned_at IS NULL
         ORDER BY c.taken_at DESC
-    """, (user["tg_id"], user["tg_id"])).fetchall()
+    """, (user["tg_id"], user["tg_id"], user["tg_id"])).fetchall()
     conn.close(); return [dict(r) for r in rows]
 
 @app.get("/api/daily_report")
@@ -815,11 +849,12 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("""
-        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan
+        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan, handoff.handed_at
         FROM checkouts c 
         LEFT JOIN users u ON u.tg_id = c.user_id
         LEFT JOIN users g ON g.tg_id = c.giver_id
         LEFT JOIN checkout_return_reminders reminder ON reminder.checkout_id = c.id
+        LEFT JOIN checkout_handoffs handoff ON handoff.checkout_id = c.id
         WHERE c.item_code = ? AND c.returned_at IS NULL
     """, (code,)).fetchall()
     conn.close()
@@ -949,39 +984,83 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
     return {"status": "ok", "code": code}
 
 
+@app.get("/api/checkout/recipients")
+def checkout_recipients(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if not user["is_registered"]:
+        raise HTTPException(403, "Сначала завершите регистрацию")
+    with contextmanager_session() as conn:
+        current = conn.execute("""
+            SELECT u.tg_id, u.full_name
+            FROM users u
+            LEFT JOIN blocked_telegram b ON b.tg_id=u.tg_id
+            WHERE u.tg_id!=? AND b.tg_id IS NULL AND TRIM(COALESCE(u.full_name,''))<>''
+              AND (u.is_registered=1 OR EXISTS (
+                  SELECT 1 FROM checkouts c WHERE c.user_id=u.tg_id
+                    AND TRIM(COALESCE(c.taken_for,''))<>''
+              ))
+        """, (user["tg_id"],)).fetchall()
+        history = conn.execute("""
+            SELECT DISTINCT c.taken_for
+            FROM checkouts c
+            LEFT JOIN users u ON u.tg_id=c.user_id
+            LEFT JOIN blocked_telegram b ON b.tg_id=c.user_id
+            WHERE c.user_id!=? AND b.tg_id IS NULL
+              AND (u.tg_id IS NULL OR TRIM(COALESCE(u.full_name,''))='')
+              AND TRIM(COALESCE(c.taken_for,''))<>''
+        """, (user["tg_id"],)).fetchall()
+
+    results = [{"id": row["tg_id"], "name": recipient_name(row["full_name"])} for row in current]
+    known = {recipient_key(row["name"]) for row in results}
+    for row in history:
+        name = recipient_name(row["taken_for"])
+        key = recipient_key(name)
+        if key not in known:
+            known.add(key)
+            results.append({"id": None, "name": name})
+    return sorted(results, key=lambda row: recipient_key(row["name"]))
+
+
 @app.post("/api/checkout_batch")
 async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] = Header(None)):
     user=get_user(x_init_data); success=[]; errors=[]
     with transaction() as conn:
         for code in dict.fromkeys(req.codes):
+            conn.execute("SAVEPOINT batch_checkout")
             try:
                 _checkout_one(conn,user,code,req.taken_for)
                 success.append(code)
-            except HTTPException as exc: errors.append(f"{code}: {exc.detail}")
+            except HTTPException as exc:
+                conn.execute("ROLLBACK TO batch_checkout")
+                errors.append(f"{code}: {exc.detail}")
+            finally:
+                conn.execute("RELEASE batch_checkout")
     return {"status":"ok","success_count":len(success),"errors":errors}
 
 @app.post("/api/checkout")
 async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(None)):
     user=get_user(x_init_data)
-    with transaction() as conn: _checkout_one(conn,user,req.code,req.taken_for)
+    with transaction() as conn: _checkout_one(conn,user,req.code,req.taken_for,req.recipient_id)
     return {"status":"ok"}
 
 
-def _checkout_one(conn,user,code,taken_for):
+def _checkout_one(conn,user,code,taken_for,recipient_id=None):
     item=active_item(conn,code)
     if item["kind"]!="equipment": raise HTTPException(400,"Это расходник")
     if item["needs_repair"]: raise HTTPException(400,"Товар в ремонте")
     if conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone(): raise HTTPException(409,"Уже выдано")
     stock=conn.execute("SELECT location_id FROM stock WHERE item_code=? AND quantity>0 ORDER BY location_id LIMIT 1",(code,)).fetchone()
     if not stock: raise HTTPException(409,"Нет в наличии")
-    taken_for=taken_for.strip()
-    if taken_for:
-        existing=conn.execute("SELECT tg_id FROM users WHERE full_name=?",(taken_for,)).fetchone()
-        target_for_booking=existing[0] if existing else None
-    else: target_for_booking=user['tg_id']
+    taken_for = recipient_name(taken_for)
+    if len(taken_for) > 150:
+        raise HTTPException(400, "Укажите имя получателя до 150 символов")
+    target = user["tg_id"]
+    if taken_for or recipient_id is not None:
+        target, taken_for = resolve_recipient(conn, taken_for, recipient_id)
+        if target == user["tg_id"]:
+            taken_for = ""
     booking=conn.execute("SELECT user_id FROM bookings WHERE item_code=? AND date('now') BETWEEN date_from AND date_to",(code,)).fetchall()
-    if booking and not all(b['user_id']==target_for_booking for b in booking): raise HTTPException(409,"Сегодня оборудование забронировано другим сотрудником")
-    target=find_or_create_guest(taken_for,conn) if taken_for else user["tg_id"]
+    if booking and not all(b['user_id']==target for b in booking): raise HTTPException(409,"Сегодня оборудование забронировано другим сотрудником")
     record = conn.execute("""
         INSERT INTO checkouts(item_code,user_id,giver_id,location_id,taken_for)
         VALUES(?,?,?,?,?) RETURNING id,taken_at
@@ -990,6 +1069,24 @@ def _checkout_one(conn,user,code,taken_for):
         queue_return_reminder(conn,record["id"],record["taken_at"])
     conn.execute("UPDATE stock SET quantity=quantity-1 WHERE item_code=? AND location_id=?",(code,stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code=? AND quantity=0",(code,))
+
+@app.post("/api/checkout/{checkout_id}/handoff")
+def handoff_checkout(checkout_id: int, x_init_data: Optional[str] = Header(None)):
+    actor = get_user(x_init_data)
+    with transaction() as conn:
+        checkout = conn.execute("""
+            SELECT item_code, taken_for
+            FROM checkouts
+            WHERE id=? AND giver_id=? AND user_id!=giver_id AND returned_at IS NULL
+              AND TRIM(COALESCE(taken_for,''))<>''
+        """, (checkout_id, actor["tg_id"])).fetchone()
+        if not checkout:
+            raise HTTPException(404, "Выдача для передачи недоступна")
+        created = conn.execute("INSERT OR IGNORE INTO checkout_handoffs(checkout_id) VALUES(?)", (checkout_id,))
+        if created.rowcount:
+            audit(conn, actor, "Передача техники", f'{checkout["item_code"]} · {checkout["taken_for"]}')
+    return {"status": "ok", "recipient": checkout["taken_for"], "code": checkout["item_code"]}
+
 
 @app.post("/api/return")
 async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
@@ -1264,6 +1361,7 @@ def apply_warehouse_snapshot(path, actor):
         tables = import_snapshot(conn, path, DB_PATH)
         apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
+        conn.execute("DELETE FROM checkout_handoffs")
         conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
         audit(conn, actor, "Импорт снимка", "Складские данные из Основы")
     return {"status": "ok", "tables": tables}
@@ -1472,16 +1570,53 @@ class WebLogin(BaseModel):
     code: str
     pwa: bool = False
 
+class WebCodeRequest(BaseModel):
+    send_to_bot: bool = False
+
+
 @app.post("/api/web/code")
-def web_code(x_init_data: Optional[str]=Header(None)):
-    if not x_init_data or x_init_data.startswith("web:"): raise HTTPException(403,"Код можно получить только внутри Telegram")
-    user=get_user(x_init_data)
-    if not user['is_registered']: raise HTTPException(403,"Сначала завершите регистрацию")
-    code=secrets.token_hex(6).upper()
+async def web_code(req: Optional[WebCodeRequest] = None, x_init_data: Optional[str] = Header(None)):
+    if not x_init_data or x_init_data.startswith("web:"):
+        raise HTTPException(403, "Код можно получить только внутри Telegram")
+    user = get_user(x_init_data)
+    if not user['is_registered']:
+        raise HTTPException(403, "Сначала завершите регистрацию")
+    code = secrets.token_hex(6).upper()
+    now = int(time.time())
+    send_to_bot = bool(req and req.send_to_bot)
     with transaction() as conn:
-        conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?",(int(time.time()), user['tg_id']))
-        conn.execute("INSERT INTO web_codes VALUES(?,?,?)",(web_digest(code),user['tg_id'],int(time.time())+300))
-    return {"code":code,"expires_in":300}
+        if send_to_bot and conn.execute("SELECT 1 FROM web_codes WHERE user_id=? AND expires>?", (user["tg_id"], now + 290)).fetchone():
+            raise HTTPException(429, "Новый код можно запросить через несколько секунд")
+        conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?", (now, user["tg_id"]))
+        conn.execute("INSERT INTO web_codes VALUES(?,?,?)", (web_digest(code), user["tg_id"], now + 300))
+    delivered = False
+    if send_to_bot:
+        domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+", domain, re.I):
+            domain = "determined-fascination-production.up.railway.app"
+        public_url = f"https://{domain}/pwa/"
+        formatted = "-".join(code[n:n+4] for n in (0, 4, 8))
+        text = (
+            "Склад Бета — это тот же склад в браузере.\n"
+            "На iPhone откройте ссылку в Safari и выберите «Поделиться → На экран Домой». "
+            "На Android откройте её в Chrome и выберите «Установить приложение».\n\n"
+            f"Код для входа: {formatted}\nКод действует 5 минут. Никому его не передавайте."
+        )
+        try:
+            async with httpx.AsyncClient(timeout=6) as client:
+                response = await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": user["tg_id"],
+                        "text": text,
+                        "reply_markup": {"inline_keyboard": [[{"text": "Открыть Склад Бета", "url": public_url}]]},
+                    },
+                )
+                delivered = response.is_success and response.json().get("ok") is True
+        except (httpx.HTTPError, ValueError):
+            pass
+    return {"code": code, "expires_in": 300, "delivered": delivered}
+
 
 @app.post("/api/web/login")
 def web_login(req: WebLogin):
