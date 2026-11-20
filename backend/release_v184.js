@@ -1,4 +1,22 @@
 /* v18.4 — Beta UI; no credentials or live stock in client code. */
+function flashSuffixBrand1853(value){
+  const model=String(value??'').normalize('NFKC').trim();
+  const suffix=model.match(/(?:^|[\s_.‐‑–—-]|\p{N}[\p{L}\p{N}]*)([cсs])$/iu)?.[1];
+  return suffix ? (suffix.toLowerCase()==='s' ? 'Sony' : 'Canon') : '';
+}
+
+function flashModelLabel1853(value){
+  const model=String(value??'').trim();
+  const brand=flashSuffixBrand1853(model);
+  return brand ? `${model} (${brand})` : model;
+}
+
+function isStandaloneFlash1853(item){
+  const category=String(item.category||'').trim().toLowerCase();
+  return item.kind==='equipment' && (['вспышки','фотовспышки'].includes(category)
+    || /^(вспышка|фотовспышка)(?:\s|$)/iu.test(String(item.name||'').trim()));
+}
+
 function installRelease184(){
   const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
   const button=(txt,fn,cls='secondary')=>{const n=el('button',cls,txt);n.type='button';n.onclick=async e=>{if(n.disabled)return;try{await fn(e)}catch(err){notify(err.message||String(err))}};return n};
@@ -50,7 +68,11 @@ function installRelease184(){
 function compactData1857(i,booked){
   const clean=v=>String(v??'').trim();
   const meaningful=v=>!['','-','—','нет','none','0','n/a','без','не указан','не указана'].includes(clean(v).toLowerCase());
-  const parts=i.kind==='equipment'?[i.kit_body,i.kit_lens,i.kit_flash].filter(meaningful).map(clean):[];
+  const parts=i.kind==='equipment'?[i.kit_body,i.kit_lens,flashModelLabel1853(i.kit_flash)].filter(meaningful).map(clean):[];
+  if(isStandaloneFlash1853(i) && !flashSuffixBrand1853(i.kit_flash)){
+    const brand=flashSuffixBrand1853(i.name);
+    if(brand)parts.push(brand);
+  }
   const summary=i.kind==='consumable'?String(i.total??0)+' '+(i.unit||'шт.'):parts.join(' · ');
   const states=[];
   if(i.needs_repair)states.push(['Ремонт','repair']);
@@ -95,7 +117,7 @@ function compactData1857(i,booked){
   }
   function choosePreview1854(){
     if(!currentUser?.can_preview)return;
-    const {o,b}=overlay17('Тестирование интерфейса');
+    const {b}=overlay17('Сменить роль');
     const note=el('p','meta','Действия реальные и сохраняются в рабочей базе. Ваша роль в аккаунте не меняется.');
     b.append(note);
     for(const role of ['admin','boss','employee']){
@@ -123,6 +145,10 @@ function compactData1857(i,booked){
   const bossBox=el('section','r184-boss hidden');main.querySelector('.v18-quick').before(bossBox);let bossJob=null;
   function bossPanel(title,key,data){const p=el('div','card r184-boss-panel '+key),heading=el('h3','',title),grid=el('div','r184-boss-grid');p.append(heading,grid);for(const [k,t]of [['cameras','Фотоаппараты'],['flashes','Отдельные вспышки']]){const metric=el('div');metric.append(el('span','meta',t),el('strong','',String(data[k]||0)));grid.append(metric)}return p}
 function bossBrand1853(value,kind){
+  if(kind==='flash'){
+    const brand=flashSuffixBrand1853(value);
+    if(brand)return brand==='Canon'?'К':'С';
+  }
   const s=String(value||'').normalize('NFKC').toLowerCase().replace(/[‐‑–—]/g,'-');
   const canon=/(?:^|[^\p{L}\p{N}])(?:canon|к[еэ]нон|канон)(?=$|[^\p{L}\p{N}])/u.test(s);
   const sony=/(?:^|[^\p{L}\p{N}])(?:sony|сони)(?=$|[^\p{L}\p{N}])/u.test(s);
@@ -146,7 +172,9 @@ function bossCounts1853(items,kind,standaloneFlash=false){
     if(q<=0)continue;
     const v=String(i[kind]||'').trim();
     const model=['','-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase())?i.name:v;
-    counts[bossBrand1853(model,kind)]+=q;
+    let brand=bossBrand1853(model,kind);
+    if(brand==='?'&&kind==='flash'&&Number(i.camera_count)===0)brand=bossBrand1853(i.name,kind);
+    counts[brand]+=q;
   }
   return counts;
 }
@@ -186,7 +214,7 @@ function bossSurname1853(name){
     const content=el('div','r1853-person-details');content.append(el('div','r1853-full-name',p.name));
     for(const i of p.items||[]){
       const item=el('div','r1853-detail-item'),link=button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link');item.append(link);
-      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash'],['На выкупе у','buyout_status']]){const v=String(i[k]||'').trim();if(v&&!['-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase()))item.append(el('div','meta',label+': '+v))}
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash'],['На выкупе у','buyout_status']]){const v=String(i[k]||'').trim();if(v&&!['-','—','нет','none','0','n/a','без','не указан'].includes(v.toLowerCase()))item.append(el('div','meta',label+': '+(k==='flash'?flashModelLabel1853(v):v)))}
       if(i.taken_at){const raw=String(i.taken_at),match=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);item.append(el('div','meta','Выдано: '+(match?[match[3],match[2],match[1]].join('.'):raw)))}
       content.append(item)
     }
@@ -209,7 +237,7 @@ function bossSurname1853(name){
       const item=el('div','r1853-detail-item');
       if(i.archived)item.append(el('div','r1853-full-name',i.name+' · '+i.code+' (архив)'));
       else item.append(button(i.name+' · '+i.code,()=>openItem(i.code),'secondary r1853-item-link'));
-      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash']])if(String(i[k]||'').trim())item.append(el('div','meta',label+': '+i[k]));
+      for(const [label,k] of [['Фотоаппарат','camera'],['Объектив','lens'],['Вспышка','flash']])if(String(i[k]||'').trim())item.append(el('div','meta',label+': '+(k==='flash'?flashModelLabel1853(i[k]):i[k])));
       if(type==='rental'){
         item.append(el('div','meta','Выдал: '+(i.giver||'Не указан')),el('div','meta',i.returned_at?'Возвращено: '+bossDate1855(i.returned_at):'На руках'));
       }else item.append(el('div','meta',i.holders?.length?'На руках: '+i.holders.join(', '):'Нет активной выдачи'));
@@ -332,7 +360,7 @@ function heldPeople1857(items){
     if(i.kind!=='equipment'||i.is_archived)continue;
     const cat=String(i.category||'').trim().toLowerCase(),name=String(i.name||'').trim().toLowerCase();
     const camera_count=Number(present(i.kit_body)||['фотоаппараты','камеры'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name));
-    const flash_count=Number(present(i.kit_flash)||['вспышки','фотовспышки'].includes(cat)||/^(вспышка|фотовспышка)(?:\s|$)/u.test(name));
+    const flash_count=Number(present(i.kit_flash)||isStandaloneFlash1853(i));
     for(const h of i.holders||[]){
       const person=String(h.taken_for||h.full_name||'Не указан').trim()||'Не указан',key=JSON.stringify([h.user_id??null,person]);
       if(!groups.has(key))groups.set(key,{person_id:h.user_id??null,name:person,items:[]});
@@ -363,15 +391,61 @@ function heldPeople1857(items){
     heldList1857.replaceChildren(list);
   }
 
+
+  const pricesBox=el('details','card r1856-buyouts beta-setting-details hidden');
+  pricesBox.id='boss-equipment-costs1859';
+  const pricesSummary=el('summary','r1856-heading');
+  const pricesTitle=el('span','r1856-title r1859-prices-title','Цены');
+  const pricesDot=el('span','r1859-prices-dot');
+  pricesDot.title='Только для администраторов';
+  pricesDot.setAttribute('role','img');
+  pricesDot.setAttribute('aria-label',pricesDot.title);
+  pricesTitle.append(pricesDot);
+  const pricesCount=el('span','meta r1856-count','0');
+  const pricesList=el('div','r1856-list r1859-boss-cost-list');
+  pricesSummary.append(pricesTitle,pricesCount,el('span','r1856-chevron'));
+  pricesBox.append(pricesSummary,pricesList);
+  buyoutBox1856.after(pricesBox);
+  const canSeeCosts=()=>!!currentUser?.is_registered&&admin();
+  let pricesJob=null;
+  function refreshPrices(){
+    const allowed=canSeeCosts();
+    pricesBox.classList.toggle('hidden',!allowed);
+    if(!allowed){pricesBox.open=false;pricesCount.textContent='0';pricesList.replaceChildren();return}
+    if(pricesJob)return pricesJob;
+    pricesJob=api('/api/boss/equipment-costs').then(rows=>{
+      if(!canSeeCosts())return;
+      pricesCount.textContent=String(rows.length);
+      const fragment=document.createDocumentFragment();
+      for(const item of rows){
+        const row=button('',()=>openItem(item.code),'r1859-boss-cost-row');
+        const primary=el('span','r1859-boss-cost-primary');
+        const name=el('span','r1859-boss-cost-name',item.name);
+        const tag=el('span','r1859-boss-cost-budget '+(item.budget_tag==='ТХ'?'tx':'kc'),item.budget_tag||'КЦ');
+        const model=el('span','r1859-boss-cost-model',item.model||item.code);
+        primary.append(name,tag,model);
+        const cost=el('span','r1859-boss-cost-price',Number(item.price||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽');
+        row.append(primary,cost);row.title=[item.name,item.budget_tag,model.textContent,cost.textContent].filter(Boolean).join(' · ');fragment.append(row);
+      }
+      if(!rows.length)fragment.append(el('div','meta r1859-boss-cost-empty','Нет оборудования'));
+      pricesList.replaceChildren(fragment);
+    }).catch(error=>{
+      if(!canSeeCosts())return;
+      pricesList.textContent='Не удалось загрузить цены: '+(error?.message||'ошибка');
+      return false;
+    }).finally(()=>{pricesJob=null});
+    return pricesJob;
+  }
   const oldLoad=loadItems;
   loadItems=async()=>{
-    const inventoryLoaded=await oldLoad();
+    const loaded=await oldLoad();
     renderBuyout1856();
     renderHeld1857();
-    const bossLoaded=await refreshBoss();
-    return inventoryLoaded && bossLoaded;
+    const summaries=await Promise.all([refreshBoss(),refreshPrices()]);
+    return loaded&&!summaries.includes(false);
   };
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
-  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss()};
+  const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss();refreshPrices()};
+  return choosePreview1854;
 }

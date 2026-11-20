@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Склад</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="/pull-refresh.js?v=2" defer></script>
+    <script src="/pull-refresh.js?v=5" defer></script>
     <style>
         :root {
             --bg: #f5f5f7; --card-bg: #ffffff; --text: #1d1d1f; --text-muted: #86868b;
@@ -170,11 +170,11 @@
     
         .room-card, .room-card.card {flex-direction:row;align-items:center;gap:12px;text-align:left}.room-info{min-width:0}.room-title{font-size:16px}.room-arrow-circle{flex-shrink:0}.compact{width:auto;min-height:36px;padding:9px 12px;font-size:13px;margin:0}.header-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 15px}.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.metric{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;color:var(--text);text-align:left;box-shadow:none;margin:0;padding:14px}.metric b{display:block;font-size:25px;margin-top:6px}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.settings-grid button{margin:0;font-size:13px;min-width:0;overflow-wrap:anywhere}.login-card{max-width:440px;margin:12vh auto;padding:24px}.login-card input{margin:14px 0}.login-card p{line-height:1.5}#net-state{position:fixed;top:0;left:0;right:0;z-index:3000;padding:10px;background:#9a3412;color:white;text-align:center}.field-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.field-row>*{flex:1;min-width:90px}.copy-line{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.label-img{width:175px;max-width:100%;height:auto;border:1px solid #bbb;background:white;display:block;margin:12px auto}.data-list{display:grid;gap:10px}.extra-card{margin:0;padding:14px}
 .finance-equipment-card{padding:12px}
-.finance-equipment-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.finance-equipment-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--warehouse-table-gap);min-height:var(--warehouse-table-row);padding:0 var(--warehouse-table-inset);margin-bottom:var(--warehouse-table-space)}
 .finance-equipment-count{font-size:11px;color:var(--text-muted)}
 .finance-equipment-list{display:grid}
-.finance-equipment-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) max-content;gap:8px;align-items:start;padding:7px 0;border-top:1px solid var(--border);font-size:12px;line-height:1.3}
-.finance-equipment-row span{min-width:0;overflow-wrap:anywhere}
+.finance-equipment-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) max-content;gap:var(--warehouse-table-gap);align-items:center;min-height:var(--warehouse-table-row);padding:var(--warehouse-table-cell-padding);border-top:1px solid var(--border);font-size:12px;line-height:1.3}
+.finance-equipment-row span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .finance-equipment-row .finance-equipment-model{color:var(--text-muted)}
 .finance-equipment-row .finance-equipment-price{text-align:right;white-space:nowrap;font-weight:650;font-variant-numeric:tabular-nums}
 .finance-equipment-row--head{color:var(--text-muted);font-size:11px;font-weight:600}
@@ -185,14 +185,14 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-<link rel="stylesheet" href="/warehouse-v18.css?v=1877">
-    <script src="/warehouse-v18.js?v=1885"></script>
+    <link rel="stylesheet" href="/warehouse-v18.css?v=1901">
+    <script src="/warehouse-v18.js?v=1901"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1877">
-    <script src="/release-v182.js?v=1886"></script>
+    <script src="/release-v182.js?v=1901"></script>
     <link rel="stylesheet" href="/release-v183.css?v=1877">
     <script src="/release-v183.js?v=1877"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1877">
-    <script src="/release-v184.js?v=1886"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=1901">
+    <script src="/release-v184.js?v=1901"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1877">
     <script src="/release-v185.js?v=1877"></script>
 <style>
@@ -212,6 +212,20 @@
 .beta-simple #items-list .r1857-top .name{font-size:15px}
 .beta-simple #items-list .r1857-summary{display:none}
 .beta-simple #my-items-list .my-item-btn{min-height:44px}
+
+#take-items-list{display:grid;gap:7px;margin-top:8px}
+#take-items-list .take-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border-radius:12px;margin:0;box-shadow:none;background:var(--card-bg);border:1px solid var(--border);min-width:0}
+#take-items-list .take-row.selected{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card-bg))}
+#take-items-list .take-row.unavailable{opacity:.63}
+#take-items-list .take-checkbox{width:19px;height:19px;margin:0;accent-color:var(--primary);cursor:pointer;justify-self:center}
+#take-items-list .take-row-main{min-width:0;cursor:pointer}
+#take-items-list .take-row-name{font-size:13px;line-height:1.25;font-weight:650;overflow-wrap:anywhere}
+#take-items-list .take-row-meta{font-size:11px;line-height:1.35;color:var(--text-muted);margin-top:3px;overflow-wrap:anywhere}
+#take-items-list .take-row-side{display:flex;align-items:flex-end;flex-direction:column;gap:4px;min-width:66px}
+#take-items-list .take-row-state{font-size:10px;font-weight:650;color:var(--success);text-align:right;max-width:106px;overflow-wrap:anywhere}
+#take-items-list .take-row-state.busy{color:var(--text-muted)}
+#take-items-list .take-row-price{font-size:11px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
+#take-items-list .take-row-price.beta-admin-price{color:var(--text)}
 </style><style>
 /* Beta motion and settings overview — isolated frontend enhancement. */
 #screen-settings .v18-settings-group>summary{padding:10px 14px;min-height:56px}
@@ -259,20 +273,9 @@
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
 @keyframes beta-sheet-in{from{opacity:.5;transform:translateY(20px)}to{opacity:1;transform:none}}
 @keyframes beta-toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-#take-items-list{display:grid;gap:7px;margin-top:8px}
-#take-items-list .take-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border-radius:12px;margin:0;box-shadow:none;background:var(--card-bg);border:1px solid var(--border);min-width:0}
-#take-items-list .take-row.selected{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card-bg))}
-#take-items-list .take-row.unavailable{opacity:.63}
-#take-items-list .take-checkbox{width:19px;height:19px;margin:0;accent-color:var(--primary);cursor:pointer;justify-self:center}
-#take-items-list .take-row-main{min-width:0;cursor:pointer}
-#take-items-list .take-row-name{font-size:13px;line-height:1.25;font-weight:650;overflow-wrap:anywhere}
-#take-items-list .take-row-meta{font-size:11px;line-height:1.35;color:var(--text-muted);margin-top:3px;overflow-wrap:anywhere}
-#take-items-list .take-row-side{display:flex;align-items:flex-end;flex-direction:column;gap:4px;min-width:66px}
-#take-items-list .take-row-state{font-size:10px;font-weight:650;color:var(--success);text-align:right;max-width:106px;overflow-wrap:anywhere}
-#take-items-list .take-row-state.busy{color:var(--text-muted)}
-#take-items-list .take-row-price{font-size:11px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
-#take-items-list .take-row-price.beta-admin-price{color:var(--text)}
-</style></head>
+
+</style>
+</head>
 <body>
 
     <div id="toast-container"></div>
@@ -381,7 +384,7 @@
 
         <button class="take-btn" onclick="showTakeScreen()">📤 Взять технику</button>
 
-        <div class="header-actions"><button class="secondary compact" id="web-login-btn" onclick="issueWebCode()">Вход на сайт</button><button class="secondary compact hidden" id="web-logout-btn" onclick="webLogout()">Выйти</button><button class="secondary compact" onclick="cycleTheme()">Тема</button></div><div id="dashboard-v17" class="hidden"></div><div id="stats-box" class="stats-card hidden"></div>
+        <div class="header-actions"><button class="secondary compact" id="web-login-btn" onclick="issueWebCode()">Вход на сайт</button><button class="secondary compact" onclick="cycleTheme()">Тема</button></div><div id="dashboard-v17" class="hidden"></div><div id="stats-box" class="stats-card hidden"></div>
 
         <div id="daily-report-box" class="report-box hidden">
             <b>📊 Сводка за вчера:</b>
@@ -548,8 +551,10 @@
         </div>
         
         <!-- Кнопка создания товара перенесена сюда -->
-        <div style="padding: 0 16px; margin-top: 16px;">
-            <button class="ok" onclick="openAddItemModal()" id="add-item-btn">➕ Добавить товар</button>
+        <div class="warehouse-room-actions">
+            <button class="ok" onclick="openAddItemModal('consumable')" id="add-consumable-btn">Добавить расходник</button>
+            <button class="secondary" onclick="openAddItemModal()" id="add-item-btn">Добавить товар</button>
+            <button class="secondary" onclick="chooseConsumableLabels17()" id="consumable-labels-btn">QR расходников</button>
         </div>
         <details id="low-stock-banner" class="hidden">
             <div id="low-stock-list"></div>
@@ -576,7 +581,10 @@
             <div class="beta-item-hero">
                 <div>
                     <h2 id="item-title">Товар</h2>
-                    <div class="meta" id="item-code-category"></div>
+                    <div class="warehouse-item-code">
+                        <div class="meta" id="item-code-category"></div>
+                        <button class="secondary compact hidden" type="button" id="item-qr-quick" onclick="showQr()" aria-label="QR-этикетка расходника">QR</button>
+                    </div>
                 </div>
                 <span class="status-badge" id="item-status-box"></span>
             </div>
@@ -592,18 +600,17 @@
                 <div id="item-facts" class="beta-item-tiles"></div>
                 <div id="beta-item-tools">
                     <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
-                    <button type="button" class="secondary" onclick="showQr()">QR-этикетка</button>
+                    <button type="button" class="secondary" id="item-qr-details" onclick="showQr()">QR-этикетка</button>
                 </div>
                 <div id="item-additional-actions"></div>
-                <div id="passport-v17"></div>
                 <div id="repairs-v17"></div>
 
                 <div id="booking-section">
                     <h2 style="font-size: 18px; margin: 24px 0 12px; font-weight: 700; letter-spacing: -0.5px;">Бронирование</h2>
                     <div id="bookings-list"></div>
                     <div class="date-row">
-                        <div class="input-group"><label>С</label><input type="date" id="book-from"></div>
-                        <div class="input-group"><label>По</label><input type="date" id="book-to"></div>
+                        <div class="input-group"><label for="book-from">От</label><input type="date" id="book-from"></div>
+                        <div class="input-group"><label for="book-to">До</label><input type="date" id="book-to"></div>
                     </div>
                     <button class="secondary" onclick="doBook()" style="margin-top: 10px;">Забронировать</button>
                 </div>
@@ -624,8 +631,9 @@
         <form method="dialog">
             <h2 id="item-recipient-title">Для кого взять технику?</h2>
             <div class="input-group">
-                <label for="item-recipient-name">Фамилия</label>
-                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" required>
+                <label for="item-recipient-name">Фамилия или имя</label>
+                <input type="text" id="item-recipient-name" placeholder="Например, Иванов" autocomplete="off" maxlength="150" required>
+                <div id="item-recipients" class="warehouse-recipient-options" aria-label="Получатели"></div>
             </div>
             <div class="beta-checkout-actions">
                 <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
@@ -675,7 +683,11 @@
                 <label>Бюджет (для админа)</label>
                 <select id="edit-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ (Красный)</option><option value="ТХ">ТХ (Зеленый)</option></select>
             </div>
-            <div class="input-group"><label>На выкупе у</label><input id="edit-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div class="input-group"><label for="edit-buyout-status">На выкупе у</label><input id="edit-buyout-status" placeholder="Например, Мартемьянов"></div>
+            <div class="warehouse-buyout-fields" id="edit-buyout-amounts">
+                <div class="input-group"><label for="edit-buyout-total">Сумма выкупа, ₽</label><input type="number" id="edit-buyout-total" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="input-group"><label for="edit-buyout-remaining">Осталось выплатить, ₽</label><input type="number" id="edit-buyout-remaining" min="0" step="0.01" inputmode="decimal"></div>
+            </div>
             
             <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
             <div class="input-group"><label>Тушка</label><input id="edit-kit-body"></div>
@@ -918,7 +930,7 @@
                 currentUser = await api("/api/me");
                 clearConnectionWait();
                 document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!currentUser.is_owner));
-                document.getElementById("web-login-btn").classList.toggle("hidden",!tg.initData); document.getElementById("web-logout-btn").classList.toggle("hidden",!!tg.initData);
+                document.getElementById("web-login-btn").classList.toggle("hidden",!tg.initData);
                 document.getElementById("owner-terminal-btn").classList.toggle("hidden", !currentUser.is_owner);
                 
                 if (currentUser.is_registered === 0) { 
@@ -1125,19 +1137,19 @@
                 return;
             }
 
-            let html = `<div style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
-                <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left; min-width: 400px;">
-                <tr style="border-bottom: 2px solid var(--border); background: var(--skeleton-bg);">
-                    <th style="padding: 10px; font-weight: 600;">Товар / Комплект</th>
-                    <th style="padding: 10px; font-weight: 600;">Где</th>
-                    <th style="padding: 10px; font-weight: 600;">У кого</th>
+            let html = `<div class="warehouse-table-scroll">
+                <table class="warehouse-table warehouse-table--category">
+                <tr>
+                    <th>Товар / Комплект</th>
+                    <th>Где</th>
+                    <th>У кого</th>
                 </tr>`;
 
             filtered.forEach(i => {
                 let kitArr = [];
                 if (i.kit_body) kitArr.push(`📷 ${i.kit_body}`);
                 if (i.kit_lens) kitArr.push(`🔭 ${i.kit_lens}`);
-                if (i.kit_flash) kitArr.push(`⚡ ${i.kit_flash}`);
+                if (i.kit_flash) kitArr.push(`⚡ ${escapeOwnerText(flashModelLabel1853(i.kit_flash))}`);
                 if (i.kit_acc) kitArr.push(`🔋 ${i.kit_acc}`);
                 if (i.kit_add) kitArr.push(`📦 ${i.kit_add}`);
                 const kitHtml = kitArr.length ? `<div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height: 1.4;">${kitArr.join('<br>')}</div>` : '';
@@ -1148,14 +1160,14 @@
                 let rowBg = i.holders.length > 0 ? 'rgba(255, 149, 0, 0.08)' : 'transparent';
                 let holderColor = i.holders.length > 0 ? 'var(--warning)' : 'var(--text)';
 
-                html += `<tr style="border-bottom: 1px solid var(--border); background: ${rowBg};">
-                    <td style="padding: 10px; vertical-align: top; max-width: 150px;">
+                html += `<tr style="background: ${rowBg};">
+                    <td style="max-width: 150px;">
                         <div style="font-weight: 600; color: var(--primary);">${escapeOwnerText(i.name)}</div>
                         <div style="font-size: 11px; color: var(--text-muted);">${escapeOwnerText(i.code)}</div>
                         ${kitHtml}
                     </td>
-                    <td style="padding: 10px; vertical-align: top; font-weight: 500;">${escapeOwnerText(locations)}</td>
-                    <td style="padding: 10px; vertical-align: top; color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${escapeOwnerText(holders)}</td>
+                    <td style="font-weight: 500;">${escapeOwnerText(locations)}</td>
+                    <td style="color: ${holderColor}; font-weight: ${i.holders.length > 0 ? 'bold' : 'normal'};">${escapeOwnerText(holders)}</td>
                 </tr>`;
             });
 
@@ -1166,7 +1178,10 @@
 
         async function loadLocations() { 
             locations = await api("/api/locations"); 
-            document.getElementById("add-location").innerHTML = locations.map(l => `<option value="${l.id}">${escapeOwnerText(l.name)}</option>`).join(""); 
+            const addLocation = $('add-location');
+            const selected = addLocation.value;
+            addLocation.replaceChildren(new Option('Выберите помещение', ''), ...locations.map(location => new Option(location.name, location.id)));
+            addLocation.value = locations.some(location => String(location.id) === selected) ? selected : '';
             document.getElementById("filter-location").innerHTML = `<option value="">Все комнаты</option>` + locations.map(l => `<option value="${l.id}">${escapeOwnerText(l.name)}</option>`).join("");
             const list = document.getElementById("locations-list"); 
             if (list) list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${escapeOwnerText(l.name)}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, ${jsArg17(l.name)})">✏️</button></div>`).join(""); 
@@ -1311,7 +1326,24 @@
                 activity.classList.toggle('has-items', hasItems);
                 activity.querySelector('.beta-activity-title').setAttribute('aria-hidden', String(!hasItems));
                 section.classList.toggle('hidden', !hasItems);
-                list.innerHTML = myItems.map(i => `<div class="my-item-card"><div class="beta-my-thumb"></div><div style="flex:1; min-width:0; cursor:pointer;" onclick="openItem(${jsArg17(i.item_code)})"><div style="font-weight:bold;">${escapeOwnerText(i.name)}</div><div class="meta" style="font-size:12px; color:var(--text-muted);">${escapeOwnerText(i.item_code)} ${i.taken_for ? `(Кому: ${escapeOwnerText(i.taken_for.trim().split(/\s+/)[0])})` : ""}</div></div><div class="my-item-btn" onclick="doReturnFromMain(${jsArg17(i.item_code)})">Вернуть</div></div>`).join("");
+                list.innerHTML = myItems.map(item => {
+                    const surname = recipientSurname(item.taken_for);
+                    const returnStyle = item.user_id === currentUser.tg_id ? 'my-item-btn' : 'my-item-btn ok';
+                    const handoff = item.can_handoff
+                        ? `<button type="button" class="warehouse-handoff" onclick="confirmHandoff(${Number(item.checkout_id)},this)">Отдал · ${escapeOwnerText(surname)}</button>`
+                        : '';
+                    return `<div class="my-item-card">
+                        <div class="beta-my-thumb"></div>
+                        <div class="warehouse-my-item-name" onclick="openItem(${jsArg17(item.item_code)})">
+                            <b>${escapeOwnerText(item.name)}</b>
+                            <div class="meta">${escapeOwnerText(item.item_code)}${surname ? ' · Кому ' + escapeOwnerText(surname) : ''}</div>
+                        </div>
+                        <div class="warehouse-my-item-actions">
+                            ${handoff}
+                            <button type="button" class="${returnStyle}" onclick="doReturnFromMain(${jsArg17(item.item_code)})">Вернуть</button>
+                        </div>
+                    </div>`;
+                }).join('');
                 if(window.betaMyPhoto) list.querySelectorAll('.beta-my-thumb').forEach((node,k)=>node.replaceWith(window.betaMyPhoto({...myItems[k],code:myItems[k].item_code})));
 
                 return true;
@@ -1321,6 +1353,27 @@
             }
         }
         
+        function recipientSurname(name) {
+            return String(name || '').trim().split(/\s+/)[0];
+        }
+
+        async function confirmHandoff(checkoutId, button) {
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                const result = await api('/api/checkout/'+checkoutId+'/handoff', {method:'POST'});
+                showToast('Передано · '+recipientSurname(result.recipient));
+                await Promise.all([
+                    loadItems(),
+                    currentScreen === 'screen-item' && currentItem?.code === result.code ? openItem(result.code) : null,
+                ]);
+            } catch (error) {
+                notify(error.message);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
         async function doReturnFromMain(code) { 
             haptic('medium');
             try { await api(`/api/return?code=${encodeURIComponent(code)}`, { method: "POST" }); showToast("Возвращено"); await Promise.all([loadItems(), loadDashboard17()]); } catch (e) { notify(e.message); }
@@ -1393,6 +1446,7 @@
             document.getElementById("take-search-input").value = "";
             document.getElementById("take-search-wrapper").classList.remove("has-text");
             selectedTakeItems = [];
+            updateTakeBatchUI();
             renderTakeItems();
             showScreen("screen-take");
         }
@@ -1419,10 +1473,10 @@
             list.innerHTML=available.map(i=>{
                 const holder=i.holders?.[0];
                 const disabled=!canTakeItem(i);
-                const selected=selectedTakeItems.includes(i.code);
+                const selected=selectedTakeItems.includes(i.code)&&!disabled;
                 const location=(i.stocks||[]).map(s=>s.location_name).filter(Boolean).join(", ");
                 const model=String(i.kit_body||i.kit_lens||i.kit_flash||"").trim();
-                const metadata=[i.code,model,i.category,i.budget_tag,location].filter(Boolean).map(escapeOwnerText).join(" · ");
+                const metadata=[i.code,model,i.budget_tag].filter(Boolean).map(escapeOwnerText).join(" · ");
                 const state=holder?"У "+escapeOwnerText(holder.taken_for||holder.full_name||"сотрудника"):i.total<=0?"Нет на складе":"Свободно";
                 const components=["body","lens","flash","acc","add"].reduce((sum,key)=>sum+(Number(i["price_"+key])||0),0);
                 const amount=components>0?components:Number(i.price)||0;
@@ -1695,7 +1749,9 @@
             try {
                 const data=await api(`/api/items/${encodeURIComponent(code)}`);
                 if(requestId!==itemRequest184||epoch!==screenEpoch184)return;
-                currentItem=data; 
+                currentItem=data;
+                $('item-qr-quick').classList.toggle('hidden', data.kind !== 'consumable');
+                $('item-qr-details').classList.toggle('hidden', data.kind === 'consumable');
                 document.getElementById("item-title").textContent = currentItem.name; 
                 
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
@@ -1711,6 +1767,7 @@
                 const facts = [
                     ['Тип', isEquipment ? 'Оборудование' : 'Расходник'],
                     ['Бюджет', item.budget_tag],
+                    ['Совместимость', isStandaloneFlash1853(item) && (flashSuffixBrand1853(item.kit_flash) || flashSuffixBrand1853(item.name))],
                     ['Серийный номер', isEquipment && item.serial_number],
                     ['На выкупе у', isEquipment && item.buyout_status],
                 ];
@@ -1724,7 +1781,7 @@
                 let componentTotal = 0;
                 if (isEquipment) {
                     for (const [key, label] of [['body','Тушка'],['lens','Объектив'],['flash','Вспышка'],['acc','Аксессуары'],['add','Допы']]) {
-                        const name = item['kit_' + key];
+                        const name = key==='flash' ? flashModelLabel1853(item.kit_flash) : item['kit_' + key];
                         const price = canSeePrices ? Number(item['price_' + key]) || 0 : 0;
                         if (!name && !price) continue;
                         const tile = name
@@ -1745,7 +1802,8 @@
                     status.textContent = 'В ремонте';
                     status.className = 'status-badge status-broken';
                 } else if (holder) {
-                    status.textContent = 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
+                    status.textContent = holder.taken_for && !holder.handed_at
+                        ? 'К передаче' : 'На руках у ' + (holder.full_name || holder.taken_for || 'сотрудника');
                     status.className = 'status-badge status-taken';
                 } else {
                     status.textContent = item.stocks.length ? (isEquipment ? 'Свободно' : 'В наличии') : 'Нет в наличии';
@@ -1756,8 +1814,18 @@
                 const unit = isEquipment ? 'шт.' : item.unit;
                 stocks.replaceChildren(...item.stocks.map(stock => itemTile(stock.location_name, stock.quantity + ' ' + unit)));
                 if (!isEquipment) stocks.append(itemTile('Минимальный остаток', item.min_stock + ' ' + unit));
+                if (holder?.taken_for) {
+                    stocks.append(itemTile(holder.handed_at ? 'Передано' : 'Получатель', holder.taken_for));
+                }
                 if (holder?.return_plan) stocks.append(itemTile('Ответ о возврате', holder.return_plan));
                 if (canSeePrices && item.price) stocks.append(itemTile('Цена · админы', money17(item.price), true));
+                if (canSeePrices && item.buyout) {
+                    for (const [label, value] of [
+                        ['Сумма выкупа', item.buyout.total],
+                        ['Выплачено', item.buyout.paid],
+                        ['Осталось выплатить', item.buyout.remaining],
+                    ]) stocks.append(itemTile(label, money17(value), true));
+                }
 
                 const bookingSection = $('booking-section');
                 bookingSection.classList.toggle('hidden', !isEquipment);
@@ -1767,7 +1835,7 @@
                     loadBookings(item.code);
                 }
 
-                renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
+                renderActions(); loadRepairs17(currentItem.code);
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
             } catch (e) { if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message); } 
@@ -1776,12 +1844,14 @@
         function showEditForm() { 
             document.getElementById("edit-name").value = currentItem.name; 
             document.getElementById("edit-kind").value = currentItem.kind; $("edit-kind").disabled=true; $("edit-category").value=currentItem.category||""; 
-            const priceInput = $("edit-price");
-            delete priceInput.dataset.kitCalculated;
-            priceInput.value = currentItem.price || 0;
+            const editPrice = $('edit-price');
+            delete editPrice.dataset.kitCalculated;
+            editPrice.value = currentItem.price || 0;
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
             document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
-            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; 
+            $('edit-buyout-status').value = currentItem.buyout_status || '';
+            $('edit-buyout-total').value = currentItem.buyout?.total ?? '';
+            $('edit-buyout-remaining').value = currentItem.buyout?.remaining ?? '';
             
             document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
             document.getElementById("edit-price-body").value = currentItem.price_body || 0; 
@@ -1806,6 +1876,7 @@
         function toggleEditFields() {
             const c=$("edit-kind").value==="consumable";
             $("edit-consumable-fields").classList.toggle("hidden",!c);
+            $("edit-buyout-amounts").classList.toggle("hidden",c);
             for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c);
             $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c);
             const priceGroup=$("edit-price").closest(".input-group");
@@ -1881,7 +1952,11 @@
                     name, kind, min_stock: minStock, price, 
                     kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
                     price_body, price_lens, price_flash, price_acc, price_add, 
-                    budget_tag, serial_number, buyout_status, category:$("edit-category").value 
+                    budget_tag, serial_number, buyout_status, category:$("edit-category").value,
+                    buyout: kind === 'equipment' ? {
+                        total: $('edit-buyout-total').value || null,
+                        remaining: $('edit-buyout-remaining').value || null,
+                    } : undefined
                 }) }); 
                 showToast("Сохранено"); setLoading(btn,false); loadItems(); if(currentScreen==="screen-edit-item"&&epoch===screenEpoch184){await openItem(savedCode);} 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
@@ -1930,7 +2005,12 @@
                 if (myCheckout) {
                     html += `<button class="ok" onclick="doReturn()">✅ Вернуть</button>`; 
                 } else if (otherCheckout) {
-                    html += `<button class="ok" onclick="doReturn()">✅ Вернуть за сотрудника</button>`; 
+                    if (otherCheckout.giver_id === myId && otherCheckout.taken_for && !otherCheckout.handed_at) {
+                        const id = Number(otherCheckout.id);
+                        const surname = escapeOwnerText(recipientSurname(otherCheckout.taken_for));
+                        html += `<button type="button" class="warehouse-handoff" onclick="confirmHandoff(${id},this)">Отдал · ${surname}</button>`;
+                    }
+                    html += `<button type="button" class="ok" onclick="doReturn()">Вернуть за сотрудника</button>`;
                 } else { 
                     if (currentItem.stocks.some(s => s.quantity > 0)) {
                         html += `<div class="beta-checkout-actions">
@@ -1986,7 +2066,7 @@
         
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         let checkoutPending = false;
-        async function doCheckout(takenFor = "") {
+        async function doCheckout(takenFor = "", recipientId = null) {
             if (checkoutPending) return;
             const {code} = currentItem;
             const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
@@ -1995,7 +2075,7 @@
             try {
                 await api('/api/checkout', {
                     method: 'POST',
-                    body: JSON.stringify({code, taken_for: takenFor}),
+                    body: JSON.stringify({code, taken_for: takenFor, recipient_id: recipientId}),
                 });
                 showToast('Выдано');
                 const refresh = Promise.all([loadItems(), loadDashboard17()]);
@@ -2011,16 +2091,58 @@
 
         const recipientDialog = document.getElementById('item-recipient-dialog');
         const recipientName = document.getElementById('item-recipient-name');
-        function doCheckoutFor() {
+        const recipientOptions = document.getElementById('item-recipients');
+        let recipientRows = [], selectedRecipient = null, recipientRequest = 0;
+
+        function showRecipientOptions() {
+            const normalize = name => name.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
+            const query = normalize(recipientName.value);
+            const matches = recipientRows.filter(row => normalize(row.name).includes(query)).slice(0,8);
+            recipientOptions.replaceChildren();
+            for (const row of matches) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'secondary';
+                button.textContent = row.name;
+                button.onclick = () => {
+                    selectedRecipient = row.id;
+                    recipientName.value = row.name;
+                    recipientName.setCustomValidity('');
+                    recipientOptions.replaceChildren();
+                    recipientName.focus();
+                };
+                recipientOptions.append(button);
+            }
+        }
+
+        async function doCheckoutFor() {
             if (checkoutPending || recipientDialog.open) return;
+            const request = ++recipientRequest;
             recipientDialog.returnValue = '';
             recipientDialog.dataset.itemCode = currentItem.code;
+            recipientRows = [];
+            selectedRecipient = null;
             recipientName.value = '';
             recipientName.setCustomValidity('');
+            recipientOptions.textContent = 'Загрузка получателей…';
             recipientDialog.showModal();
             recipientName.focus();
+            try {
+                const rows = await api('/api/checkout/recipients');
+                if (request !== recipientRequest || !recipientDialog.open) return;
+                recipientRows = rows;
+                showRecipientOptions();
+            } catch (error) {
+                if (request === recipientRequest && recipientDialog.open) {
+                    recipientOptions.textContent = 'Список временно недоступен. Введите фамилию вручную.';
+                }
+            }
         }
-        recipientName.addEventListener('input', () => recipientName.setCustomValidity(''));
+        recipientName.addEventListener('input', () => {
+            selectedRecipient = null;
+            recipientName.setCustomValidity('');
+            showRecipientOptions();
+        });
         recipientDialog.querySelector('form').addEventListener('submit', event => {
             if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
             event.preventDefault();
@@ -2028,9 +2150,10 @@
             recipientName.reportValidity();
         });
         recipientDialog.addEventListener('close', () => {
+            ++recipientRequest;
             if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
                 currentItem?.code === recipientDialog.dataset.itemCode) {
-                doCheckout(recipientName.value.trim());
+                doCheckout(recipientName.value.trim(), selectedRecipient);
             }
         });
         async function doReturn() {
@@ -2110,7 +2233,7 @@
         
         function showAddForm() { openAddItemModal(); }
 
-        function openAddItemModal() {
+        function openAddItemModal(kind) {
             document.getElementById("add-name").value = "";
             document.getElementById("add-code").value = "";
             document.getElementById("qr-preview-box").classList.add("hidden");
@@ -2135,7 +2258,23 @@
             document.getElementById("add-kit-add").value = "";
             document.getElementById("add-price-add").value = "0";
             toggleFields();
-            $("add-photo").value=""; $("add-unit").value="шт."; $("add-supplier").value=""; $("add-category").value=""; restoreDraft17(); toggleFields(); syncKitTotal("add"); document.getElementById("create-item-modal").classList.remove("hidden");
+            const modal = $('create-item-modal');
+            $('add-photo').value = '';
+            $('add-unit').value = 'шт.';
+            $('add-supplier').value = '';
+            $('add-category').value = '';
+            $('add-location').value = '';
+            restoreDraft17(kind);
+            if (kind) $('add-kind').value = kind;
+            if ($('add-kind').value === 'equipment' && !$('add-location').value && locations.length) {
+                $('add-location').value = String(locations[0].id);
+            }
+            modal.classList.toggle('quick-consumable', kind === 'consumable');
+            toggleFields();
+            syncKitTotal('add');
+            modal.querySelectorAll('details[open]').forEach(details => { details.open = false; });
+            modal.classList.remove('hidden');
+            modal.querySelector('.modal-content').scrollTop = 0;
         }
 
         function closeAddItemModal() {
@@ -2146,13 +2285,15 @@
             document.getElementById("qr-preview-box").classList.add("hidden");
         }
 
+        function itemCodePrefix(name) {
+            const transliterated = name.toLowerCase().split('').map(letter => ruToEn[letter] || letter).join('');
+            return transliterated.replace(/[^a-z]/g, '').toUpperCase().slice(0, 3) || 'ITM';
+        }
+
         async function generateCodeForNew() {
-            const name = document.getElementById("add-name").value.trim();
-            if (!name) { notify("Введите название"); return; }
-            let en = name.toLowerCase().split('').map(c => ruToEn[c] || c).join('');
-            en = en.replace(/[^a-z]/g, '').toUpperCase();
-            const prefix = en.substring(0, 3) || 'ITM';
-            
+            const name = $('add-name').value.trim();
+            if (!name) { notify('Введите название'); return; }
+            const prefix = itemCodePrefix(name);
             try {
                 const res = await api(`/api/next_code?prefix=${prefix}`);
                 document.getElementById("add-code").value = res.code;
@@ -2167,17 +2308,29 @@
             } catch(e) { notify("Ошибка генерации кода"); }
         }
 
-        async function saveNewItem() { 
-            if($("add-kind").value==="equipment")syncKitTotal("add");
-            const btn = document.getElementById("save-item-btn"); 
-            const code = document.getElementById("add-code").value.trim(); 
-            const name = document.getElementById("add-name").value.trim(); 
-            const kind = document.getElementById("add-kind").value;
-            
-            if (!code || !name) { notify("Заполните код и название"); return; } 
-            
-            const formData = new FormData(); 
-            formData.append("code", code); 
+        let savingNewItem = false;
+        async function saveNewItem(printLabel = false) {
+            if (savingNewItem || currentUser?.role !== 'admin') return;
+            const kind = $('add-kind').value;
+            if (kind === 'equipment') syncKitTotal('add');
+            const btn = $(printLabel ? 'save-item-print-btn' : 'save-item-btn');
+            const code = $('add-code').value.trim();
+            const name = $('add-name').value.trim();
+            const location = $('add-location').value;
+            if (!name) { notify('Введите название'); $('add-name').focus(); return; }
+            if (kind === 'consumable') {
+                if (!location) { notify('Выберите помещение'); $('add-location').focus(); return; }
+                const qty = $('add-qty');
+                if (qty.value === '' || !Number.isInteger(Number(qty.value)) || Number(qty.value) < 0) {
+                    notify('Укажите целое количество от нуля');
+                    qty.focus();
+                    return;
+                }
+            }
+
+            const formData = new FormData();
+            formData.append('code', code);
+            formData.append('code_prefix', itemCodePrefix(name));
             formData.append("name", name); 
             formData.append("kind", kind); formData.append("category", $("add-category").value); const photo=$("add-photo").files[0]; if(photo)formData.append("photo",photo); 
             
@@ -2185,10 +2338,13 @@
                 formData.append("quantity", document.getElementById("add-qty").value); 
                 formData.append("min_stock", document.getElementById("add-min-stock").value); 
                 formData.append("price", document.getElementById("add-price").value); 
-                formData.append("location_id", document.getElementById("add-location").value);
+                formData.append('location_id', location);
+                formData.append('unit', $('add-unit').value.trim());
+                formData.append('supplier', $('add-supplier').value);
+                formData.append('notes', $('add-location-desc').value);
             } else {
-                formData.append("location_id", document.getElementById("add-location").value); 
-                formData.append("price", document.getElementById("add-price-eq").value); 
+                formData.append('location_id', location || '0');
+                formData.append("price", document.getElementById("add-price-eq").value);
                 formData.append("serial_number", document.getElementById("add-serial-number").value); 
                 formData.append("budget_tag", document.getElementById("add-budget-tag").value); 
                 formData.append("buyout_status", document.getElementById("add-buyout-status").value); 
@@ -2204,20 +2360,26 @@
                 formData.append("price_add", document.getElementById("add-price-add").value || "0"); 
             }
             
-            setLoading(btn, true, "Сохранение..."); 
-            try { 
-                await api("/api/items", { method: "POST", body: formData });
-                if(kind==="consumable"){try{await api(`/api/items/${encodeURIComponent(code)}/passport`,{method:"PUT",body:JSON.stringify({unit:$("add-unit").value||"шт.",supplier:$("add-supplier").value,notes:$("add-location-desc").value})})}catch(e){notify("Товар создан, но паспорт не сохранён: "+e.message)}}
-                clearDraft17(); setLoading(btn,false); 
-                showToast("Добавлено"); 
+            savingNewItem = true;
+            setLoading(btn, true, 'Сохранение…');
+            try {
+                const result = await api('/api/items', {method:'POST', body:formData});
+                clearDraft17();
                 closeAddItemModal();
+                showToast('Добавлено');
                 loadItems();
-                loadLowStock(); loadDashboard17(); loadStats(); showRooms(); showCreated182(code,name);
-            } catch (e) { notify(e.message); setLoading(btn, false); } 
+                loadDashboard17();
+                showRooms();
+                if (printLabel) showLabelPrint17([{code:result.code, name}]);
+                else showCreated182(result.code, name, kind);
+            } catch (error) {
+                notify(error.message);
+            } finally {
+                savingNewItem = false;
+                setLoading(btn, false);
+            }
         }
-        
-        
-        
+
         async function downloadFile(url, filename) {
             const fullUrl = url;
             try {
@@ -2248,9 +2410,9 @@
                 if (res.type === "select") {
                     if (!res.data.length) resBox.innerHTML = "<p>Запрос выполнен. Данных нет.</p>";
                     else {
-                        let html = `<div style="overflow-x: auto; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 10px;"><table style="width: 100%; border-collapse: collapse;">`;
-                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th style="text-align: left; border-bottom: 1px solid var(--border); padding: 4px;">${escapeOwnerText(k)}</th>`).join("") + `</tr>`;
-                        res.data.forEach(row => { html += `<tr>` + Object.values(row).map(v => `<td style="border-bottom: 1px solid var(--border); padding: 4px;">${escapeOwnerText(v)}</td>`).join("") + `</tr>`; });
+                        let html = `<div class="warehouse-table-scroll"><table class="warehouse-table">`;
+                        html += `<tr>` + Object.keys(res.data[0]).map(k => `<th>${escapeOwnerText(k)}</th>`).join("") + `</tr>`;
+                        res.data.forEach(row => { html += `<tr>` + Object.values(row).map(v => `<td>${escapeOwnerText(v)}</td>`).join("") + `</tr>`; });
                         html += `</table></div>`; resBox.innerHTML = html;
                     }
                 } else { resBox.innerHTML = `<div class="status-badge status-free">${escapeOwnerText(res.message)}</div>`; loadStats(); }
@@ -2355,14 +2517,13 @@
             }catch(e){notify(e.message)}
         }
         async function webLogin(btn){setLoading(btn,true);try{await api('/api/web/login',{method:'POST',body:JSON.stringify({code:$('web-code').value})});location.reload()}catch(e){notify(e.message);setLoading(btn,false)}}
-        async function webLogout(){try{await api('/api/web/logout',{method:'POST'});try{localStorage.removeItem(cacheKey17('platforms'));localStorage.removeItem(cacheKey17('ships'));clearDraft17()}catch(e){}location.reload()}catch(e){notify(e.message)}}
         async function blob17(url){const r=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.detail||'Не удалось загрузить файл')}return r.blob()}
         async function image17(img,url){const obj=URL.createObjectURL(await blob17(url));if(img.dataset.objecturl)URL.revokeObjectURL(img.dataset.objecturl);img.dataset.objecturl=obj;img.src=obj}
         async function showLabelPreview17(code,name,img){await image17(img,`/api/label/${encodeURIComponent(code)}?name=${encodeURIComponent(name)}`)}
         async function showQr(){const code=currentItem.code,name=currentItem.name;const {b}=overlay17('Этикетка · '+name);const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);btn17(b,'Копировать код: '+code,()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));try{if(currentUser.role==='admin'){const path='/api/label/'+encodeURIComponent(code);await image17(img,path);btn17(b,'Скачать PNG · 203 dpi',()=>downloadFile(path,code+'.png'));btn17(b,'Скачать PDF · 50 × 80 мм',()=>downloadFile(path+'?format=pdf',code+'.pdf'));btn17(b,'Скачать PDF · 300 dpi',()=>downloadFile(path+'?format=pdf&dpi=300',code+'.pdf'))}else{await image17(img,'/api/label/'+encodeURIComponent(code))}}catch(e){notify(e.message)}}
         function draftKey17(){return 'warehouse_main_draft_'+(currentUser?.tg_id||'none')}
         function clearDraft17(){try{localStorage.removeItem(draftKey17())}catch(e){}}
-        function restoreDraft17(){try{const d=JSON.parse(localStorage.getItem(draftKey17())||'{}');for(const [id,v]of Object.entries(d)){const el=$(id);if(el&&el.type!=='file')el.value=v}}catch(e){}}
+        function restoreDraft17(kind){try{const d=JSON.parse(localStorage.getItem(draftKey17())||'{}');if(kind&&d['add-kind']!==kind)return;for(const [id,v]of Object.entries(d)){const el=$(id);if(el&&el.type!=='file')el.value=v}}catch(e){}}
         $('create-item-modal').addEventListener('input',()=>{if(!currentUser)return;const data={};$('create-item-modal').querySelectorAll('input,select').forEach(e=>{if(e.type!=='file')data[e.id]=e.value});try{localStorage.setItem(draftKey17(),JSON.stringify(data))}catch(e){}});
         async function loadCategories17(){try{categories17=await api('/api/categories');categories17=categories17.map(c=>typeof c==='string'?c:c.name);for(const id of ['add-category','edit-category','filter-category']){const el=$(id),v=el.value;el.replaceChildren(new Option(id==='filter-category'?'Все категории':'Без категории',''));categories17.forEach(c=>el.add(new Option(c,c)));el.value=v}}catch(e){notify(e.message)}}
         function matchesStatus17(i,status){if(status==='free')return i.kind==='equipment'&&!i.needs_repair&&!i.holders.length&&i.total>0&&!booked17.has(i.code);if(status==='on_hand')return i.holders.length>0;if(status==='repair')return !!i.needs_repair;if(status==='booked_today')return booked17.has(i.code);if(status==='low_stock')return !!i.is_low;return true}
@@ -2407,9 +2568,7 @@
         }
         async function showExtra(section){const titles={categories:'Категории',finance:'Финансы',purchases:'Закупки',archive:'Архив',audit:'Журнал администратора',bookings:'Календарь бронирований',inventorylog:'История инвентаризации'};$('extra-title').textContent=titles[section];showScreen('screen-extra');const box=$('extra-content');box.className='data-list';box.textContent='Загрузка…';try{if(section==='categories'){await renderCategorySettings(box);}else if(section==='finance'){const [r,items]=await Promise.all([api('/api/dashboard'),api('/api/items')]);box.replaceChildren();const f=r.finance;if(!f)throw Error('Нет доступа');for(const [label,key]of [['Стоимость всего','total'],['На руках','on_hand'],['В ремонте','repair'],['Расходники','consumables'],['Учтённые закупки за 30 дней','receipt_cost_30_days']])card17(box,label).append(adminPrice(f[key]));renderFinanceBars17(box,f.by_category);renderFinanceEquipment17(box,items);}else if(section==='purchases'){const rows=await api('/api/purchases');box.replaceChildren();if(!rows.length)box.textContent='Все запасы выше минимума';for(const r of rows){const c=card17(box,r.name,`Осталось: ${r.remaining} ${r.unit}\nМинимум: ${r.min_stock}\nРасход за 30 дней: ${r.used_30_days}\nДокупить: ${r.suggested_quantity}\nПоставщик: ${r.supplier||'—'}`);if(r.price!==undefined)c.append(adminPrice(r.suggested_quantity*r.price));btn17(c,'Открыть товар',()=>openItem(r.code));if(currentUser.role==='admin')btn17(c,'Принять закупку',()=>replenish17(r.code,r.suggested_quantity,r.price,()=>showExtra('purchases')))}}else if(section==='archive'){const rows=await api('/api/archive');box.replaceChildren();if(!rows.length)box.textContent='Архив пуст';for(const r of rows){const c=card17(box,r.name,r.code);btn17(c,'Восстановить',async()=>{await api('/api/archive/'+encodeURIComponent(r.code)+'/restore',{method:'POST'});showToast('Восстановлено');showExtra(section);loadItems()})}}else if(section==='audit'){const rows=await api('/api/audit');box.replaceChildren();if(!rows.length)box.textContent='Нет записей';for(const r of rows)card17(box,r.action,`${r.created_at} · ${r.full_name||'—'}\n${r.subject}`)}else if(section==='inventorylog'){const rows=await api('/api/inventory_runs');box.replaceChildren();if(!rows.length)box.textContent='Нет проверок';for(const r of rows)card17(box,r.name||'Комната',`${r.created_at} · ${r.full_name||'—'}\n${r.report.differences?.length? r.report.differences.map(d=>d.code+': '+d.actual+' / '+d.expected).join('\n'):'Без расхождений'}`)}else if(section==='bookings'){const rows=await api('/api/booking_calendar');box.replaceChildren();renderCalendar17(box,rows);if(!rows.length)card17(box,'Нет предстоящих броней');for(const r of rows){const c=card17(box,r.name,`${r.date_from} — ${r.date_to}\n${r.full_name||'—'}`);btn17(c,'Открыть товар',()=>openItem(r.item_code));if(r.user_id===currentUser.tg_id||currentUser.role==='admin')btn17(c,'Отменить бронь',async()=>{if(confirm('Отменить бронь?')){await api('/api/bookings/id/'+r.id,{method:'DELETE'});showExtra(section);loadMyBookings();loadDashboard17()}})}}}catch(e){box.textContent=e.message}}
         function userCard17(u){const {b}=overlay17(u.full_name||'Пользователь');if(currentUser.is_owner&&u.role)card17(b,'Роль',u.is_owner?'Главный администратор':u.role==='admin'?'Администратор':u.role==='guest'?'Гость':u.role==='boss'?'Босс':'Сотрудник');for(const code of u.held_items||[]){const item=allItems.find(i=>i.code===code);btn17(b,item?.name||code,()=>{b.parentElement.remove();openItem(code)})}if(!u.held_items?.length)card17(b,'На руках','Нет оборудования')}
-        async function loadPassport17(code){const box=$('passport-v17');box.replaceChildren();try{const m=await api(itemPath17(code,'/passport'));if(currentItem?.code!==code)return;const c=card17(box,'Паспорт товара',[m.notes,m.site?'Площадка: '+m.site:'',m.vessel?'Теплоход: '+m.vessel:'',currentItem.kind==='consumable'?'Единица: '+m.unit:'',m.supplier?'Поставщик: '+m.supplier:''].filter(Boolean).join('\n'));if(m.has_photo){const im=document.createElement('img');im.style.cssText='max-width:100%;max-height:220px;object-fit:contain;border-radius:12px';im.alt='Фото товара';c.prepend(im);image17(im,itemPath17(code,'/photo')).catch(e=>im.remove())}btn17(c,'Копировать название',()=>copyText(currentItem.name));btn17(c,'Копировать код',()=>copyText(code));if(currentUser.role==='admin')btn17(c,'Редактировать паспорт',()=>editPassport17(code,m))}catch(e){box.textContent=e.message}}
         function field17(parent,label,value='',type='text'){const g=document.createElement('div');g.className='input-group';const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')e.type=type;if(type!=='file')e.value=value??'';g.append(l,e);parent.append(g);return e;}
-        function editPassport17(code,m){const {b,o}=overlay17('Паспорт товара');const unit=field17(b,'Единица измерения',m.unit),supplier=field17(b,'Поставщик',m.supplier),site=field17(b,'Площадка',m.site),vessel=field17(b,'Теплоход',m.vessel);populateSuggestions17(b,site,'site',cachedPlatforms.map(r=>r['Площадка']));populateSuggestions17(b,vessel,'vessel',cachedTH.map(r=>r['Название']||Object.values(r)[0]));const notes=field17(b,'Описание и место хранения',m.notes,'textarea'),photo=field17(b,'Заменить фото','','file');photo.accept='image/*';btn17(b,'Сохранить',async()=>{await api(itemPath17(code,'/passport'),{method:'PUT',body:JSON.stringify({unit:unit.value,supplier:supplier.value,site:site.value,vessel:vessel.value,notes:notes.value})});if(photo.files[0]){let f=new FormData();f.append('photo',photo.files[0]);await api(itemPath17(code,'/photo'),{method:'PUT',body:f})}o.remove();loadPassport17(code);loadItems();showToast('Сохранено')},'ok')}
         async function loadRepairs17(code){const box=$('repairs-v17');box.replaceChildren();if(currentItem?.kind!=='equipment')return;try{const rows=await api(itemPath17(code,'/repairs'));if(currentItem?.code!==code)return;for(const r of rows){const c=card17(box,r.finished_at?'Завершённый ремонт':'Ремонт',`${r.description}\n${r.started_at}${r.finished_at?' — '+r.finished_at:''}`);if(currentUser.role==='admin'&&r.cost!==undefined)c.append(adminPrice(r.cost));if(r.has_photo){const im=document.createElement('img');im.alt='Фото ремонта';im.style.cssText='max-width:100%;max-height:220px;object-fit:contain';c.append(im);image17(im,'/api/repairs/'+r.id+'/photo').catch(()=>im.remove())}if(currentUser.role==='admin'||currentUser.tg_id===r.user_id){const f=field17(c,'Фото поломки','','file');f.accept='image/*';btn17(c,'Сохранить фото',async()=>{if(!f.files[0])throw Error('Выберите фото');const data=new FormData();data.append('photo',f.files[0]);await api('/api/repairs/'+r.id+'/photo',{method:'PUT',body:data});loadRepairs17(code);showToast('Фото сохранено')})}}}catch(e){console.log(e)}}
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
@@ -2499,16 +2658,16 @@
         }
         function renderFinanceBars17(box,values){const c=card17(box,'Стоимость по категориям');const max=Math.max(1,...Object.values(values));for(const [name,v]of Object.entries(values).sort((a,b)=>b[1]-a[1])){const p=document.createElement('div');p.className='meta';p.append(document.createTextNode(name+' · '),adminPrice(v));const bar=document.createElement('div');bar.style.cssText='height:8px;border-radius:6px;background:var(--skeleton-bg);margin:6px 0 13px;overflow:hidden';const fill=document.createElement('div');fill.style.cssText=`height:100%;background:var(--primary);width:${Math.max(0,Math.min(100,v/max*100))}%`;bar.append(fill);c.append(p,bar)}}
         function renderCalendar17(box,rows){const c=card17(box,'Брони по дням');const month=document.createElement('input');month.type='month';month.value=localDay17().slice(0,7);const grid=document.createElement('div');grid.className='calendar-grid17';const detail=document.createElement('div');c.append(month,grid,detail);function draw(){grid.replaceChildren();detail.replaceChildren();const [y,m]=month.value.split('-').map(Number);if(!y||!m)return;for(const d of ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']){const el=document.createElement('span');el.textContent=d;grid.append(el)}const offset=(new Date(y,m-1,1).getDay()+6)%7;for(let j=0;j<offset;j++)grid.append(document.createElement('span'));for(let d=1;d<=new Date(y,m,0).getDate();d++){const dt=localDay17(new Date(y,m-1,d));const active=rows.filter(r=>r.date_from<=dt&&r.date_to>=dt);const el=document.createElement('button');el.className='secondary';el.textContent=d+(active.length?' · '+active.length:'');if(active.length)el.style.borderColor='var(--primary)';el.onclick=()=>{detail.replaceChildren();card17(detail,dt);if(!active.length)card17(detail,'Нет броней');for(const r of active){const item=card17(detail,r.name,r.full_name||'—');btn17(item,'Открыть',()=>openItem(r.item_code))}};grid.append(el)}}month.onchange=draw;draw()}
-        function replenish17(code,suggestion=1,price='',after){const {o,b}=overlay17('Приход на склад');const sel=document.createElement('select');for(const loc of locations)sel.add(new Option(loc.name,loc.id));b.append(sel);const qty=field17(b,'Количество',suggestion,'number');qty.min=1;const unit=field17(b,'Фактическая цена за единицу, ₽ (необязательно)',price,'number');unit.min=0;unit.step='0.01';btn17(b,'Принять',async()=>{const n=Number(qty.value),p=unit.value===''?null:Number(unit.value);if(!Number.isInteger(n)||n<=0||p!==null&&(!Number.isFinite(p)||p<0))throw Error('Проверьте количество и цену');await api(itemPath17(code,'/replenish'),{method:'POST',body:JSON.stringify({location_id:Number(sel.value),quantity:n,unit_price:p})});o.remove();showToast('Пополнение сохранено');await loadItems();loadDashboard17();if(after)after();else if(currentItem?.code===code)openItem(code)},'ok')}
+        function replenish17(code,suggestion=1,price='',after,locationId,itemUnit){const {o,b}=overlay17('Приход на склад');const sel=document.createElement('select');if(locationId!==undefined)sel.add(new Option('Выберите помещение',''));for(const loc of locations)sel.add(new Option(loc.name,loc.id));if(locationId)sel.value=locationId;b.append(sel);const qty=field17(b,itemUnit?'Количество, '+itemUnit:'Количество',suggestion,'number');qty.min=1;const unit=field17(b,'Фактическая цена за единицу, ₽ (необязательно)',price,'number');unit.min=0;unit.step='0.01';btn17(b,'Принять',async()=>{if(!sel.value)throw Error('Выберите помещение');const n=Number(qty.value),p=unit.value===''?null:Number(unit.value);if(!Number.isInteger(n)||n<=0||p!==null&&(!Number.isFinite(p)||p<0))throw Error('Проверьте количество и цену');await api(itemPath17(code,'/replenish'),{method:'POST',body:JSON.stringify({location_id:Number(sel.value),quantity:n,unit_price:p})});o.remove();showToast('Пополнение сохранено');await loadItems();loadDashboard17();if(after)after();else if(currentItem?.code===code)openItem(code)},'ok')}
         function populateSuggestions17(b,field,key,values){const list=document.createElement('datalist');list.id='suggest-'+key+'-'+Date.now();for(const n of [...new Set(values.filter(Boolean))])list.append(new Option(n));b.append(list);field.setAttribute('list',list.id)}
         function showLinked17(key,name){const {o,b}=overlay17(name);const rows=allItems.filter(i=>String(i[key]||'').trim().toLowerCase()===String(name).trim().toLowerCase());if(!rows.length)card17(b,'Нет привязанного оборудования','Администратор может указать площадку или теплоход в паспорте товара.');for(const i of rows)btn17(b,i.name+' · '+i.code,()=>{o.remove();openItem(i.code)})}
 
         $('qr-preview-code').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copyText($('add-code').value)}});
 
-        installV18();
+        installV18(()=>openRoleMenu());
         installRelease182();
         installRelease183();
-        installRelease184();
+        const openRoleMenu=installRelease184();
         installRelease185();
 
 (function installBetaMotion(){
@@ -2520,7 +2679,7 @@
     'Добавить помещение':'Добавить помещение','Использование техники':'Использование','История инвентаризаций':'История проверок',
     'Выгрузить склад в Excel':'Склад в Excel','Печать QR-этикеток':'QR-этикетки','Размер этикетки':'Размер этикетки',
     'Журнал администратора':'Журнал','Скачать резервную копию базы':'Резервная копия','Сбросить настройки браузера':'Сброс браузера',
-    'Тестирование интерфейса':'Предпросмотр','Выйти из сайта':'Выход с сайта'
+    'Тестирование интерфейса':'Предпросмотр'
   };
   const groupRoot=document.querySelector('#screen-settings .v18-settings-layout');
   if(groupRoot){
@@ -2686,6 +2845,12 @@
             } catch (error) {
                 notify(error.message);
             }
+        }
+        // Load installability and iOS camera support exclusively for the PWA entry point.
+        if(!tg.initData && location.pathname.startsWith('/pwa/')){
+          const pwaScript=document.createElement('script');
+          pwaScript.src='/pwa/client.js?v=3';
+          document.body.append(pwaScript);
         }
         (async () => { await init(); await openReturnReminder(); })();
     </script>

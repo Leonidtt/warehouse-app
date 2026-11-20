@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Requ
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 import qrcode
 import io
@@ -16,6 +16,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 import base64
 from datetime import datetime, timedelta
+from decimal import Decimal
 import os
 import traceback
 import pandas as pd
@@ -36,6 +37,7 @@ from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_export import register_snapshot_export
+from telegram_app_bot import register_telegram_app_bot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 from pwa_assets import render_icon_png
 
@@ -56,7 +58,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.9"
+APP_VERSION = "18.5.10"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -99,18 +101,40 @@ def get_conn(x_init_data: Optional[str] = None):
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
-def find_or_create_guest(full_name, conn):
-    name = full_name.strip()
-    if not name: return None
-    row = conn.execute("SELECT tg_id FROM users WHERE full_name = ?", (name,)).fetchone()
-    if row: return row["tg_id"]
-    
-    min_id_row = conn.execute("SELECT MIN(tg_id) FROM users WHERE tg_id < 0").fetchone()
-    min_id = min_id_row[0] if min_id_row and min_id_row[0] is not None else 0
-    new_id = min_id - 1
-    
-    conn.execute("INSERT INTO users (tg_id, full_name, role, is_registered) VALUES (?, ?, 'guest', 1)", (new_id, name))
-    return new_id
+def recipient_name(value):
+    return " ".join((value or "").split())
+
+def recipient_key(value):
+    return recipient_name(value).casefold().replace("ё", "е")
+
+def resolve_recipient(conn, name, recipient_id):
+    if recipient_id is not None:
+        row = conn.execute("SELECT tg_id,full_name FROM users WHERE tg_id=?", (recipient_id,)).fetchone()
+        if not row or not recipient_name(row["full_name"]):
+            raise HTTPException(404, "Получатель не найден")
+        deny_blocked(conn, row["tg_id"], MAIN_ADMIN_ID)
+        return row["tg_id"], recipient_name(row["full_name"])
+
+    key = recipient_key(name)
+    rows = conn.execute("SELECT tg_id,full_name FROM users WHERE TRIM(COALESCE(full_name,''))<>''").fetchall()
+    matches = [row for row in rows if recipient_key(row["full_name"]) == key]
+    if not matches and " " not in key:
+        matches = [row for row in rows if recipient_key(row["full_name"]).split(" ", 1)[0] == key]
+    # A registered account takes precedence over a guest spelling of the same full name.
+    if len({recipient_key(row["full_name"]) for row in matches}) == 1:
+        accounts = [row for row in matches if row["tg_id"] > 0]
+        if accounts:
+            matches = accounts
+    if len(matches) > 1:
+        raise HTTPException(409, "Есть несколько получателей. Выберите нужного из списка")
+    if matches:
+        row = matches[0]
+        deny_blocked(conn, row["tg_id"], MAIN_ADMIN_ID)
+        return row["tg_id"], recipient_name(row["full_name"])
+
+    guest_id = conn.execute("SELECT COALESCE(MIN(tg_id),0)-1 FROM users WHERE tg_id<0").fetchone()[0]
+    conn.execute("INSERT INTO users(tg_id,full_name,role,is_registered) VALUES(?,?,'guest',1)", (guest_id, name))
+    return guest_id, name
 
 def init_db(db_path):
     # Создаем директорию для файла базы данных, если ее нет
@@ -180,6 +204,15 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS item_metadata (code TEXT PRIMARY KEY, unit TEXT DEFAULT 'шт.', supplier TEXT DEFAULT '', site TEXT DEFAULT '', vessel TEXT DEFAULT '', notes TEXT DEFAULT '')")
     c.execute("CREATE TABLE IF NOT EXISTS repair_records (id INTEGER PRIMARY KEY, code TEXT NOT NULL, description TEXT NOT NULL, cost REAL DEFAULT 0, user_id INTEGER NOT NULL, started_at TEXT DEFAULT CURRENT_TIMESTAMP, finished_at TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+    c.execute("""CREATE TABLE IF NOT EXISTS checkout_handoffs (
+        checkout_id INTEGER PRIMARY KEY,
+        handed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS equipment_buyout_amounts (
+        item_code TEXT PRIMARY KEY,
+        total_cents INTEGER NOT NULL CHECK(total_cents>=0),
+        remaining_cents INTEGER NOT NULL CHECK(remaining_cents BETWEEN 0 AND total_cents)
+    )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_checkouts_code_return ON checkouts(item_code,returned_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(item_code,date_from,date_to)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_location ON stock(location_id)")
@@ -188,6 +221,10 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS repair_photos (repair_id INTEGER PRIMARY KEY, photo TEXT NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS inventory_runs (id INTEGER PRIMARY KEY, location_id INTEGER NOT NULL, user_id INTEGER NOT NULL, report TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
+    c.execute("""CREATE TABLE IF NOT EXISTS telegram_bot_updates (
+        update_id INTEGER PRIMARY KEY,
+        received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
     c.execute("CREATE TABLE IF NOT EXISTS web_sessions (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS employee_preview (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     if "preview_role" not in {row[1] for row in c.execute("PRAGMA table_info(employee_preview)")}:
@@ -303,6 +340,12 @@ def audit(conn, actor, action, subject):
     conn.execute("INSERT INTO audit_log(user_id,action,subject) VALUES (?,?,?)", (actor["tg_id"],action,str(subject)[:500]))
 
 
+def budget_for_equipment_name(name: str) -> str:
+    # "Комплект Т10" belongs to ТХ; other equipment belongs to КЦ.
+    actual = re.sub(r"^(?:\s*комплект\b[\s№#.:–—-]*)+", "", str(name or ""), flags=re.IGNORECASE).lstrip()
+    return "ТХ" if actual.casefold().startswith(("т", "t")) else "КЦ"
+
+
 def active_item(conn, code):
     row=conn.execute("SELECT * FROM items WHERE code=? AND is_archived=0",(code,)).fetchone()
     if not row: raise HTTPException(404,"Товар не найден")
@@ -337,15 +380,23 @@ class BookingRequest(BaseModel):
 class CommentRequest(BaseModel):
     code: str; text: str
 class CheckoutRequest(BaseModel):
-    code: str; taken_for: str = ""
+    code: str
+    taken_for: str = ""
+    recipient_id: Optional[int] = None
 class RegisterRequest(BaseModel):
     full_name: str
 class LocationCreate(BaseModel):
     name: str
 class LocationUpdate(BaseModel):
     id: int; name: str
+class BuyoutAmounts(BaseModel):
+    total: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    remaining: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
 class ItemUpdate(BaseModel):
     name: str; kind: str; min_stock: int; price: float; kit_body: str; kit_lens: str; kit_flash: str; kit_acc: str; kit_add: str; budget_tag: str; serial_number: str; buyout_status: str; category: str = ""; price_body: float = 0; price_lens: float = 0; price_flash: float = 0; price_acc: float = 0; price_add: float = 0
+    buyout: Optional[BuyoutAmounts] = None
 class ImportTextRequest(BaseModel):
     text: str
 class UserUpdate(BaseModel):
@@ -439,13 +490,16 @@ def my_bookings(x_init_data: Optional[str] = Header(None)):
 def my_items(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data); conn = get_conn(x_init_data)
     rows = conn.execute("""
-        SELECT c.item_code, i.name, i.kind, i.category, i.kit_body, i.kit_lens, i.kit_flash, CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name
-        FROM checkouts c 
-        JOIN items i ON i.code = c.item_code 
+        SELECT c.item_code, i.name, i.kind, i.category, i.kit_body, i.kit_lens, i.kit_flash, CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo, c.taken_for, c.user_id, c.giver_id, u.full_name as target_name,
+               c.id AS checkout_id, h.handed_at,
+               (c.giver_id=? AND c.user_id!=c.giver_id AND TRIM(COALESCE(c.taken_for,''))<>'' AND h.checkout_id IS NULL) AS can_handoff
+        FROM checkouts c
+        JOIN items i ON i.code = c.item_code
         LEFT JOIN users u ON u.tg_id = c.user_id
-        WHERE (c.user_id = ? OR c.giver_id = ?) AND c.returned_at IS NULL 
+        LEFT JOIN checkout_handoffs h ON h.checkout_id = c.id
+        WHERE (c.user_id = ? OR (c.giver_id = ? AND h.checkout_id IS NULL)) AND c.returned_at IS NULL
         ORDER BY c.taken_at DESC
-    """, (user["tg_id"], user["tg_id"])).fetchall()
+    """, (user["tg_id"], user["tg_id"], user["tg_id"])).fetchall()
     conn.close(); return [dict(r) for r in rows]
 
 @app.get("/api/daily_report")
@@ -687,26 +741,21 @@ def get_low_stock(x_init_data: Optional[str] = Header(None)):
     conn.close()
     return [dict(r) for r in rows]
 
+def next_item_code(conn, prefix):
+    prefix = (prefix or "").upper()
+    if not re.fullmatch(r"[A-Z]{2,12}", prefix):
+        prefix = "ITEM"
+    rows = conn.execute("SELECT code FROM items WHERE code LIKE ?", (f"{prefix}-%",))
+    suffixes = (row["code"].rsplit("-", 1)[-1] for row in rows)
+    serial = max((int(val) for val in suffixes if val.isascii() and val.isdigit()), default=0)
+    return f"{prefix}-{serial + 1}"
+
+
 @app.get("/api/next_code")
 def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    if prefix and len(prefix) >= 2:
-        rows = conn.execute("SELECT code FROM items WHERE code LIKE ?", (f"{prefix}-%",)).fetchall()
-        max_num = 0
-        for r in rows:
-            try:
-                parts = r["code"].split("-")
-                if len(parts) >= 2:
-                    num = int(parts[-1])
-                    if num > max_num: max_num = num
-            except: pass
-        conn.close()
-        return {"code": f"{prefix}-{max_num + 1}"}
-    else:
-        rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
-        max_num = max([int(r["code"].split("-")[1]) for r in rows if r["code"].split("-")[1].isdigit()] + [0])
-        conn.close()
-        return {"code": f"ITEM-{max_num + 1}"}
+    check_admin(x_init_data)
+    with contextmanager_session() as conn:
+        return {"code": next_item_code(conn, prefix)}
 
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
@@ -749,13 +798,19 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
     stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
     holders = conn.execute("""
-        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan
+        SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan, handoff.handed_at
         FROM checkouts c 
         LEFT JOIN users u ON u.tg_id = c.user_id
         LEFT JOIN users g ON g.tg_id = c.giver_id
         LEFT JOIN checkout_return_reminders reminder ON reminder.checkout_id = c.id
+        LEFT JOIN checkout_handoffs handoff ON handoff.checkout_id = c.id
         WHERE c.item_code = ? AND c.returned_at IS NULL
     """, (code,)).fetchall()
+    buyout = None
+    if is_admin and str(item["buyout_status"] or "").strip():
+        buyout = conn.execute(
+            "SELECT total_cents,remaining_cents FROM equipment_buyout_amounts WHERE item_code=?", (code,)
+        ).fetchone()
     conn.close()
     
     c_at = item["created_at"] if "created_at" in item.keys() else ""
@@ -770,6 +825,12 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
         result["price_acc"] = item["price_acc"]
         result["price_add"] = item["price_add"]
         
+        if buyout:
+            result["buyout"] = {
+                "total": buyout["total_cents"] / 100,
+                "remaining": buyout["remaining_cents"] / 100,
+                "paid": (buyout["total_cents"] - buyout["remaining_cents"]) / 100,
+            }
     return result
 
 @app.post("/api/items/{code}/update")
@@ -777,27 +838,47 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
     actor=check_admin(x_init_data)
     validate_item_fields(req.name,req.kind,req.min_stock,[req.price,req.price_body,req.price_lens,req.price_flash,req.price_acc,req.price_add])
     req.name=req.name.strip(); req.category=req.category.strip()
-    conn = get_conn(x_init_data)
-    existing=conn.execute("SELECT kind FROM items WHERE code=? AND is_archived=0",(code,)).fetchone()
-    if not existing: conn.close(); raise HTTPException(404,"Товар не найден")
-    if existing["kind"]!=req.kind: conn.close(); raise HTTPException(409,"Тип существующего товара менять нельзя")
-    if req.kind=="consumable":
-        req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
-        req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
-    conn.execute("""UPDATE items SET 
-        name=?, kind=?, min_stock=?, price=?, 
-        kit_body=?, kit_lens=?, kit_flash=?, kit_acc=?, kit_add=?, 
-        price_body=?, price_lens=?, price_flash=?, price_acc=?, price_add=?, 
-        budget_tag=?, serial_number=?, buyout_status=?, category=? 
-        WHERE code=?""", (
-            req.name, req.kind, req.min_stock, req.price, 
-            req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
-            req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
-            req.budget_tag, req.serial_number, req.buyout_status, req.category, code
-        ))
-    if req.category.strip(): conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)",(req.category.strip(),))
-    audit(conn,actor,"Изменение товара",code)
-    conn.commit(); conn.close(); return {"status": "ok"}
+    if req.kind=="equipment" and not req.budget_tag.strip(): req.budget_tag=budget_for_equipment_name(req.name)
+    buyout_total = buyout_remaining = None
+    if req.buyout is not None and (req.buyout.total is not None or req.buyout.remaining is not None):
+        if req.kind != "equipment" or not req.buyout_status.strip():
+            raise HTTPException(400, "Укажите, у кого техника на выкупе")
+        if req.buyout.total is None:
+            raise HTTPException(400, "Укажите полную сумму выкупа")
+        buyout_total = req.buyout.total
+        buyout_remaining = req.buyout.remaining if req.buyout.remaining is not None else buyout_total
+        if buyout_remaining > buyout_total:
+            raise HTTPException(400, "Остаток не может быть больше суммы выкупа")
+
+    with transaction() as conn:
+        existing = active_item(conn, code)
+        if existing["kind"] != req.kind:
+            raise HTTPException(409, "Тип существующего товара менять нельзя")
+        if req.kind == "consumable":
+            req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
+            req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
+        conn.execute("""UPDATE items SET
+            name=?, kind=?, min_stock=?, price=?,
+            kit_body=?, kit_lens=?, kit_flash=?, kit_acc=?, kit_add=?,
+            price_body=?, price_lens=?, price_flash=?, price_acc=?, price_add=?,
+            budget_tag=?, serial_number=?, buyout_status=?, category=?
+            WHERE code=?""", (
+                req.name, req.kind, req.min_stock, req.price,
+                req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
+                req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
+                req.budget_tag, req.serial_number, req.buyout_status, req.category, code
+            ))
+        if buyout_total is not None:
+            conn.execute("""INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents)
+                VALUES(?,?,?) ON CONFLICT(item_code) DO UPDATE SET
+                total_cents=excluded.total_cents, remaining_cents=excluded.remaining_cents""",
+                (code, int(buyout_total * 100), int(buyout_remaining * 100)))
+        elif req.buyout is not None or not req.buyout_status.strip():
+            conn.execute("DELETE FROM equipment_buyout_amounts WHERE item_code=?", (code,))
+        if req.category:
+            conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (req.category,))
+        audit(conn, actor, "Изменение товара", code)
+    return {"status": "ok"}
 
 @app.post("/api/items/{code}/repair")
 async def toggle_repair(code: str, x_init_data: Optional[str] = Header(None)):
@@ -829,13 +910,15 @@ def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
     return {"status":"ok"}
 
 @app.post("/api/items")
-async def create_item(code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)):
+async def create_item(code: str = Form(""), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), code_prefix: str = Form(""), unit: str = Form("шт."), supplier: str = Form(""), notes: str = Form(""), x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     validate_item_fields(name,kind,min_stock,[price,price_body,price_lens,price_flash,price_acc,price_add])
     code=code.strip(); name=name.strip(); category=category.strip()
-    if not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
+    if kind=="equipment" and not budget_tag.strip(): budget_tag=budget_for_equipment_name(name)
+    if code and not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
     if quantity<0: raise HTTPException(400,"Количество не может быть отрицательным")
     if kind=="consumable":
+        metadata = passport_values(ItemMetadata(unit=unit, supplier=supplier, notes=notes))
         kit_body=kit_lens=kit_flash=kit_acc=kit_add=serial_number=buyout_status=""
         price_body=price_lens=price_flash=price_acc=price_add=0
     photo_base64=""
@@ -848,66 +931,114 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
                 im.thumbnail((1600,1600)); output=io.BytesIO(); im.convert("RGB").save(output,format="JPEG",quality=85)
                 photo_base64=base64.b64encode(output.getvalue()).decode("ascii")
         except Exception: raise HTTPException(400,"Некорректное изображение")
-    conn=get_conn(x_init_data)
-    
-    if location_id == 0:
-        loc = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
-        location_id = loc["id"] if loc else 1
-        
-    if not conn.execute("SELECT 1 FROM locations WHERE id=?",(location_id,)).fetchone(): conn.close(); raise HTTPException(404,"Помещение не найдено")
-    if kind == "equipment" and quantity == 0: quantity = 1
-    if kind == "equipment" and quantity != 1: conn.close(); raise HTTPException(400,"У оборудования должен быть уникальный код на каждую единицу")
-    
-    try: 
+    if kind == "equipment":
+        quantity = quantity or 1
+        if quantity != 1:
+            raise HTTPException(400, "У оборудования должен быть уникальный код на каждую единицу")
+
+    with transaction() as conn:
+        if location_id == 0:
+            location = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
+            location_id = location["id"] if location else 1
+        valid_location(conn, location_id)
+        code = code or next_item_code(conn, code_prefix)
+        if conn.execute("SELECT 1 FROM items WHERE code=?", (code,)).fetchone():
+            raise HTTPException(400, "Код уже существует")
         conn.execute("""INSERT INTO items (
-            code, name, kind, min_stock, photo, price, 
-            kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
+            code, name, kind, min_stock, photo, price,
+            kit_body, kit_lens, kit_flash, kit_acc, kit_add,
             price_body, price_lens, price_flash, price_acc, price_add,
             budget_tag, serial_number, buyout_status, category
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", 
-        (code, name, kind, min_stock, photo_base64, price, 
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (code, name, kind, min_stock, photo_base64, price,
          kit_body, kit_lens, kit_flash, kit_acc, kit_add,
          price_body, price_lens, price_flash, price_acc, price_add,
          budget_tag, serial_number, buyout_status, category))
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
-    conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, location_id, quantity))
-    if category: conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)",(category,))
-    audit(conn,actor,"Создание товара",code)
-    conn.commit(); conn.close(); return {"status": "ok"}
+        conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, location_id, quantity))
+        if kind == "consumable":
+            conn.execute("INSERT INTO item_metadata(code,unit,supplier,site,vessel,notes) VALUES(?,?,?,?,?,?)", (code, *metadata))
+        if category:
+            conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (category,))
+        audit(conn, actor, "Создание товара", code)
+    return {"status": "ok", "code": code}
+
+@app.get("/api/checkout/recipients")
+def checkout_recipients(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if not user["is_registered"]:
+        raise HTTPException(403, "Сначала завершите регистрацию")
+    with contextmanager_session() as conn:
+        current = conn.execute("""
+            SELECT u.tg_id, u.full_name
+            FROM users u
+            LEFT JOIN blocked_telegram b ON b.tg_id=u.tg_id
+            WHERE u.tg_id!=? AND b.tg_id IS NULL AND TRIM(COALESCE(u.full_name,''))<>''
+              AND (u.is_registered=1 OR EXISTS (
+                  SELECT 1 FROM checkouts c WHERE c.user_id=u.tg_id
+                    AND TRIM(COALESCE(c.taken_for,''))<>''
+              ))
+        """, (user["tg_id"],)).fetchall()
+        history = conn.execute("""
+            SELECT DISTINCT c.taken_for
+            FROM checkouts c
+            LEFT JOIN users u ON u.tg_id=c.user_id
+            LEFT JOIN blocked_telegram b ON b.tg_id=c.user_id
+            WHERE c.user_id!=? AND b.tg_id IS NULL
+              AND (u.tg_id IS NULL OR TRIM(COALESCE(u.full_name,''))='')
+              AND TRIM(COALESCE(c.taken_for,''))<>''
+        """, (user["tg_id"],)).fetchall()
+
+    results = [{"id": row["tg_id"], "name": recipient_name(row["full_name"])} for row in current]
+    known = {recipient_key(row["name"]) for row in results}
+    for row in history:
+        name = recipient_name(row["taken_for"])
+        key = recipient_key(name)
+        if key not in known:
+            known.add(key)
+            results.append({"id": None, "name": name})
+    return sorted(results, key=lambda row: recipient_key(row["name"]))
+
 
 @app.post("/api/checkout_batch")
 async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] = Header(None)):
     user=get_user(x_init_data); success=[]; errors=[]
     with transaction() as conn:
         for code in dict.fromkeys(req.codes):
+            conn.execute("SAVEPOINT batch_checkout")
             try:
                 _checkout_one(conn,user,code,req.taken_for)
                 success.append(code)
-            except HTTPException as exc: errors.append(f"{code}: {exc.detail}")
+            except HTTPException as exc:
+                conn.execute("ROLLBACK TO batch_checkout")
+                errors.append(f"{code}: {exc.detail}")
+            finally:
+                conn.execute("RELEASE batch_checkout")
     return {"status":"ok","success_count":len(success),"errors":errors}
 
 @app.post("/api/checkout")
 async def checkout(req: CheckoutRequest, x_init_data: Optional[str] = Header(None)):
     user=get_user(x_init_data)
-    with transaction() as conn: _checkout_one(conn,user,req.code,req.taken_for)
+    with transaction() as conn: _checkout_one(conn,user,req.code,req.taken_for,req.recipient_id)
     return {"status":"ok"}
 
 
-def _checkout_one(conn,user,code,taken_for):
+def _checkout_one(conn,user,code,taken_for,recipient_id=None):
     item=active_item(conn,code)
     if item["kind"]!="equipment": raise HTTPException(400,"Это расходник")
     if item["needs_repair"]: raise HTTPException(400,"Товар в ремонте")
     if conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone(): raise HTTPException(409,"Уже выдано")
     stock=conn.execute("SELECT location_id FROM stock WHERE item_code=? AND quantity>0 ORDER BY location_id LIMIT 1",(code,)).fetchone()
     if not stock: raise HTTPException(409,"Нет в наличии")
-    taken_for=taken_for.strip()
-    if taken_for:
-        existing=conn.execute("SELECT tg_id FROM users WHERE full_name=?",(taken_for,)).fetchone()
-        target_for_booking=existing[0] if existing else None
-    else: target_for_booking=user['tg_id']
+    taken_for = recipient_name(taken_for)
+    if len(taken_for) > 150:
+        raise HTTPException(400, "Укажите имя получателя до 150 символов")
+    target = user["tg_id"]
+    if taken_for or recipient_id is not None:
+        target, taken_for = resolve_recipient(conn, taken_for, recipient_id)
+        if target == user["tg_id"]:
+            taken_for = ""
     booking=conn.execute("SELECT user_id FROM bookings WHERE item_code=? AND date('now') BETWEEN date_from AND date_to",(code,)).fetchall()
-    if booking and not all(b['user_id']==target_for_booking for b in booking): raise HTTPException(409,"Сегодня оборудование забронировано другим сотрудником")
-    target=find_or_create_guest(taken_for,conn) if taken_for else user["tg_id"]
+    if booking and not all(b['user_id']==target for b in booking): raise HTTPException(409,"Сегодня оборудование забронировано другим сотрудником")
     record = conn.execute("""
         INSERT INTO checkouts(item_code,user_id,giver_id,location_id,taken_for)
         VALUES(?,?,?,?,?) RETURNING id,taken_at
@@ -916,6 +1047,24 @@ def _checkout_one(conn,user,code,taken_for):
         queue_return_reminder(conn,record["id"],record["taken_at"])
     conn.execute("UPDATE stock SET quantity=quantity-1 WHERE item_code=? AND location_id=?",(code,stock["location_id"]))
     conn.execute("DELETE FROM stock WHERE item_code=? AND quantity=0",(code,))
+
+
+@app.post("/api/checkout/{checkout_id}/handoff")
+def handoff_checkout(checkout_id: int, x_init_data: Optional[str] = Header(None)):
+    actor = get_user(x_init_data)
+    with transaction() as conn:
+        checkout = conn.execute("""
+            SELECT item_code, taken_for
+            FROM checkouts
+            WHERE id=? AND giver_id=? AND user_id!=giver_id AND returned_at IS NULL
+              AND TRIM(COALESCE(taken_for,''))<>''
+        """, (checkout_id, actor["tg_id"])).fetchone()
+        if not checkout:
+            raise HTTPException(404, "Выдача для передачи недоступна")
+        created = conn.execute("INSERT OR IGNORE INTO checkout_handoffs(checkout_id) VALUES(?)", (checkout_id,))
+        if created.rowcount:
+            audit(conn, actor, "Передача техники", f'{checkout["item_code"]} · {checkout["taken_for"]}')
+    return {"status": "ok", "recipient": checkout["taken_for"], "code": checkout["item_code"]}
 
 @app.post("/api/return")
 async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
@@ -1218,11 +1367,17 @@ def item_passport(code: str,x_init_data: Optional[str]=Header(None)):
         result['has_photo']=bool(item['photo'])
     return result
 
+def passport_values(metadata):
+    values = [metadata.unit.strip(), metadata.supplier.strip(), metadata.site.strip(), metadata.vessel.strip(), metadata.notes.strip()]
+    if not values[0] or any(len(value) > 250 for value in values[:4]) or len(values[4]) > 3000:
+        raise HTTPException(400, "Проверьте поля паспорта")
+    return values
+
+
 @app.put('/api/items/{code}/passport')
 def save_passport(code: str,req: ItemMetadata,x_init_data: Optional[str]=Header(None)):
     actor=check_admin(x_init_data)
-    values=[req.unit.strip(),req.supplier.strip(),req.site.strip(),req.vessel.strip(),req.notes.strip()]
-    if not values[0] or any(len(v)>250 for v in values[:4]) or len(values[4])>3000: raise HTTPException(400,'Проверьте поля паспорта')
+    values=passport_values(req)
     with transaction() as conn:
         active_item(conn,code)
         conn.execute('INSERT INTO item_metadata(code,unit,supplier,site,vessel,notes) VALUES(?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET unit=excluded.unit,supplier=excluded.supplier,site=excluded.site,vessel=excluded.vessel,notes=excluded.notes',(code,*values))
@@ -1279,6 +1434,29 @@ def finish_repair(code: str,req: RepairDetails,x_init_data: Optional[str]=Header
         conn.execute('UPDATE items SET needs_repair=0 WHERE code=?',(code,)); audit(conn,actor,'Завершение ремонта',code)
     return {'status':'ok'}
 
+@app.get("/api/boss/equipment-costs")
+def boss_equipment_costs(x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if not user.get("is_registered") or user["role"] != "admin":
+        raise HTTPException(403, "Нет доступа")
+    with contextmanager_session() as conn:
+        rows = conn.execute("""SELECT code,name,budget_tag,kit_body,kit_lens,kit_flash,
+            price,price_body,price_lens,price_flash,price_acc,price_add
+            FROM items WHERE kind='equipment' AND is_archived=0 ORDER BY name COLLATE NOCASE""").fetchall()
+        result = []
+        for item in rows:
+            components = sum(float(item[key] or 0) for key in
+                ("price_body","price_lens","price_flash","price_acc","price_add"))
+            amount = components if components > 0 else float(item["price"] or 0)
+            result.append({
+                "code": item["code"], "name": item["name"],
+                "model": (item["kit_body"] or item["kit_lens"] or item["kit_flash"] or "").strip(),
+                "budget_tag": item["budget_tag"] or budget_for_equipment_name(item["name"]),
+                "price": round(amount, 2),
+            })
+        return result
+
+
 @app.get('/api/purchases')
 def purchase_suggestions(x_init_data: Optional[str]=Header(None)):
     actor = get_user(x_init_data)
@@ -1334,20 +1512,37 @@ async def web_session_middleware(request: Request, call_next):
     if path.startswith("/api/"): response.headers["Cache-Control"]="no-store"
     return response
 
+def authorize_telegram_app_user(conn, user_id):
+    deny_blocked(conn, user_id, MAIN_ADMIN_ID)
+    user = conn.execute("SELECT is_registered FROM users WHERE tg_id=?", (user_id,)).fetchone()
+    if not user or not user["is_registered"]:
+        raise HTTPException(403, "Сначала откройте Склад в Telegram и завершите регистрацию.")
+
+
 class WebLogin(BaseModel):
     code: str
     pwa: bool = False
 
+def issue_web_login_code(conn, user_id, rate_limit=False):
+    code = secrets.token_hex(6).upper()
+    now = int(time.time())
+    if rate_limit and conn.execute("SELECT 1 FROM web_codes WHERE user_id=? AND expires>?", (user_id, now + 290)).fetchone():
+        raise HTTPException(429, "Новый код можно запросить через несколько секунд")
+    conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?", (now, user_id))
+    conn.execute("INSERT INTO web_codes VALUES(?,?,?)", (web_digest(code), user_id, now + 300))
+    return code
+
+
 @app.post("/api/web/code")
-def web_code(x_init_data: Optional[str]=Header(None)):
-    if not x_init_data or x_init_data.startswith("web:"): raise HTTPException(403,"Код можно получить только внутри Telegram")
-    user=get_user(x_init_data)
-    if not user['is_registered']: raise HTTPException(403,"Сначала завершите регистрацию")
-    code=secrets.token_hex(6).upper()
+def web_code(x_init_data: Optional[str] = Header(None)):
+    if not x_init_data or x_init_data.startswith("web:"):
+        raise HTTPException(403, "Код можно получить только внутри Telegram")
+    user = get_user(x_init_data)
+    if not user["is_registered"]:
+        raise HTTPException(403, "Сначала завершите регистрацию")
     with transaction() as conn:
-        conn.execute("DELETE FROM web_codes WHERE expires<=? OR user_id=?",(int(time.time()), user['tg_id']))
-        conn.execute("INSERT INTO web_codes VALUES(?,?,?)",(web_digest(code),user['tg_id'],int(time.time())+300))
-    return {"code":code,"expires_in":300}
+        code = issue_web_login_code(conn, user["tg_id"])
+    return {"code": code, "expires_in": 300}
 
 @app.post("/api/web/login")
 def web_login(req: WebLogin):
@@ -1395,20 +1590,57 @@ def booking_calendar(x_init_data:Optional[str]=Header(None)):
     with transaction() as conn:
         return [dict(r) for r in conn.execute("SELECT b.*,i.name,u.full_name FROM bookings b JOIN items i ON i.code=b.item_code LEFT JOIN users u ON u.tg_id=b.user_id WHERE i.is_archived=0 AND date_to>=date('now') ORDER BY date_from,name")]
 
+def labels_pdf(rows, dpi, width_mm, height_mm, copies=1):
+    if dpi not in (203, 300):
+        raise HTTPException(400, "Выберите 203 или 300 dpi")
+    label_dimensions(width_mm, height_mm)
+    pages = len(rows) * copies
+    if pages > 500:
+        raise HTTPException(400, "Выберите до 500 этикеток с учётом копий")
+    pixels = round(width_mm / 25.4 * dpi) * round(height_mm / 25.4 * dpi)
+    if pages * pixels > 100_000_000:
+        raise HTTPException(400, "Слишком большой PDF, уменьшите число этикеток, размер или dpi")
+    images = [label_image(row["code"], row["name"], dpi, width_mm, height_mm) for row in rows]
+    ordered = [image for image in images for _ in range(copies)]
+    buf = io.BytesIO()
+    ordered[0].save(buf, format="PDF", resolution=dpi, save_all=True, append_images=ordered[1:])
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Cache-Control": "no-store"})
+
+
 @app.get('/api/export_labels')
-def export_labels(dpi:int=203,width_mm:int=50,height_mm:int=80,x_init_data:Optional[str]=Header(None)):
+def export_labels(dpi: int = 203, width_mm: int = 50, height_mm: int = 80, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    if dpi not in (203,300): raise HTTPException(400,'Выберите 203 или 300 dpi')
-    with contextmanager_session() as conn: rows=conn.execute('SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 500').fetchall()
-    if not rows: raise HTTPException(400,'Склад пуст')
-    if len(rows)==500:
-        with contextmanager_session() as conn:
-            if conn.execute('SELECT COUNT(*) FROM items WHERE is_archived=0').fetchone()[0]>500: raise HTTPException(400,'За один раз можно выгрузить до 500 этикеток; скачивайте этикетки отдельно')
-    label_dimensions(width_mm,height_mm)
-    if len(rows)*round(width_mm/25.4*dpi)*round(height_mm/25.4*dpi)>100_000_000: raise HTTPException(400,'Слишком большой PDF, уменьшите размер или dpi')
-    images=[label_image(r['code'],r['name'],dpi,width_mm,height_mm) for r in rows]
-    buf=io.BytesIO(); images[0].save(buf,format='PDF',resolution=dpi,save_all=True,append_images=images[1:]); buf.seek(0)
-    return StreamingResponse(buf,media_type='application/pdf')
+    with contextmanager_session() as conn:
+        rows = conn.execute("SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 501").fetchall()
+    if not rows:
+        raise HTTPException(400, "Склад пуст")
+    return labels_pdf(rows, dpi, width_mm, height_mm)
+
+
+class LabelSelection(BaseModel):
+    codes: List[str] = Field(min_length=1, max_length=500)
+    copies: int = Field(default=1, ge=1, le=20)
+    dpi: int = 203
+    width_mm: int = 50
+    height_mm: int = 80
+
+@app.post('/api/export_labels')
+def export_selected_labels(req: LabelSelection, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    codes = list(dict.fromkeys(req.codes))
+    if any(not 1 <= len(code) <= 64 for code in codes):
+        raise HTTPException(400, "Проверьте коды товаров")
+    placeholders = ",".join("?" for _ in codes)
+    with contextmanager_session() as conn:
+        rows = {
+            row["code"]: row for row in conn.execute(
+                f"SELECT code,name FROM items WHERE is_archived=0 AND code IN ({placeholders})", codes
+            )
+        }
+    if len(rows) != len(codes):
+        raise HTTPException(404, "Один из выбранных товаров недоступен")
+    return labels_pdf([rows[code] for code in codes], req.dpi, req.width_mm, req.height_mm, req.copies)
 
 @app.put('/api/items/{code}/photo')
 async def update_photo(code:str,photo:UploadFile=File(...),x_init_data:Optional[str]=Header(None)):
@@ -1451,6 +1683,12 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
 register_snapshot_export(app, DB_PATH)
+register_telegram_app_bot(
+    app, BOT_TOKEN, "https://warehouse-app-production-3e9d62c2.up.railway.app", transaction,
+    authorize_telegram_app_user, issue_web_login_code,
+    owner_chat_id=MAIN_ADMIN_ID,
+    auto_configure=os.environ.get("RAILWAY_SERVICE_ID") == "07cb1e8f-fbf7-4ecf-955b-243625619fad",
+)
 register_return_reminders(
     app, get_user, transaction, lambda _conn: None, BOT_TOKEN,
     os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip(),
@@ -1507,7 +1745,7 @@ def main_pwa_home():
     html=html.replace(title_marker,title_marker+'\n    '+meta,1)
     html=html.replace(login_marker,"JSON.stringify({code:$('web-code').value,pwa:true})",1)
     html=html.replace('</head>',styles+'<meta name="warehouse-app-version" content="'+_WAREHOUSE_VERSION+'"></head>',1)
-    html=html.replace('</body>','<script src="/pwa/client.js?v=1"></script>\n</body>',1)
+    html=html.replace('</body>','<script src="/pwa/client.js?v=2"></script>\n</body>',1)
     return HTMLResponse(html,headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
 
 @app.get("/pwa/manifest.webmanifest", include_in_schema=False)

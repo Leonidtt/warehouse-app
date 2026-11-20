@@ -259,24 +259,123 @@ function installRelease182(){
   const header=body.firstElementChild;header.classList.add('r182-form-header');header.after(selector,type);
   const name=field('add-name'),photo=field('add-photo'),code=$('add-code'),codeRow=code.parentElement,gen=codeRow.querySelector('button');codeRow.classList.add('r182-code-row');codeRow.replaceChildren(code,gen);gen.textContent='Сгенерировать';code.removeAttribute('style');gen.removeAttribute('style');
   const codeSection=section('Код товара',codeRow,$('qr-preview-box'));codeSection.classList.add('r182-code-section');
-  const basics=section('Основное',name,pair(field('add-category'),field('add-location')),codeSection);type.after(basics);
+  const category=field('add-category'),location=field('add-location');
+  const equipmentLocation=pair(category,location);
+  const basics=section('Основное',name,equipmentLocation,codeSection);type.after(basics);
   const eq=$('equipment-fields'),cons=$('consumable-fields'),parts=['body','lens','flash','acc','add'];
   const eqInfo=section('Оборудование',field('add-serial-number'),field('add-price-eq'));
   const eqParts=section('Комплектация и стоимость',...parts.map(k=>pair(field('add-kit-'+k),field('add-price-'+k))));
   const eqTotal=el('div','r182-form-total');eqParts.append(eqTotal);
   const extras=el('details','r182-form-section');extras.append(el('summary','','Дополнительные сведения'),field('add-budget-tag'),field('add-buyout-status'));eq.replaceChildren(eqInfo,eqParts,extras);
-  const cTotal=el('div','r182-form-total');const cMain=section('Остатки и стоимость',pair(field('add-qty'),field('add-min-stock')),pair(field('add-price'),field('add-unit')),cTotal);const cExtra=el('details','r182-form-section');cExtra.append(el('summary','','Дополнительные сведения'),field('add-supplier'),field('add-location-desc'));cons.replaceChildren(cMain,cExtra);
-  const footer=el('div','r182-form-footer');footer.append($('save-item-btn'));body.append(footer);$('save-item-btn').removeAttribute('style');
-  function formTotals(){const n=id=>Math.max(0,Number($(id).value)||0),equipment=$('add-kind').value==='equipment';const target=equipment?extras:cExtra;if(photo.parentElement!==target)target.append(photo);const sum=parts.reduce((a,k)=>a+n('add-price-'+k),0);eqTotal.replaceChildren(el('span','','Стоимость комплекта'),el('b','',money182(sum||n('add-price-eq'))));cTotal.replaceChildren(el('span','','Стоимость партии'),el('b','',money182(n('add-qty')*n('add-price'))));for(const [value,b]of tabs){b.classList.toggle('active',$('add-kind').value===value);b.setAttribute('aria-pressed',String($('add-kind').value===value))}if(!$('save-item-btn').disabled)$('save-item-btn').textContent=equipment?'Создать оборудование':'Создать расходник';$('save-item-btn').classList.toggle('r182-main-action',equipment)}
-  const oldToggle=toggleFields;toggleFields=()=>{oldToggle();formTotals()};body.addEventListener('input',formTotals);formTotals();
-  // On save, reserve a code automatically if the user hasn't typed one.
-  const oldSave=saveNewItem;let saving=false;saveNewItem=async()=>{if(saving)return;saving=true;try{if(!$('add-name').value.trim())return notify('Введите название');if(!$('add-code').value.trim())await generateCodeForNew();if(!$('add-code').value.trim())return;await oldSave()}finally{saving=false}};
+
+  const duplicate=el('div','warehouse-duplicate hidden');
+  duplicate.setAttribute('aria-live','polite');
+  name.after(duplicate);
+  const quantity=field('add-qty'),unit=field('add-unit'),units=el('div','warehouse-unit-options');
+  quantity.querySelector('label').textContent='Количество';
+  location.querySelector('label').textContent='Помещение';
+  $('add-qty').min='0';
+  $('add-qty').step='1';
+  $('add-unit').setAttribute('aria-label','Другая единица измерения');
+  $('add-unit').before(units);
+  const standardUnits=['шт.','рул.','м','упак.'];
+  const unitButtons=standardUnits.map(value=>button(value,()=>{
+    $('add-unit').value=value;
+    $('add-unit').dispatchEvent(new Event('input',{bubbles:true}));
+  },'secondary'));
+  const custom=button('Другая',()=>{
+    $('add-unit').value='';
+    $('add-unit').dispatchEvent(new Event('input',{bubbles:true}));
+    $('add-unit').focus();
+  },'secondary');
+  units.append(...unitButtons,custom);
+  const cMain=el('div','warehouse-consumable-fields');
+  cMain.append(quantity,unit);
+  const cTotal=el('div','r182-form-total');
+  const cExtra=el('details','r182-form-section');
+  cExtra.append(el('summary','','Дополнительно'),pair(field('add-min-stock'),field('add-price')),field('add-supplier'),field('add-location-desc'),cTotal);
+  cons.replaceChildren(cMain,cExtra);
+  const footer=el('div','r182-form-footer');
+  const save=$('save-item-btn');
+  const print=button('Создать и печатать QR',()=>saveNewItem(true),'ok hidden');
+  print.id='save-item-print-btn';
+  footer.append(save,print);
+  body.append(footer);
+  save.removeAttribute('style');
+
+  function showDuplicate(){
+    const normalize=value=>value.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
+    const query=normalize($('add-name').value);
+    const matches=$('add-kind').value==='consumable' && query
+      ? allItems.filter(item=>item.kind==='consumable' && normalize(item.name)===query)
+      : [];
+    duplicate.replaceChildren();
+    duplicate.classList.toggle('hidden',!matches.length);
+    if(!matches.length)return;
+    duplicate.append(el('strong','','Такой расходник уже есть'));
+    for(const item of matches){
+      const row=el('div','warehouse-duplicate-row');
+      row.append(el('span','meta',item.name+' · '+item.code+' · '+item.total+' '+item.unit));
+      row.append(button('Пополнить остаток',()=>{
+        const sameUnit=$('add-unit').value.trim()===item.unit;
+        const qty=Number($('add-qty').value);
+        replenish17(item.code,sameUnit&&Number.isInteger(qty)&&qty>0?qty:1,
+          sameUnit&&$('add-price').valueAsNumber>0?$('add-price').value:'',
+          ()=>{clearDraft17();closeAddItemModal();showRooms()},$('add-location').value,item.unit);
+      },'secondary'));
+      duplicate.append(row);
+    }
+  }
+
+  let previousKind='';
+  function formTotals(){
+    const n=id=>Math.max(0,Number($(id).value)||0),kind=$('add-kind').value,equipment=kind==='equipment';
+    if(kind!==previousKind){
+      previousKind=kind;
+      if(equipment){
+        equipmentLocation.append(category,location);
+        basics.append(equipmentLocation,codeSection);
+        extras.append(photo);
+      }else{
+        cMain.append(location);
+        cExtra.append(category,codeSection,photo);
+        if(!$('add-category').value && categories17.includes('Расходники'))$('add-category').value='Расходники';
+      }
+      showDuplicate();
+    }
+    const value=$('add-unit').value;
+    unitButtons.forEach((b,i)=>b.setAttribute('aria-pressed',String(value===standardUnits[i])));
+    custom.setAttribute('aria-pressed',String(!standardUnits.includes(value)));
+    $('add-unit').classList.toggle('hidden',standardUnits.includes(value));
+    field('add-price').querySelector('label').textContent='Цена за '+(value||'единицу');
+    eqTotal.replaceChildren(el('span','','Стоимость комплекта'),el('b','',money182(parts.reduce((a,k)=>a+n('add-price-'+k),0)||n('add-price-eq'))));
+    cTotal.replaceChildren(el('span','','Стоимость партии'),el('b','',money182(n('add-qty')*n('add-price'))));
+    for(const [value,b] of tabs){
+      b.classList.toggle('active',kind===value);
+      b.setAttribute('aria-pressed',String(kind===value));
+    }
+    body.classList.toggle('warehouse-consumable-form',!equipment);
+    header.querySelector('h2').textContent=equipment?'Новый товар':'Новый расходник';
+    print.classList.toggle('hidden',equipment);
+    if(!save.disabled)save.textContent=equipment?'Создать оборудование':'Создать расходник';
+    save.classList.toggle('r182-main-action',equipment);
+  }
+  const oldToggle=toggleFields;
+  toggleFields=()=>{oldToggle();formTotals();showDuplicate()};
+  $('add-name').addEventListener('input',showDuplicate);
+  body.addEventListener('input',formTotals);
+  formTotals();
   const edit=$('screen-edit-item');edit.classList.add('r182-edit');const editBody=$('edit-name').closest('.input-group').parentElement;const oldHeading=editBody.querySelector('h2');oldHeading.classList.add('r182-form-title');for(const k of parts){const a=field('edit-kit-'+k),b=field('edit-price-'+k);const marker=document.createComment('pair');a.before(marker);marker.replaceWith(pair(a,b))}
-  const editFooter=el('div','r182-edit-footer');const save=edit.querySelector('button[onclick="saveEditItem()"]');save.before(editFooter);editFooter.append(save);
+  const editFooter=el('div','r182-edit-footer');const editSave=edit.querySelector('button[onclick="saveEditItem()"]');editSave.before(editFooter);editFooter.append(editSave);
 }
-function showCreated182(code,name){
+function showCreated182(code,name,kind){
   const {o,b}=overlay17('Товар создан');const title=document.createElement('h3');title.textContent=name+' · '+code;b.append(title);const image=document.createElement('img');image.className='label-img r182-created-label';image.alt='QR-этикетка';b.append(image);showLabelPreview17(code,name,image).catch(()=>notify('Не удалось загрузить этикетку'));
-  btn17(b,'Скачать PNG',()=>downloadCreatedLabel182(code,'png'),'ok');btn17(b,'Скачать PDF',()=>downloadCreatedLabel182(code,'pdf'));btn17(b,'Готово',()=>{if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);o.remove()});
+  if(kind==='consumable')btn17(b,'Печать QR',()=>{
+    if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);
+    o.remove();
+    showLabelPrint17([{code,name}]);
+  },'ok');
+  btn17(b,'Скачать PNG',()=>downloadCreatedLabel182(code,'png'));btn17(b,'Скачать PDF',()=>downloadCreatedLabel182(code,'pdf'));btn17(b,'Готово',()=>{if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);o.remove()});
 }
 async function downloadCreatedLabel182(code,format){
   let d={width:50,height:80};try{d={...d,...JSON.parse(cacheGet17('label_dimensions')||'{}')}}catch(e){}
