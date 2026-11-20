@@ -38,7 +38,7 @@ function installV18(){
   aside.append($('my-bookings-section'));
   workspace.append(inventory,aside);main.append(workspace);
   // Retain both login controls; move the site button into Settings. Employees use their profile.
-  const settings=$('screen-settings'),settings_header=settings.querySelector('.sticky-header'),site=$('web-login-btn'),logout=$('web-logout-btn');site.textContent='Сайт';const oldAction=main.querySelector('.header-actions');oldAction.classList.add('hidden');
+  const settings=$('screen-settings'),settings_header=settings.querySelector('.sticky-header'),site=$('web-login-btn');site.textContent='Сайт';const oldAction=main.querySelector('.header-actions');oldAction.classList.add('hidden');
   const byAction=action=>[...settings.querySelectorAll('button')].find(b=>b.getAttribute('onclick')===action);
   const groups=document.createElement('div');groups.className='v18-settings-layout';
   function group(title,entries,owner=false){
@@ -64,7 +64,7 @@ function installV18(){
     return list;
   }
   const action=(attr,label,k)=>[byAction(attr),label,k];
-  group('Приложение',[[site,'Сайт','web'],[logout,'Выйти из сайта','web'],[btn('',showSessions),'Активные сеансы сайта','user'],[btn('',showAccent),'Акцентный цвет','sun'],[btn('',showChangelog),'Что нового в v18.5.2','file']]);
+  group('Приложение',[[site,'Сайт','web'],[btn('',showSessions),'Активные сеансы сайта','user'],[btn('',showAccent),'Акцентный цвет','sun'],[btn('',showChangelog),'Что нового в v18.5.2','file']]);
   group('Управление',[action('showUsers()','Пользователи','user'),action("showExtra('categories')",'Категории','grid'),[btn('',showBulk),'Массовое редактирование','edit'],action("showExtra('archive')",'Архив и восстановление','archive'),[btn('',showTemplates),'Шаблоны товаров','file']]);
   const roomsInput=$('new-location-name').closest('.input-group');group('Помещения',[[roomsInput],[byAction('createLocation()'),'Добавить помещение','plus'],[$('locations-list')]]);
   group('Учёт и аналитика',[action("showExtra('finance')",'Финансы','chart'),action("showExtra('purchases')",'Закупки','take'),[btn('',showUsage),'Использование техники','chart'],action('showInventory()','Инвентаризация','scan'),action("showExtra('inventorylog')",'История инвентаризаций','clock')]);
@@ -73,7 +73,7 @@ function installV18(){
   maintenance.id='beta-maintenance-settings';
   const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад Бета v18.5.9';settings.replaceChildren(settings_header,groups,footer);
   $('screen-login').querySelector('.login-card p').textContent='Открой склад в Telegram, выбери «Сайт» в настройках или профиле и введи одноразовый код.';$('screen-login').querySelector('.login-card h1').textContent='Склад · v18.4';
-  $('user-info').onclick=()=>{const {o,b}=overlay17('Мой профиль');const p=document.createElement('p');p.textContent=currentUser?.full_name||'';b.append(p);btn17(b,'Изменить имя',()=>{o.remove();editMyName()});if(tg.initData){btn17(b,'Сайт',()=>{o.remove();return issueWebCode()});btn17(b,'Приложение',()=>{o.remove();return issueWebCode('app')});}else btn17(b,'Выйти из сайта',()=>{o.remove();return webLogout()});btn17(b,'Активные сеансы сайта',()=>{o.remove();showSessions()});btn17(b,'Акцентный цвет',()=>{o.remove();showAccent()})};
+  $('user-info').onclick=()=>{const {o,b}=overlay17('Мой профиль');const p=document.createElement('p');p.textContent=currentUser?.full_name||'';b.append(p);btn17(b,'Изменить имя',()=>{o.remove();editMyName()});if(tg.initData){btn17(b,'Сайт',()=>{o.remove();return issueWebCode()});btn17(b,'Приложение',()=>{o.remove();return issueWebCode('app')});}btn17(b,'Активные сеансы сайта',()=>{o.remove();showSessions()});btn17(b,'Акцентный цвет',()=>{o.remove();showAccent()})};
   const cleanButtons=root=>root.querySelectorAll('button').forEach(b=>{if(b.children.length||b.classList.contains('v18-icon-btn'))return;const old=b.textContent,txt=old.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu,'').trim();if(txt&&txt!==old.trim())b.textContent=txt});cleanButtons(document);
   const oldLoadLocations=loadLocations;loadLocations=async()=>{await oldLoadLocations();$('locations-list').querySelectorAll('.card').forEach(c=>{c.classList.add('v18-place-row');const b=c.querySelector('button');if(b){b.innerHTML=ico('edit');b.title='Переименовать';b.setAttribute('aria-label',b.title)}})};
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();$('rooms-list').querySelectorAll('.room-arrow-circle').forEach(e=>e.innerHTML=ico('right'))};
@@ -101,17 +101,16 @@ function installV18(){
   function showBulk(){return showBulk183()}
   const templateFields=['name','kind','category','unit','supplier','qty','min-stock','price','location-desc','price-eq','budget-tag','kit-body','kit-lens','kit-flash','kit-acc','kit-add','price-body','price-lens','price-flash','price-acc','price-add'];
   function showTemplates(){if(currentUser?.role!=='admin')return;const {o,b}=overlay17('Шаблоны товаров');for(const [name,values] of Object.entries(profile.templates)){const c=card17(b,name,values.name||'');btn17(c,'Создать по шаблону',()=>{o.remove();openAddItemModal();for(const [key,v]of Object.entries(values))if(templateFields.includes(key)&&$('add-'+key))$('add-'+key).value=v;$('add-code').value='';toggleFields();onNameInput()});btn17(c,'Удалить',async()=>{if(!await ask('Удалить шаблон?',name,'Удалить'))return;delete profile.templates[name];saveProfile();o.remove();showTemplates()})}if(!Object.keys(profile.templates).length)card17(b,'Нет шаблонов','Заполните новую карточку товара и нажмите «Сохранить шаблон».');btn17(b,'Новый товар',()=>{o.remove();openAddItemModal()},'ok')}
-  const templateButton=btn('Сохранить как шаблон',async()=>{const name=await ask('Название шаблона','Код и серийный номер не сохраняются.','Сохранить',$('add-name').value.trim());if(!name?.trim())return;if(name.trim().length>100)throw Error('Название слишком длинное');const vals=Object.fromEntries(templateFields.filter(k=>$('add-'+k)).map(k=>[k,$('add-'+k).value]));Object.defineProperty(profile.templates,name.trim(),{value:vals,enumerable:true,writable:true,configurable:true});saveProfile();showToast('Шаблон сохранён')},'file');$('save-item-btn').before(templateButton);
+  const templateButton=btn('Сохранить как шаблон',async()=>{const name=await ask('Название шаблона','Код и серийный номер не сохраняются.','Сохранить',$('add-name').value.trim());if(!name?.trim())return;if(name.trim().length>100)throw Error('Название слишком длинное');const vals=Object.fromEntries(templateFields.filter(k=>$('add-'+k)).map(k=>[k,$('add-'+k).value]));Object.defineProperty(profile.templates,name.trim(),{value:vals,enumerable:true,writable:true,configurable:true});saveProfile();showToast('Шаблон сохранён')},'file');templateButton.classList.add('warehouse-save-template');$('save-item-btn').before(templateButton);
   async function showUsage(){if(currentUser?.role!=='admin')return;const {b}=overlay17('Использование оборудования');const rows=await api('/api/v18/usage');const un=rows.filter(r=>!r.last_checkout||Date.now()-Date.parse(r.last_checkout.replace(' ','T')+'Z')>90*864e5);card17(b,'Не использовалось 90 дней или дольше',String(un.length));for(const r of rows){const c=card17(b,r.name,`Выдач за всё время: ${r.checkouts}\nПоследняя: ${r.last_checkout||'Не выдавалось'}`);btn17(c,'Открыть',()=>{b.parentElement.remove();openItem(r.code)})}}
   async function showNotifications(){const {b}=overlay17('Уведомления');const rows=allItems.filter(i=>i.is_low||i.needs_repair);if(!rows.length)card17(b,'Всё в порядке','Нет предупреждений о ремонте или низком остатке.');for(const i of rows){const c=card17(b,i.name,i.needs_repair?'В ремонте':`Остаток ${i.total}, минимум ${i.min_stock}`);btn17(c,'Открыть товар',()=>{b.parentElement.remove();openItem(i.code)})}}
   async function showSessions(){const {b}=overlay17('Активные сеансы сайта');try{const rows=await api('/api/v18/sessions');if(!rows.length)card17(b,'Нет активных браузерных сеансов');for(const r of rows){const c=card17(b,r.current?'Текущий браузер':'Другой браузер',`Действует до ${new Date(r.expires*1000).toLocaleString('ru-RU')}`);btn17(c,'Завершить сеанс',async()=>{if(!await ask('Завершить сеанс?','Потребуется новый код входа.','Завершить'))return;await api('/api/v18/sessions/'+r.id,{method:'DELETE'});if(r.current&&!tg.initData)location.reload();else c.remove()})}}catch(e){notify(e.message)}}
   function showAccent(){const {b}=overlay17('Акцентный цвет');const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:7px';for(const v of ['#007aff','#5856d6','#0b8862','#c45d20','#b53b7b','#42647e']){const e=btn('',()=>accent(v),null,'v18-accent');e.style.background=v;e.setAttribute('aria-label','Цвет '+v);row.append(e)}b.append(row);btn17(b,'По умолчанию',()=>accent('#007aff'))}
   function showChangelog(){const {b}=overlay17('Что нового · v18.5.2');for(const [t,d]of [['v18.5.2','Реалистичные иллюстрации, Telegram-ники, блокировка по ID, обновлённые стили.'],['v18.4','Кнопки под обзором; расходники отдельным разделом; возврат расходников; автоматическое обновление площадок и теплоходов; массовые действия.'],['Liquid Glass','Компактная навигация, тема в верхнем углу, новая страница настроек.'],['Сайт','Боковая панель и таблица товаров для компьютера.'],['Рабочие инструменты','Избранное, недавние, комплекты, шаблоны, массовое редактирование, Excel.'],['Этикетки','Настраиваемая ширина и высота; PNG и PDF.']])card17(b,t,d)}
-  function labelSettings(){try{const d=JSON.parse(cacheGet17('label_dimensions')||'{}');if(d.width>=30&&d.width<=100&&d.height>=40&&d.height<=150)return d}catch(e){}return {width:50,height:80}}
   const labelQuery=()=>{const d=labelSettings();return 'width_mm='+d.width+'&height_mm='+d.height};
   function configureLabels(){const {o,b}=overlay17('Размер QR-этикетки');const d=labelSettings(),w=field17(b,'Ширина, мм (30–100)',d.width,'number'),h=field17(b,'Высота, мм (40–150)',d.height,'number');btn17(b,'Сохранить',()=>{const width=Number(w.value),height=Number(h.value);if(!Number.isInteger(width)||!Number.isInteger(height)||width<30||width>100||height<40||height>150)throw Error('Проверьте размеры');cacheSet17('label_dimensions',JSON.stringify({width,height}));o.remove();showToast('Размер сохранён')},'ok');btn17(b,'По умолчанию 50 × 80 мм',()=>{w.value=50;h.value=80})}
   showLabelPreview17=async(code,name,img)=>image17(img,'/api/label/'+encodeURIComponent(code)+'?name='+encodeURIComponent(name)+'&'+labelQuery());
-  showQr=async()=>{const {code,name}=currentItem;const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'))}};
+  showQr=async()=>{const {code,name,kind}=currentItem;if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'))}};
   $('export-qr-btn').onclick=()=>downloadFile('/api/export_labels?'+labelQuery(),'labels.pdf');exportStock=()=>downloadFile('/api/v18/stock.xlsx','warehouse_stock.xlsx');
   downloadFile=async(url,filename)=>{try{const response=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!response.ok){const e=await response.json().catch(()=>({}));throw Error(e.detail||'HTTP '+response.status)}const blob=await response.blob(),a=document.createElement('a'),obj=URL.createObjectURL(blob);a.href=obj;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(obj),10000)}catch(e){notify('Ошибка скачивания: '+e.message)}};
   deleteItemFromEdit=async()=>{const {code,name}=currentItem;if(!await ask('Отправить в архив?',name,'В архив'))return;try{await api('/api/items/'+encodeURIComponent(code),{method:'DELETE'});backToMain();const {o,b}=overlay17('Товар в архиве');card17(b,name,'Можно восстановить без потери остатка.');btn17(b,'Отменить архивирование',async()=>{await api('/api/archive/'+encodeURIComponent(code)+'/restore',{method:'POST'});o.remove();showToast('Товар восстановлен');refresh(true)},'ok')}catch(e){notify(e.message)}};
@@ -123,4 +122,204 @@ function installV18(){
   window.addEventListener('keydown',e=>{if(e.target.matches?.('input,select,textarea,[contenteditable]')||document.querySelector('.modal-overlay:not(.hidden),.v18-photo-overlay,dialog[open]'))return;if(e.key==='/'&&currentUser){e.preventDefault();if(currentScreen!=='screen-main')backToMain();$('search-input').focus()}if(e.key==='Escape'&&currentUser&&currentScreen!=='screen-main')goBack();if(e.key.toLowerCase()==='r'&&e.altKey&&currentUser){e.preventDefault();refresh(true)}});
   let start=0;document.addEventListener('touchstart',e=>{start=window.scrollY===0&&currentScreen==='screen-main'&&!document.querySelector('.modal-overlay:not(.hidden)')?e.touches[0].clientY:0},{passive:true});document.addEventListener('touchend',e=>{if(start&&e.changedTouches[0].clientY-start>95&&window.scrollY===0)refresh(true);start=0},{passive:true});
   const search=main.querySelector('.search-icon');if(search)search.innerHTML=ico('search');
+}
+
+function labelSettings(){
+  try{
+    const settings=JSON.parse(cacheGet17('label_dimensions')||'{}');
+    if(settings.width>=30&&settings.width<=100&&settings.height>=40&&settings.height<=150)return settings;
+  }catch(error){}
+  return {width:50,height:80};
+}
+
+async function chooseConsumableLabels17(){
+  if(currentUser?.role!=='admin')return;
+  const {o,b}=overlay17('QR расходников');
+  const search=field17(b,'Найти расходник','');
+  search.type='search';
+  const list=document.createElement('div');
+  list.className='warehouse-label-picker';
+  const status=document.createElement('p');
+  status.className='meta';
+  status.setAttribute('aria-live','polite');
+  b.append(list,status);
+  const selected=new Set();
+  let items=[];
+  const next=btn17(b,'Продолжить',()=>{
+    if(!selected.size)return;
+    o.remove();
+    showLabelPrint17(items.filter(item=>selected.has(item.code)));
+  },'ok');
+  next.disabled=true;
+  list.textContent='Загрузка…';
+  function updateSelection(){
+    status.textContent=selected.size?'Выбрано: '+selected.size:'';
+    next.disabled=!selected.size;
+  }
+  function render(){
+    const query=search.value.trim().toLocaleLowerCase('ru-RU');
+    const shown=items.filter(item=>(item.name+' '+item.code).toLocaleLowerCase('ru-RU').includes(query));
+    list.replaceChildren(...shown.map(item=>{
+      const row=document.createElement('label');
+      const checkbox=document.createElement('input');
+      checkbox.type='checkbox';
+      checkbox.checked=selected.has(item.code);
+      checkbox.onchange=()=>{
+        if(checkbox.checked)selected.add(item.code);
+        else selected.delete(item.code);
+        updateSelection();
+      };
+      const name=document.createElement('span');
+      name.textContent=item.name;
+      const code=document.createElement('small');
+      code.className='meta';
+      code.textContent=item.code;
+      row.append(checkbox,name,code);
+      return row;
+    }));
+    if(!shown.length)list.textContent=items.length?'Ничего не найдено':'На складе нет расходников';
+  }
+  try{
+    items=(await api('/api/items')).filter(item=>item.kind==='consumable');
+    search.addEventListener('input',render);
+    render();
+  }catch(error){list.textContent=error.message}
+}
+
+function showLabelPrint17(items){
+  if(currentUser?.role!=='admin'||!items.length)return;
+  const {o,b}=overlay17('Печать QR');
+  const header=document.createElement('p');
+  header.className='warehouse-label-title';
+  header.textContent=items.length===1?items[0].name+' · '+items[0].code:'Выбрано позиций: '+items.length;
+  const image=document.createElement('img');
+  image.className='label-img';
+  image.alt='Предпросмотр QR-этикетки';
+  const status=document.createElement('p');
+  status.className='meta';
+  status.setAttribute('aria-live','polite');
+  b.append(header,image,status);
+  const controls=document.createElement('div');
+  controls.className='warehouse-label-controls';
+  b.append(controls);
+  const settings=labelSettings();
+  const width=field17(controls,'Ширина, мм',settings.width,'number');
+  const height=field17(controls,'Высота, мм',settings.height,'number');
+  const copies=field17(controls,items.length===1?'Копий':'Копий на позицию',1,'number');
+  width.setAttribute('aria-label','Ширина, мм');
+  height.setAttribute('aria-label','Высота, мм');
+  copies.setAttribute('aria-label','Копий');
+  width.min=30;width.max=100;
+  height.min=40;height.max=150;
+  copies.min=1;copies.max=20;
+  const density=document.createElement('label');
+  density.textContent='Разрешение';
+  const dpi=document.createElement('select');
+  dpi.add(new Option('203 dpi',203));
+  dpi.add(new Option('300 dpi',300));
+  density.append(dpi);
+  controls.append(density);
+
+  function parameters(){
+    const w=width.valueAsNumber,h=height.valueAsNumber,n=copies.valueAsNumber,d=Number(dpi.value);
+    if(!Number.isInteger(w)||!Number.isInteger(h)||w<30||w>100||h<40||h>150)throw Error('Введите размер от 30 × 40 до 100 × 150 мм');
+    if(!Number.isInteger(n)||n<1||n>20)throw Error('Введите от 1 до 20 копий на позицию');
+    const pages=items.length*n;
+    if(pages>500||pages*Math.round(w/25.4*d)*Math.round(h/25.4*d)>100000000)throw Error('Уменьшите число копий или размер этикетки');
+    return {width_mm:w,height_mm:h,copies:n,dpi:d};
+  }
+
+  const previewPath=(code,p)=>'/api/label/'+encodeURIComponent(code)+'?'+new URLSearchParams({
+    width_mm:p.width_mm,height_mm:p.height_mm,dpi:p.dpi,
+  });
+  let previewUrl='',previewVersion=0,previewTimer;
+  async function preview(){
+    const version=++previewVersion;
+    try{
+      const p=parameters();
+      const blob=await blob17(previewPath(items[0].code,p));
+      if(!o.isConnected||version!==previewVersion)return;
+      if(previewUrl)URL.revokeObjectURL(previewUrl);
+      previewUrl=URL.createObjectURL(blob);
+      image.src=previewUrl;
+      image.classList.remove('hidden');
+      status.textContent=items.length>1?'Предпросмотр первой этикетки · '+items.length*p.copies+' стр.':'';
+    }catch(error){
+      if(version!==previewVersion)return;
+      image.classList.add('hidden');
+      status.textContent=error.message;
+    }
+  }
+  controls.addEventListener('input',()=>{
+    ++previewVersion;
+    clearTimeout(previewTimer);
+    previewTimer=setTimeout(preview,180);
+  });
+  o.querySelector('.field-row button').addEventListener('click',()=>{
+    clearTimeout(previewTimer);
+    if(previewUrl)URL.revokeObjectURL(previewUrl);
+  });
+
+  const actions=document.createElement('div');
+  actions.className='warehouse-print-actions';
+  b.append(actions);
+  btn17(actions,'Печать',async()=>{
+    const p=parameters();
+    const host=document.createElement('div');
+    host.className='warehouse-print-labels';
+    const rules=document.createElement('style');
+    rules.textContent='@page{size:'+p.width_mm+'mm '+p.height_mm+'mm;margin:0}';
+    const images=[];
+    const cleanup=()=>{
+      host.remove();
+      rules.remove();
+      document.body.classList.remove('warehouse-printing');
+      images.forEach(url=>URL.revokeObjectURL(url));
+      window.removeEventListener('afterprint',cleanup);
+    };
+    try{
+      for(const item of items){
+        const url=URL.createObjectURL(await blob17(previewPath(item.code,p)));
+        images.push(url);
+        const label=new Image();
+        label.src=url;
+        await label.decode();
+        label.style.width=p.width_mm+'mm';
+        label.style.height=p.height_mm+'mm';
+        label.alt=item.name;
+        for(let n=0;n<p.copies;n++)host.append(label.cloneNode());
+      }
+      if(!o.isConnected){cleanup();return}
+      document.head.append(rules);
+      document.body.append(host);
+      document.body.classList.add('warehouse-printing');
+      window.addEventListener('afterprint',cleanup,{once:true});
+      window.print();
+    }catch(error){cleanup();throw error}
+  },'ok');
+  btn17(actions,'Скачать PDF',async()=>{
+    const response=await fetch('/api/export_labels',{
+      method:'POST',
+      credentials:'same-origin',
+      headers:{...authHeaders17(),'Content-Type':'application/json'},
+      body:JSON.stringify({codes:items.map(item=>item.code),...parameters()}),
+    });
+    if(!response.ok){
+      const error=await response.json().catch(()=>({}));
+      throw Error(typeof error.detail==='string'?error.detail:'Не удалось скачать этикетки');
+    }
+    const href=URL.createObjectURL(await response.blob());
+    const link=document.createElement('a');
+    link.href=href;
+    link.download=items.length===1?items[0].code+'.pdf':'qr-consumables.pdf';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(href),10000);
+  });
+  if(items.length===1)btn17(b,'Скачать PNG',()=>{
+    const path=previewPath(items[0].code,parameters());
+    return downloadFile(path,items[0].code+'.png');
+  });
+  preview();
 }

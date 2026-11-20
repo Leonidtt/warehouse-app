@@ -278,7 +278,7 @@ function bossSurname1853(name){
       held.append(list);if(unknown)held.append(el('div','r1853-legend','? — бренд не определён'));
       const buyouts=bossExtraPanel1855('На выкупе',r.buyouts||[],'buyout',expanded);
       bossBox.replaceChildren(held,buyouts);bossBox.classList.remove('hidden');
-    }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden')}).finally(()=>bossJob=null);
+    }).catch(e=>{if(!bossBox.children.length)bossBox.append(el('p','meta','Сводка временно недоступна'));bossBox.classList.remove('hidden');return false}).finally(()=>bossJob=null);
     return bossJob
   }
 function buyoutRows1856(items){
@@ -368,7 +368,7 @@ function heldPeople1857(items){
   const bossCostsList=el('div','r1859-boss-cost-list');
   bossCostsSummary.append(bossCostsTitle,bossCostsCount);
   bossCosts.append(bossCostsSummary,bossCostsList);
-  main.append(bossCosts);
+  main.querySelector('.v18-quick').before(bossCosts);
   let bossCostsJob=null;
   function refreshBossCosts(){
     const allowed=!!currentUser?.is_registered&&currentUser.role==='boss';
@@ -387,14 +387,21 @@ function heldPeople1857(items){
         const model=el('span','r1859-boss-cost-model',item.model||item.code);
         primary.append(name,tag,model);
         const cost=el('span','r1859-boss-cost-price',Number(item.price||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽');
-        row.append(primary,cost);row.title='Открыть карточку: '+item.name;fragment.append(row);
+        row.append(primary,cost);row.title=[item.name,item.budget_tag,model.textContent,cost.textContent].filter(Boolean).join(' · ');fragment.append(row);
       }
       if(!rows.length)fragment.append(el('div','meta r1859-boss-cost-empty','Нет оборудования'));
       bossCostsList.replaceChildren(fragment);
-    }).catch(error=>{bossCostsList.textContent='Не удалось загрузить стоимость: '+(error?.message||'ошибка')}).finally(()=>{bossCostsJob=null});
+    }).catch(error=>{bossCostsList.textContent='Не удалось загрузить стоимость: '+(error?.message||'ошибка');return false}).finally(()=>{bossCostsJob=null});
     return bossCostsJob;
   }
-  const oldLoad=loadItems;loadItems=async()=>{await oldLoad();renderBuyout1856();renderHeld1857();refreshBoss();refreshBossCosts()};
+  const oldLoad=loadItems;
+  loadItems=async()=>{
+    const loaded=await oldLoad();
+    renderBuyout1856();
+    renderHeld1857();
+    const summaries=await Promise.all([refreshBoss(),refreshBossCosts()]);
+    return loaded&&!summaries.includes(false);
+  };
   const oldShowRooms=showRooms;showRooms=async()=>{await oldShowRooms();for(const r of $('rooms-list').querySelectorAll('.room-card')){const title=r.querySelector('.room-title')?.textContent,loc=locations.find(l=>l.name===title);if(!loc)continue;const rows=allItems.flatMap(i=>i.stocks.filter(s=>s.location_id===loc.id).map(s=>({kind:i.kind,qty:s.quantity})));const equipment=rows.filter(i=>i.kind==='equipment').reduce((n,i)=>n+i.qty,0),cons=rows.filter(i=>i.kind==='consumable').reduce((n,i)=>n+i.qty,0);const b=r.querySelector('.room-count-badge');if(b)b.replaceChildren(el('div','','Оборудование: '+equipment),el('div','','Расходники: '+cons+' шт.'))}};
   const mark=()=>{if(!admin())return;for(const q of ['#screen-settings .v18-settings-layout button','#screen-users #users-list button','#nav-settings','#nav-rooms','.v18-admin','#edit-btn','#delete-item-btn','#export-history-btn','#add-item-btn','#actions button[onclick*="replenish"]','#screen-item .owner-only'])document.querySelectorAll(q).forEach(e=>e.classList.add('r184-admin-dot'))};const oldScreen=showScreen;showScreen=id=>{oldScreen(id);mark()};
   const oldInit=init;init=async()=>{await oldInit();if(!currentUser?.is_registered)return;document.body.classList.toggle('r184-admin',admin());document.body.classList.toggle('r184-finance',admin());document.body.classList.toggle('r184-boss-role',currentUser.role==='boss');if(currentUser.role==='boss')$('user-info').append(el('span','r184-role','Босс'));if(!admin())$('export-history-btn').classList.add('hidden');renderPreview();mark();resetInventoryView();renderBuyout1856();renderHeld1857();refreshBoss();refreshBossCosts()};

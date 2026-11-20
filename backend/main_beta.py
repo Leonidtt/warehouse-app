@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Requ
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 import qrcode
 import io
@@ -757,26 +757,22 @@ def get_low_stock(x_init_data: Optional[str] = Header(None)):
     conn.close()
     return [dict(r) for r in rows]
 
+def next_item_code(conn, prefix):
+    prefix = (prefix or "").upper()
+    if not re.fullmatch(r"[A-Z]{2,12}", prefix):
+        prefix = "ITEM"
+    rows = conn.execute("SELECT code FROM items WHERE code LIKE ?", (f"{prefix}-%",))
+    suffixes = (row["code"].rsplit("-", 1)[-1] for row in rows)
+    serial = max((int(val) for val in suffixes if val.isascii() and val.isdigit()), default=0)
+    return f"{prefix}-{serial + 1}"
+
+
 @app.get("/api/next_code")
 def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    if prefix and len(prefix) >= 2:
-        rows = conn.execute("SELECT code FROM items WHERE code LIKE ?", (f"{prefix}-%",)).fetchall()
-        max_num = 0
-        for r in rows:
-            try:
-                parts = r["code"].split("-")
-                if len(parts) >= 2:
-                    num = int(parts[-1])
-                    if num > max_num: max_num = num
-            except: pass
-        conn.close()
-        return {"code": f"{prefix}-{max_num + 1}"}
-    else:
-        rows = conn.execute("SELECT code FROM items WHERE code LIKE 'ITEM-%'").fetchall()
-        max_num = max([int(r["code"].split("-")[1]) for r in rows if r["code"].split("-")[1].isdigit()] + [0])
-        conn.close()
-        return {"code": f"ITEM-{max_num + 1}"}
+    check_admin(x_init_data)
+    with contextmanager_session() as conn:
+        return {"code": next_item_code(conn, prefix)}
+
 
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
@@ -900,14 +896,15 @@ def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
     return {"status":"ok"}
 
 @app.post("/api/items")
-async def create_item(code: str = Form(...), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), x_init_data: Optional[str] = Header(None)):
+async def create_item(code: str = Form(""), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), code_prefix: str = Form(""), unit: str = Form("шт."), supplier: str = Form(""), notes: str = Form(""), x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     validate_item_fields(name,kind,min_stock,[price,price_body,price_lens,price_flash,price_acc,price_add])
     code=code.strip(); name=name.strip(); category=category.strip()
     if kind=="equipment" and not budget_tag.strip(): budget_tag=budget_for_equipment_name(name)
-    if not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
+    if code and not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
     if quantity<0: raise HTTPException(400,"Количество не может быть отрицательным")
     if kind=="consumable":
+        metadata = passport_values(ItemMetadata(unit=unit, supplier=supplier, notes=notes))
         kit_body=kit_lens=kit_flash=kit_acc=kit_add=serial_number=buyout_status=""
         price_body=price_lens=price_flash=price_acc=price_add=0
     photo_base64=""
@@ -920,32 +917,37 @@ async def create_item(code: str = Form(...), name: str = Form(...), kind: str = 
                 im.thumbnail((1600,1600)); output=io.BytesIO(); im.convert("RGB").save(output,format="JPEG",quality=85)
                 photo_base64=base64.b64encode(output.getvalue()).decode("ascii")
         except Exception: raise HTTPException(400,"Некорректное изображение")
-    conn=get_conn(x_init_data)
-    
-    if location_id == 0:
-        loc = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
-        location_id = loc["id"] if loc else 1
-        
-    if not conn.execute("SELECT 1 FROM locations WHERE id=?",(location_id,)).fetchone(): conn.close(); raise HTTPException(404,"Помещение не найдено")
-    if kind == "equipment" and quantity == 0: quantity = 1
-    if kind == "equipment" and quantity != 1: conn.close(); raise HTTPException(400,"У оборудования должен быть уникальный код на каждую единицу")
-    
-    try: 
+    if kind == "equipment":
+        quantity = quantity or 1
+        if quantity != 1:
+            raise HTTPException(400, "У оборудования должен быть уникальный код на каждую единицу")
+
+    with transaction() as conn:
+        if location_id == 0:
+            location = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
+            location_id = location["id"] if location else 1
+        valid_location(conn, location_id)
+        code = code or next_item_code(conn, code_prefix)
+        if conn.execute("SELECT 1 FROM items WHERE code=?", (code,)).fetchone():
+            raise HTTPException(400, "Код уже существует")
         conn.execute("""INSERT INTO items (
-            code, name, kind, min_stock, photo, price, 
-            kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
+            code, name, kind, min_stock, photo, price,
+            kit_body, kit_lens, kit_flash, kit_acc, kit_add,
             price_body, price_lens, price_flash, price_acc, price_add,
             budget_tag, serial_number, buyout_status, category
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", 
-        (code, name, kind, min_stock, photo_base64, price, 
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (code, name, kind, min_stock, photo_base64, price,
          kit_body, kit_lens, kit_flash, kit_acc, kit_add,
          price_body, price_lens, price_flash, price_acc, price_add,
          budget_tag, serial_number, buyout_status, category))
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Код уже существует")
-    conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, location_id, quantity))
-    if category: conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)",(category,))
-    audit(conn,actor,"Создание товара",code)
-    conn.commit(); conn.close(); return {"status": "ok"}
+        conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, location_id, quantity))
+        if kind == "consumable":
+            conn.execute("INSERT INTO item_metadata(code,unit,supplier,site,vessel,notes) VALUES(?,?,?,?,?,?)", (code, *metadata))
+        if category:
+            conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (category,))
+        audit(conn, actor, "Создание товара", code)
+    return {"status": "ok", "code": code}
+
 
 @app.post("/api/checkout_batch")
 async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] = Header(None)):
@@ -1308,6 +1310,13 @@ class ItemMetadata(BaseModel):
     vessel: str = ""
     notes: str = ""
 
+def passport_values(metadata):
+    values = [metadata.unit.strip(), metadata.supplier.strip(), metadata.site.strip(), metadata.vessel.strip(), metadata.notes.strip()]
+    if not values[0] or any(len(value) > 250 for value in values[:4]) or len(values[4]) > 3000:
+        raise HTTPException(400, "Проверьте поля паспорта")
+    return values
+
+
 @app.get('/api/items/{code}/passport')
 def item_passport(code: str,x_init_data: Optional[str]=Header(None)):
     user=get_user(x_init_data)
@@ -1322,8 +1331,7 @@ def item_passport(code: str,x_init_data: Optional[str]=Header(None)):
 @app.put('/api/items/{code}/passport')
 def save_passport(code: str,req: ItemMetadata,x_init_data: Optional[str]=Header(None)):
     actor=check_admin(x_init_data)
-    values=[req.unit.strip(),req.supplier.strip(),req.site.strip(),req.vessel.strip(),req.notes.strip()]
-    if not values[0] or any(len(v)>250 for v in values[:4]) or len(values[4])>3000: raise HTTPException(400,'Проверьте поля паспорта')
+    values=passport_values(req)
     with transaction() as conn:
         active_item(conn,code)
         conn.execute('INSERT INTO item_metadata(code,unit,supplier,site,vessel,notes) VALUES(?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET unit=excluded.unit,supplier=excluded.supplier,site=excluded.site,vessel=excluded.vessel,notes=excluded.notes',(code,*values))
@@ -1521,20 +1529,59 @@ def booking_calendar(x_init_data:Optional[str]=Header(None)):
     with transaction() as conn:
         return [dict(r) for r in conn.execute("SELECT b.*,i.name,u.full_name FROM bookings b JOIN items i ON i.code=b.item_code LEFT JOIN users u ON u.tg_id=b.user_id WHERE i.is_archived=0 AND date_to>=date('now') ORDER BY date_from,name")]
 
+def labels_pdf(rows, dpi, width_mm, height_mm, copies=1):
+    if dpi not in (203, 300):
+        raise HTTPException(400, "Выберите 203 или 300 dpi")
+    label_dimensions(width_mm, height_mm)
+    pages = len(rows) * copies
+    if pages > 500:
+        raise HTTPException(400, "Выберите до 500 этикеток с учётом копий")
+    pixels = round(width_mm / 25.4 * dpi) * round(height_mm / 25.4 * dpi)
+    if pages * pixels > 100_000_000:
+        raise HTTPException(400, "Слишком большой PDF, уменьшите число этикеток, размер или dpi")
+    images = [label_image(row["code"], row["name"], dpi, width_mm, height_mm) for row in rows]
+    ordered = [image for image in images for _ in range(copies)]
+    buf = io.BytesIO()
+    ordered[0].save(buf, format="PDF", resolution=dpi, save_all=True, append_images=ordered[1:])
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Cache-Control": "no-store"})
+
+
 @app.get('/api/export_labels')
-def export_labels(dpi:int=203,width_mm:int=50,height_mm:int=80,x_init_data:Optional[str]=Header(None)):
+def export_labels(dpi: int = 203, width_mm: int = 50, height_mm: int = 80, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
-    if dpi not in (203,300): raise HTTPException(400,'Выберите 203 или 300 dpi')
-    with contextmanager_session() as conn: rows=conn.execute('SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 500').fetchall()
-    if not rows: raise HTTPException(400,'Склад пуст')
-    if len(rows)==500:
-        with contextmanager_session() as conn:
-            if conn.execute('SELECT COUNT(*) FROM items WHERE is_archived=0').fetchone()[0]>500: raise HTTPException(400,'За один раз можно выгрузить до 500 этикеток; скачивайте этикетки отдельно')
-    label_dimensions(width_mm,height_mm)
-    if len(rows)*round(width_mm/25.4*dpi)*round(height_mm/25.4*dpi)>100_000_000: raise HTTPException(400,'Слишком большой PDF, уменьшите размер или dpi')
-    images=[label_image(r['code'],r['name'],dpi,width_mm,height_mm) for r in rows]
-    buf=io.BytesIO(); images[0].save(buf,format='PDF',resolution=dpi,save_all=True,append_images=images[1:]); buf.seek(0)
-    return StreamingResponse(buf,media_type='application/pdf')
+    with contextmanager_session() as conn:
+        rows = conn.execute("SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 501").fetchall()
+    if not rows:
+        raise HTTPException(400, "Склад пуст")
+    return labels_pdf(rows, dpi, width_mm, height_mm)
+
+
+class LabelSelection(BaseModel):
+    codes: List[str] = Field(min_length=1, max_length=500)
+    copies: int = Field(default=1, ge=1, le=20)
+    dpi: int = 203
+    width_mm: int = 50
+    height_mm: int = 80
+
+
+@app.post('/api/export_labels')
+def export_selected_labels(req: LabelSelection, x_init_data: Optional[str] = Header(None)):
+    check_admin(x_init_data)
+    codes = list(dict.fromkeys(req.codes))
+    if any(not 1 <= len(code) <= 64 for code in codes):
+        raise HTTPException(400, "Проверьте коды товаров")
+    placeholders = ",".join("?" for _ in codes)
+    with contextmanager_session() as conn:
+        rows = {
+            row["code"]: row for row in conn.execute(
+                f"SELECT code,name FROM items WHERE is_archived=0 AND code IN ({placeholders})", codes
+            )
+        }
+    if len(rows) != len(codes):
+        raise HTTPException(404, "Один из выбранных товаров недоступен")
+    return labels_pdf([rows[code] for code in codes], req.dpi, req.width_mm, req.height_mm, req.copies)
+
 
 @app.put('/api/items/{code}/photo')
 async def update_photo(code:str,photo:UploadFile=File(...),x_init_data:Optional[str]=Header(None)):

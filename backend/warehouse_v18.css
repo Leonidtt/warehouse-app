@@ -392,3 +392,57 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
 #item-recipient-dialog::backdrop { background: var(--r185-dim); }
 #item-recipient-dialog h2 { margin: 0 0 12px; font-size: 18px; }
 #item-recipient-dialog .beta-checkout-actions { margin-bottom: 0; }
+
+.warehouse-room-actions {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  padding:0 16px;
+  margin-top:12px;
+}
+.warehouse-room-actions button { margin:0; padding:8px; font-size:13px; }
+.warehouse-room-actions #add-consumable-btn { grid-column:1 / -1; }
+.warehouse-item-code { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.warehouse-item-code button { width:auto; min-height:32px; margin:0; padding:3px 9px; }
+.quick-consumable .r182-types, .quick-consumable .warehouse-save-template,
+.warehouse-consumable-form #add-name + button { display:none; }
+.warehouse-consumable-fields { display:grid; grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr); gap:8px; }
+.warehouse-consumable-fields > .input-group:last-child { grid-column:1 / -1; }
+.warehouse-unit-options { display:flex; flex-wrap:wrap; gap:4px; }
+.warehouse-unit-options button { width:auto; min-height:30px; margin:0; padding:4px 7px; font-size:12px; }
+.warehouse-unit-options button[aria-pressed=true] { color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary); }
+.warehouse-duplicate { margin:0 0 8px; padding:8px; border-radius:10px; background:var(--skeleton-bg); font-size:13px; }
+.warehouse-duplicate-row { display:flex; align-items:center; gap:6px; justify-content:space-between; margin-top:5px; }
+.warehouse-duplicate-row button { width:auto; min-height:36px; margin:0; padding:4px 7px; font-size:12px; }
+.warehouse-consumable-form .r182-form-footer { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:6px; }
+.warehouse-consumable-form .r182-form-footer button { margin:0; padding:8px 4px; font-size:13px; }
+.warehouse-consumable-form #save-item-btn { background:var(--card-bg); color:var(--text); border:1px solid var(--border); }
+.warehouse-label-title { margin:4px 0 8px; font-weight:600; overflow-wrap:anywhere; }
+.warehouse-label-controls, .warehouse-print-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.warehouse-label-controls input, .warehouse-label-controls select { width:100%; min-width:0; }
+.warehouse-label-controls label { font-size:12px; }
+.warehouse-print-actions button { margin:0; }
+.warehouse-label-picker { display:grid; gap:4px; max-height:45vh; overflow:auto; }
+.warehouse-label-picker label {
+  display:grid;
+  grid-template-columns:20px minmax(0,1fr) auto;
+  align-items:center;
+  gap:7px;
+  min-height:40px;
+  margin:0;
+  padding:5px 8px;
+  border-radius:9px;
+  background:var(--skeleton-bg);
+  color:var(--text);
+  font-size:13px;
+}
+.warehouse-label-picker input { width:18px; height:18px; margin:0; accent-color:var(--primary); }
+.warehouse-label-picker small { max-width:86px; overflow-wrap:anywhere; }
+.warehouse-print-labels { display:none; }
+@media print {
+  :root, body { background:#fff !important; padding:0 !important; margin:0 !important; }
+  body.warehouse-printing > :not(.warehouse-print-labels) { display:none !important; }
+  .warehouse-print-labels { display:block; }
+  .warehouse-print-labels img { display:block; break-after:page; max-width:none; }
+  .warehouse-print-labels img:last-child { break-after:auto; }
+}

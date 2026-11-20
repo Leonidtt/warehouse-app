@@ -106,19 +106,20 @@ details[open] > .r1856-heading .r1856-chevron { transform: rotate(45deg); }
 @media(min-width:900px){.web-mode #items-list .r183-items{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:5px}}
 
 /* Collapsible cost overview for Boss on Home: deliberately last in the page. */
-.r1859-boss-cost{margin:22px 0 26px;padding:0;overflow:hidden}
+.r1859-boss-cost{margin:8px 0 12px;padding:0;overflow:hidden}
 .r1859-boss-cost-summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer;font-size:14px}
 .r1859-boss-cost-summary::-webkit-details-marker{display:none}
 .r1859-boss-cost-summary::after{content:'⌄';font-size:19px;color:var(--text-muted);transition:transform .2s}
 .r1859-boss-cost[open] .r1859-boss-cost-summary::after{transform:rotate(180deg)}
 .r1859-boss-cost-count{color:var(--text-muted);font-size:12px;margin-left:auto}
 .r1859-boss-cost-list{padding:0 10px 12px;display:grid;gap:5px}
-.r1859-boss-cost-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--skeleton-bg);border:0;border-radius:11px;padding:11px 12px;box-shadow:none;color:var(--text);cursor:pointer;margin:0;min-height:48px}
+.r1859-boss-cost-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--skeleton-bg);border:0;border-radius:11px;padding:7px 9px;box-shadow:none;color:var(--text);cursor:pointer;margin:0;min-height:36px}
 .r1859-boss-cost-row:active{opacity:.75}
-.r1859-boss-cost-primary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px;min-width:0;flex:1}
-.r1859-boss-cost-name{font-size:13px;font-weight:650;overflow-wrap:anywhere}
-.r1859-boss-cost-model{font-size:11px;color:var(--text-muted);flex-basis:100%;overflow-wrap:anywhere}
-.r1859-boss-cost-budget{font-size:10px;line-height:1.4;font-weight:700;border-radius:7px;padding:2px 6px}
+.r1859-boss-cost-primary{display:flex;align-items:center;gap:5px;min-width:0;flex:1}
+.r1859-boss-cost-name{font-size:12px;font-weight:650;flex:1}
+.r1859-boss-cost-model{font-size:11px;color:var(--text-muted);max-width:35%}
+.r1859-boss-cost-name,.r1859-boss-cost-model{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r1859-boss-cost-budget{flex:none;font-size:10px;line-height:1.4;font-weight:700;border-radius:7px;padding:2px 6px}
 .r1859-boss-cost-budget.tx{background:rgba(52,199,89,.13);color:var(--success)}
 .r1859-boss-cost-budget.kc{background:rgba(255,59,48,.13);color:var(--danger)}
 .r1859-boss-cost-price{font-size:12px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
