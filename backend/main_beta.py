@@ -6,7 +6,7 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import qrcode
@@ -1402,6 +1402,16 @@ async def web_session_middleware(request: Request, call_next):
             if not origin or urlsplit(origin).netloc.lower()!=request.headers.get("host", "").lower():
                 return JSONResponse(status_code=403,content={"detail":"Запрос с другого сайта запрещён"})
     response=await call_next(request)
+    if path=="/api/me" and request.method=="GET" and request.cookies.get(WEB_COOKIE) and not request.headers.get("x-init-data") and request.headers.get("x-warehouse-pwa")=="1" and response.status_code==200:
+        # Installed PWA: keep an active session until explicit revocation, never extend blocked users.
+        token=request.cookies.get(WEB_COOKIE)
+        with transaction() as conn:
+            now=int(time.time())
+            entry=conn.execute("SELECT expires FROM web_sessions WHERE digest=? AND expires>?",(web_digest(token),now)).fetchone()
+            if entry:
+                if entry["expires"]<4102444800:
+                    conn.execute("UPDATE web_sessions SET expires=4102444800 WHERE digest=?",(web_digest(token),))
+                response.set_cookie(WEB_COOKIE,token,max_age=34560000,httponly=True,secure=True,samesite="strict",path="/")
     if path.startswith("/api/"): response.headers["Cache-Control"]="no-store"
     return response
 
@@ -1425,14 +1435,15 @@ def web_login(req: WebLogin):
     code=re.sub(r"[ -]","",req.code).upper()
     if not re.fullmatch(r"[A-F0-9]{12}",code): raise HTTPException(400,"Введите код из Telegram")
     token=secrets.token_urlsafe(32)
-    session_ttl=2592000 if req.pwa else 43200
+    session_ttl=34560000 if req.pwa else 43200
+    session_expires=4102444800 if req.pwa else int(time.time())+session_ttl
     with transaction() as conn:
         row=conn.execute("SELECT c.user_id FROM web_codes c JOIN users u ON u.tg_id=c.user_id WHERE digest=? AND expires>?",(web_digest(code),int(time.time()))).fetchone()
         if not row: raise HTTPException(401,"Код неверный или истёк")
         deny_blocked(conn, row[0], MAIN_ADMIN_ID)
         conn.execute("DELETE FROM web_codes WHERE digest=?",(web_digest(code),))
         conn.execute("DELETE FROM web_sessions WHERE expires<=?",(int(time.time()),))
-        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],int(time.time())+session_ttl))
+        conn.execute("INSERT INTO web_sessions VALUES(?,?,?)",(web_digest(token),row[0],session_expires))
     response=JSONResponse({"status":"ok"})
     response.set_cookie(WEB_COOKIE,token,max_age=session_ttl,httponly=True,secure=True,samesite="strict",path="/")
     return response
@@ -1541,9 +1552,24 @@ _PWA_DIR = Path(__file__).resolve().parent
 def pwa_redirect():
     return RedirectResponse("/pwa/", status_code=307)
 
+_WAREHOUSE_VERSION_FILES=tuple(sorted(p for p in _PWA_DIR.iterdir() if p.suffix in (".py",".html",".css",".js")))
+_WAREHOUSE_VERSION=hashlib.sha256(b"".join(p.name.encode("utf-8")+b"\0"+hashlib.sha256(p.read_bytes()).digest() for p in _WAREHOUSE_VERSION_FILES)).hexdigest()[:20]
+
+@app.get("/app/version", include_in_schema=False)
+def warehouse_version():
+    return JSONResponse({"version":_WAREHOUSE_VERSION},headers={"Cache-Control":"no-store"})
+
+@app.get("/pull-refresh.js", include_in_schema=False)
+def pull_refresh_script():
+    return FileResponse(_PWA_DIR / "pull_refresh.js",media_type="text/javascript",headers={"Cache-Control":"no-cache,no-store,must-revalidate"})
+
+def warehouse_versioned_html():
+    html=(_PWA_DIR / "index.html").read_text(encoding="utf-8")
+    return html.replace("</head>",'<meta name="warehouse-app-version" content="'+_WAREHOUSE_VERSION+'"></head>',1)
+
 @app.get("/pwa/", include_in_schema=False)
 def pwa_home():
-    return FileResponse(_PWA_DIR / "index.html", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+    return HTMLResponse(warehouse_versioned_html(), headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 @app.get("/pwa/manifest.webmanifest", include_in_schema=False)
 def pwa_manifest():
@@ -1576,4 +1602,4 @@ def pwa_icon(size: int):
 @app.get("/beta")
 @app.get("/beta.html")
 def serve_main():
-    return FileResponse(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), headers={"Cache-Control":"no-cache"})
+    return HTMLResponse(warehouse_versioned_html(), headers={"Cache-Control":"no-store"})
