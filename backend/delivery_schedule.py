@@ -21,10 +21,10 @@ RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 PN='{http://schemas.openxmlformats.org/package/2006/relationships}'
 A='{http://schemas.openxmlformats.org/drawingml/2006/main}'
 THEME_COLORS=('lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink')
-DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ'}
+DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ','СТАЖЕРЫ П','СТАЖЁРЫ П'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
 ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
-VENUE_ROSTER_VERSION=4
+VENUE_ROSTER_VERSION=5
 
 
 class VenueDeliveryNotes(BaseModel):
@@ -178,45 +178,55 @@ def parse_xlsx_schedule(raw):
     count=0
     for sheet,cells,fills,epoch in sheets_from_xlsx(raw):
         count+=1
+        # Find all seven week dates from the header. Three oldest tabs are shifted
+        # (F:L or E:K), while newer tabs use D:J.
         days={}
-        for col in 'DEFGHIJ':
+        for col in 'DEFGHIJKLM':
             try:
                 date_obj=excel_date(cells.get(col+'2',''),epoch)
                 if date(2020,1,1)<=date_obj<=date(2040,12,31):
                     days[col]=date_obj.isoformat()
-                    coverage.add(date_obj.isoformat())
-            except (OverflowError,ValueError):
+            except (OverflowError,ValueError,TypeError):
                 continue
-        if not days:
+        if len(days)!=7:
             continue
-        venues={row:cells.get('A'+str(row),'') for row in range(4,49)}
+        dates=[date.fromisoformat(days[col]) for col in sorted(days)]
+        if any(dates[i]-dates[i-1]!=timedelta(days=1) for i in range(1,7)):
+            continue
+        coverage.update(days.values())
+        # The first two tabs have surnames and venue names in B, later tabs in A.
+        name_col='B' if plain(cells.get('B4','')).upper()=='МОСКВА' else 'A'
+        first_department=next((row for row in range(30,85)
+            if plain(cells.get(name_col+str(row),'')).upper() in DEPARTMENTS),None)
+        if first_department is None:
+            continue
+        venues={row:cells.get(name_col+str(row),'') for row in range(4,first_department)}
         venues={row:name for row,name in venues.items() if name and name.upper() not in ('МОСКВА','ПИТЕР','НИЖНИЙ НОВГОРОД','ТЕСТ')}
         colors=venues_by_color(venues,fills,days)
+        # The photo flag is the dedicated column AFTER the Sunday schedule,
+        # not B ("Ф" there means the foyer) nor a weekday assignment.
+        camera_col=chr(ord(max(days))+1)
         department=''
-        for row in range(49,350):
-            person=cells.get('A'+str(row),'')
+        for row in range(first_department,350):
+            person=cells.get(name_col+str(row),'')
             if person.upper() in DEPARTMENTS:
                 department=person.upper()
                 continue
             if department not in DEPARTMENTS or not person:
                 continue
-            # B is a venue marker (foyer), not a camera flag. Use only the roster's K flag.
-            roster_photo=PHOTO.search(cells.get('K'+str(row),'')) is not None
+            roster_photo=PHOTO.search(cells.get(camera_col+str(row),'')) is not None
             for col,day in days.items():
                 address=col+str(row)
                 assignment=cells.get(address,'')
-                daily_photo=PHOTO.search(assignment) is not None
-                if daily_photo and PHOTO.fullmatch(assignment):
-                    assignment=''
                 fill=fills.get(address,'')
                 colored_venue=colors[col].get(fill,'')
-                if assignment or colored_venue or daily_photo:
+                if assignment or colored_venue:
                     venue=colored_venue or guess_venue(assignment,venues.values())
                     rows.append({
                         'work_date':day,'person':person,'department':department,
                         'assignment':assignment,'venue':venue,
                         'venue_color':fill if colored_venue else '',
-                        'status':classify(assignment,roster_photo or daily_photo,venue),'sheet':sheet
+                        'status':classify(assignment,roster_photo,venue),'sheet':sheet
                     })
     if count<1 or len(coverage)<7 or len(rows)>12000:
         raise ValueError('Не удалось прочитать недельный график')
