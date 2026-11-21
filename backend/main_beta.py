@@ -791,8 +791,7 @@ def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(Non
     with transaction() as conn:
         name=req.name.strip()
         if normalize_office(name)=='офис7':
-            office7_location_id(conn,create=True)
-            raise HTTPException(409,"«Офис 7» уже существует")
+            raise HTTPException(409,"Помещение «Офис 7» создаётся и защищается автоматически")
         try: conn.execute("INSERT INTO locations (name) VALUES (?)", (name,))
         except sqlite3.IntegrityError: raise HTTPException(400, "Такая комната уже есть")
     return {"status": "ok"}
