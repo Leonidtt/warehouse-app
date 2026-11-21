@@ -23,7 +23,14 @@ jobs:
           ref: ${{ github.event.deployment.sha || github.sha }}
           persist-credentials: false
       - name: Сверить версию и входы Основы
-        run: python3 scripts/release_handoff.py --wait 60 > handoff.json
+        shell: bash
+        run: |
+          result=0
+          python3 scripts/release_handoff.py --wait 60 > handoff.json || result=$?
+          if [[ -s handoff.json ]]; then
+            printf '::notice title=handoff.json::%s\n' "$(<handoff.json)"
+          fi
+          exit "$result"
       - name: Сохранить результат для следующего чата
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
