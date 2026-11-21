@@ -36,6 +36,7 @@ function installRelease182(){
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
   function categoryWidget(category,label,counts={}){
     const widget=el('section','r182-summary-main');
+    widget.dataset.gear=category==='Фотокомплекты'?'camera':category==='Вспышки'?'flash':category==='Ноутбуки'?'laptop':'printer';
     widget.setAttribute('aria-label',label);
     const content=el('div','r182-featured-card');
     widget.append(el('h2','r182-featured-title',label),content);
@@ -61,26 +62,20 @@ function installRelease182(){
   function renderOverview(data){
     const {categories,booked,daily:d,low:short,consumables=0}=data;
     booked17=new Set(booked);
-    const expanded=dashboard.querySelector('details')?.open??false;
     const byName=new Map(categories.map(category=>[category.name,category]));
-    const primary=el('div','r182-summary r182-featured');
-    primary.append(
-      categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
-      categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
-    );
-
-    const detail=el('details','r182-disclosure');
-    detail.open=expanded;
-    const detailTitle=el('summary');
-    detailTitle.append(el('span','','Ноутбуки и принтеры'),icon('right'));
-    const other=el('div','r182-summary r182-featured');
-    other.append(
-      categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),
-      categoryWidget('Принтеры','Принтеры',byName.get('Принтеры')),
-    );
-    detail.append(detailTitle,other);
-    dashboard.className='r182-overview card';
-    dashboard.replaceChildren(primary,detail);
+    const heading=el('div','r187-overview-heading');
+    heading.append(el('span','r187-overview-kicker','ТЕХНИКА'),el('span','r187-overview-hint','Нажмите, чтобы открыть список'));
+    const grid=el('div','r182-summary r182-featured r187-all-gear');
+    for(const [category,label] of [
+      ['Фотокомплекты','Фотоаппараты'],
+      ['Вспышки','Вспышки'],
+      ['Ноутбуки','Ноутбуки'],
+      ['Принтеры','Принтеры DNP']
+    ]){
+      grid.append(categoryWidget(category,label,byName.get(category)));
+    }
+    dashboard.className='r182-overview card r187-equipment-overview';
+    dashboard.replaceChildren(heading,grid);
 
     daily.replaceChildren();
     daily.className=d?'r182-daily':'hidden';
