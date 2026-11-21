@@ -199,7 +199,9 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
   margin: 0;
   padding: 6px 8px;
   border-radius: 12px;
-  background: var(--warehouse-panel);
+  background: transparent;
+  background: color-mix(in srgb, var(--warehouse-panel) 38%, transparent);
+  border: 1px solid var(--border);
   color: var(--text);
   font-size: 13px;
   box-shadow: none;
