@@ -2894,7 +2894,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
     const item=nav.querySelector('.nav-item.active:not(.hidden)');
     if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){if(nav.classList.contains('beta-tab-motion'))nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
     const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
-    if(!document.body.classList.contains('web-mode')) {
+    if(window.matchMedia('(max-width:899px)').matches) {
       const clearance=Math.max(82,Math.ceil(window.innerHeight-base.top));
       document.documentElement.style.setProperty('--beta-dock-clearance',clearance+'px');
     }
