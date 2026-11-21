@@ -327,6 +327,8 @@ def init_delivery_schedule(conn):
     # delivered via Railway Variables only. Never commit names/roster to Git.
     source_row=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
     verified_blob=os.environ.get('DELIVERY_VERIFIED_ROSTER_BZ64','').strip()
+    if not verified_blob:
+        verified_blob=''.join(os.environ.get('DELIVERY_VERIFIED_ROSTER_BZ64_'+str(i),'').strip() for i in range(1,4))
     marker='beta-verified-full-weekly-roster-2026-11-21'
     if (verified_blob and source_row and source_row['source']=='График МСК · исходная копия'
             and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(marker,)).fetchone()):
