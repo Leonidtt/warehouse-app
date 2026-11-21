@@ -20,7 +20,8 @@ function installDeliverySchedule(){
   const next=el('button','delivery-control delivery-arrow','›');
   next.type='button';next.title='Следующий день';next.setAttribute('aria-label','Следующий день');
   day.value=localDate();
-  const source=el('div','delivery-source'),list=el('div','delivery-list');
+  const source=el('div','delivery-source'),metrics=el('div','delivery-metrics'),list=el('div','delivery-list');
+  metrics.setAttribute('aria-label','Сводка по фотоаппаратам');
   const refresh=el('button','delivery-control delivery-refresh','↻');
   refresh.title='Обновить список';refresh.setAttribute('aria-label',refresh.title);
   const upload=el('button','delivery-control delivery-excel','Excel');
@@ -30,7 +31,7 @@ function installDeliverySchedule(){
   const datePicker=el('div','delivery-date-picker');
   datePicker.append(prev,day,next);
   bar.append(datePicker,refresh,upload,file);
-  body.append(bar,source,list);panel.append(heading,body);
+  body.append(bar,source,metrics,list);panel.append(heading,body);
   const activity=main.querySelector('#main-activity');
   if(activity)activity.after(panel);else main.querySelector('#items-list')?.before(panel);
   panel.classList.add('hidden');
@@ -46,9 +47,10 @@ function installDeliverySchedule(){
   const names=(people,{showCount=false}={})=>[...people]
     .sort((a,b)=>a.person.localeCompare(b.person,'ru'))
     .map(row=>row.person+(showCount&&row.camera_count>1?' ×'+row.camera_count:'')).join(', ');
-  const needsCamera=row=>row.status==='delivery'&&row.camera_count===0;
-  const hasCamera=row=>row.status==='delivery'&&row.camera_count>0;
-  const needsReview=row=>row.status==='review'||(row.status==='delivery'&&row.camera_count===null);
+  // Unknown camera handoffs are pending delivery until the warehouse can confirm possession.
+  const needsCamera=row=>row.status==='delivery'&&!(Number(row.camera_count)>0);
+  const hasCamera=row=>row.status==='delivery'&&Number(row.camera_count)>0;
+  const needsReview=row=>row.status==='review';
   const venueLabel=venue=>venue||'Площадку уточнить';
   const infoRow=(label,people,css='',showCount=false)=>{
     const row=el('div',('delivery-line '+css).trim());
@@ -106,23 +108,46 @@ function installDeliverySchedule(){
       }
     };
   }
-  function renderSummary(venues,readyCount){
-    const section=el('section','delivery-summary');
-    const heading=el('div','delivery-summary-head');
-    heading.append(el('h4','','Куда привезти'));
-    if(readyCount)heading.append(el('span','','Камер: '+readyCount));
-    section.append(heading);
-    if(!readyCount){
-      section.append(el('p','delivery-muted','Нет подтверждённых доставок'));
-      return section;
+  function renderMetrics(groups){
+    const needed=groups.reduce((n,g)=>n+g.needed.length,0);
+    const held=groups.reduce((n,g)=>n+g.held.length,0);
+    const bring=groups.reduce((n,g)=>n+g.ready.length,0);
+    metrics.replaceChildren();
+    for(const [label,value,cls] of [['Нужно',needed,'needed'],['На руках',held,'held'],['Привезти',bring,'bring']]){
+      const cell=el('div','delivery-metric '+cls);
+      cell.append(el('span','delivery-metric-label',label),el('strong','delivery-metric-value',String(value)));
+      metrics.append(cell);
     }
-    for(const {venue,ready} of venues){
-      if(ready.length)section.append(infoRow(venue||'Уточнить адрес',ready,venue?'':'delivery-route-pending'));
+    metrics.title='Нужно: '+needed+'. Подтверждено на руках: '+held+'. Привезти: '+bring+'. Неподтверждённые выдачи считаются в доставке.';
+    return {needed,held,bring};
+  }
+  function venueTable(groups){
+    const table=el('table','delivery-site-table');
+    const caption=el('caption','delivery-site-caption','Фотоаппараты по площадкам');
+    const head=el('thead'),top=el('tr');
+    for(const name of ['Площадка','Нужно','На руках','Привезти']){
+      const th=el('th','',name);th.scope='col';top.append(th);
     }
-    return section;
+    head.append(top);table.append(caption,head);
+    const rows=el('tbody');
+    for(const g of groups.filter(g=>g.needed.length||g.review.length)){
+      const row=el('tr'),label=el('td');
+      const btn=el('button','delivery-venue-link',venueLabel(g.venue));
+      btn.type='button';btn.title='Перейти к площадке';
+      btn.onclick=()=>document.getElementById(g.anchor)?.scrollIntoView({block:'nearest',behavior:'smooth'});
+      label.append(btn);row.append(label);
+      for(const [n,cls] of [[g.needed.length,'need'],[g.held.length,'held'],[g.ready.length,'bring']]){
+        row.append(el('td','delivery-site-number '+cls,String(n)));
+      }
+      rows.append(row);
+    }
+    table.append(rows);
+    const wrap=el('div','delivery-site-overview');wrap.append(table);
+    return wrap;
   }
   const draw=data=>{
     list.replaceChildren();
+    metrics.replaceChildren();
     const entries=data.rows||[];
     const ignored=entries.filter(x=>x.status==='excluded');
     count.textContent='';
@@ -151,13 +176,17 @@ function installDeliverySchedule(){
       venues.get(row.venue).push(row);
     }
     const ordered=[...venues].map(([venue,people])=>({
-      venue,people,ready:people.filter(needsCamera)
-    })).sort((a,b)=>Number(!a.ready.length)-Number(!b.ready.length)||
+      venue,people,needed:people.filter(x=>x.status==='delivery'),
+      ready:people.filter(needsCamera),held:people.filter(hasCamera),review:people.filter(needsReview)
+    })).sort((a,b)=>b.ready.length-a.ready.length||
       Number(!a.venue)-Number(!b.venue)||a.venue.localeCompare(b.venue,'ru'));
-    const readyCount=ordered.reduce((total,group)=>total+group.ready.length,0);
-    count.textContent=readyCount?'К доставке: '+readyCount:'';
-    for(const {venue,people,ready} of ordered){
+    const {bring}=renderMetrics(ordered);
+    count.textContent='Привезти · '+bring;
+    ordered.forEach((g,i)=>g.anchor='delivery-place-'+i);
+    list.append(venueTable(ordered));
+    for(const {venue,people,ready,held,review,anchor} of ordered){
       const section=el('section','delivery-group');
+      section.id=anchor;
       const heading=el('h4','delivery-group-head');
       const hasPlan=venue||people.some(row=>row.status==='no_camera'||row.assignment);
       const title=el(hasPlan?'button':'span','delivery-venue');
@@ -177,11 +206,9 @@ function installDeliverySchedule(){
       }
       heading.append(title);
       section.append(heading);
-      const held=people.filter(hasCamera);
-      const review=people.filter(needsReview);
       if(ready.length)section.append(infoRow('Привезти',ready,'delivery-priority'));
       if(held.length)section.append(infoRow('На руках',held,'delivery-held',true));
-      if(review.length)section.append(infoRow('Проверить',review,'delivery-review'));
+      if(review.length)section.append(infoRow('Уточнить запись',review,'delivery-review'));
       if(!ready.length&&!held.length&&!review.length){
         section.append(el('div','delivery-muted','Без отметок «Ф»'));
       }
@@ -192,7 +219,6 @@ function installDeliverySchedule(){
       skip.append(el('summary','','Отсутствуют · '+ignored.length));
       skip.append(el('p','delivery-names',names(ignored)));list.append(skip);
     }
-    list.append(renderSummary(ordered,readyCount));
   };
   const reload=(force=false)=>{
     if(!toggleAccess())return;
@@ -289,101 +315,82 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
       content.append(el('p','delivery-muted','Загрузите Excel заново для полного состава.'));
     }
     const days=calendar.map((_,i)=>offset(data.start,i));
-    const people=new Map(),colors=new Map();
+    const groups=new Map();
     for(const row of data.rows||[]){
-      const key=JSON.stringify([row.person,row.department]);
+      if(row.status==='excluded')continue;
+      const venue=row.venue||'Площадка не указана';
+      if(!groups.has(venue))groups.set(venue,new Map());
+      const people=groups.get(venue), key=JSON.stringify([row.person,row.department]);
       if(!people.has(key))people.set(key,{name:row.person,department:row.department,days:new Map()});
-      const assignments=people.get(key).days;
-      if(!assignments.has(row.work_date))assignments.set(row.work_date,[]);
-      assignments.get(row.work_date).push(row);
-      if(row.status!=='excluded'&&row.venue&&validColor(row.venue_color)){
-        if(!colors.has(row.venue))colors.set(row.venue,new Set());
-        colors.get(row.venue).add(row.venue_color);
-      }
+      const shifts=people.get(key).days;
+      if(!shifts.has(row.work_date))shifts.set(row.work_date,[]);
+      shifts.get(row.work_date).push(row);
     }
-    const visiblePeople=[...people.values()].filter(person=>[...person.days.values()]
-      .some(rows=>rows.some(row=>row.status!=='excluded')));
-    if(!visiblePeople.length){
+    if(!groups.size){
       content.append(el('p','delivery-muted','На эту неделю назначений нет.'));
       return;
     }
+    const colorOf=rows=>rows.find(r=>validColor(r.venue_color))?.venue_color||'';
     const marker=color=>{
-      const item=el('span','staff-color');
-      if(color)item.style.backgroundColor=color;
-      item.setAttribute('aria-hidden','true');
-      return item;
+      const node=el('span','staff-color');
+      if(color)node.style.backgroundColor=color;
+      node.setAttribute('aria-hidden','true');
+      return node;
     };
-    const colorFor=row=>validColor(row.venue_color)?row.venue_color:colors.get(row.venue)?.values().next().value;
-    const legend=el('ul','staff-legend');
-    const venues=new Map();
-    for(const person of visiblePeople){
-      for(const rows of person.days.values()){
-        for(const row of rows){
-          if(row.status==='excluded')continue;
-          const label=row.venue||'Площадка не указана';
-          if(!venues.has(label))venues.set(label,new Set());
-          venues.get(label).add(colorFor(row)||'');
+    const ordered=[...groups].sort(([a],[b])=>
+      Number(a==='Площадка не указана')-Number(b==='Площадка не указана')||a.localeCompare(b,'ru'));
+    const fragment=document.createDocumentFragment();
+    for(const [index,[venue,people]] of ordered.entries()){
+      const section=el('details','staff-venue-group');section.open=index<3;
+      const staff=[...people.values()].sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.department.localeCompare(b.department,'ru'));
+      const shifts=staff.flatMap(person=>[...person.days.values()].flat());
+      const header=el('summary','staff-venue-header');
+      header.append(marker(colorOf(shifts)),el('strong','staff-venue-title',venue),el('span','staff-venue-count',staff.length+' чел.'));
+      section.append(header);
+      const table=el('table','staff-grid');
+      table.setAttribute('aria-label','График площадки '+venue);
+      const thead=el('thead'),head=el('tr'),first=el('th','','Сотрудник');
+      first.scope='col';head.append(first);
+      days.forEach((day,i)=>{
+        const th=el('th',day===selected?'staff-today':'');
+        th.scope='col';th.title=formatDate(day);
+        th.append(el('span','',calendar[i]),el('small','',day.slice(8,10)));head.append(th);
+      });
+      thead.append(head);table.append(thead);
+      const grid=el('tbody'),detail=el('p','staff-selection');detail.setAttribute('aria-live','polite');
+      let active;
+      for(const person of staff){
+        const tr=el('tr'),name=el('th','staff-name',person.name);
+        name.scope='row';name.title=person.name+' · '+person.department;tr.append(name);
+        for(const day of days){
+          const td=el('td',day===selected?'staff-today':'');
+          const rows=person.days.get(day)||[];
+          if(rows.length){
+            const slot=el('button','staff-slot');
+            slot.type='button';slot.setAttribute('aria-pressed','false');
+            const hasPhoto=rows.some(r=>r.status==='delivery');
+            slot.append(marker(colorOf(rows)));
+            if(hasPhoto)slot.append(el('span','staff-photo-flag','Ф'));
+            const notes=[...new Set(rows.map(r=>r.assignment).filter(Boolean))];
+            const description=person.name+' · '+formatDate(day)+' · '+venue+
+              (hasPhoto?' · фотоаппарат':'')+(notes.length?' · '+notes.join(', '):'');
+            slot.title=description;slot.setAttribute('aria-label',description);
+            slot.onclick=()=>{
+              active?.setAttribute('aria-pressed','false');
+              active=slot;slot.setAttribute('aria-pressed','true');
+              detail.textContent=description;
+            };
+            td.append(slot);
+          }else td.append(el('span','staff-empty','—'));
+          tr.append(td);
         }
+        grid.append(tr);
       }
+      table.append(grid);
+      const scroll=el('div','staff-scroll');scroll.append(table);
+      section.append(scroll,detail);fragment.append(section);
     }
-    for(const [venue,swatches] of [...venues].sort(([a],[b])=>a.localeCompare(b,'ru'))){
-      const item=el('li');
-      for(const color of swatches)item.append(marker(color));
-      item.append(el('span','',venue));
-      legend.append(item);
-    }
-    const detail=el('p','staff-selection');
-    detail.setAttribute('aria-live','polite');
-    let selectedSlot;
-    const table=el('table','staff-grid');
-    table.setAttribute('aria-label','График сотрудников на неделю');
-    const head=el('thead'),headRow=el('tr');
-    const nameHeader=el('th','','Сотрудник');nameHeader.scope='col';headRow.append(nameHeader);
-    days.forEach((day,i)=>{
-      const th=el('th',day===selected?'staff-today':'');
-      th.scope='col';
-      th.title=formatDate(day);
-      th.append(el('span','',calendar[i]),el('small','',day.slice(8,10)));
-      headRow.append(th);
-    });
-    head.append(headRow);
-    const grid=el('tbody');
-    visiblePeople.sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.department.localeCompare(b.department,'ru'));
-    for(const person of visiblePeople){
-      const line=el('tr');
-      const name=el('th','',person.name);name.scope='row';name.title=person.department;line.append(name);
-      for(const day of days){
-        const cell=el('td',day===selected?'staff-today':'');
-        const rows=person.days.get(day)||[];
-        const shifts=rows.filter(row=>row.status!=='excluded');
-        if(shifts.length){
-          const slot=el('button','staff-slot');
-          slot.type='button';
-          const locations=[...new Set(shifts.map(row=>row.venue||'Площадка не указана'))];
-          const description=person.name+' · '+formatDate(day)+' · '+locations.join(', ');
-          slot.title=description;
-          slot.setAttribute('aria-label',description);
-          slot.setAttribute('aria-pressed','false');
-          const swatches=new Set(shifts.map(colorFor));
-          for(const color of swatches)slot.append(marker(color));
-          slot.onclick=()=>{
-            selectedSlot?.setAttribute('aria-pressed','false');
-            selectedSlot=slot;
-            slot.setAttribute('aria-pressed','true');
-            detail.textContent=description;
-          };
-          cell.append(slot);
-        }else{
-          cell.append(el('span','staff-empty',rows.length?'·':'—'));
-        }
-        line.append(cell);
-      }
-      grid.append(line);
-    }
-    table.append(head,grid);
-    const scroller=el('div','staff-scroll');
-    scroller.append(table);
-    content.append(legend,detail,scroller);
+    content.append(fragment);
   }
   async function load(force=false){
     if(!panel.open||!permitted())return;
