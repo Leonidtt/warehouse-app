@@ -351,6 +351,22 @@ def register_delivery_schedule(app,get_user,transaction,audit):
                 FROM delivery_schedule_notes WHERE work_date=?""",(work_date,))]
         return {'date':work_date,'rows':rows,'notes':notes,'meta':dict(meta) if meta else None}
 
+    @app.get('/api/delivery-schedule/week')
+    def staff_week(work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
+        require_admin(x_init_data)
+        try:
+            start=work_date-timedelta(days=work_date.weekday())
+            end=start+timedelta(days=6)
+        except OverflowError:
+            raise HTTPException(400,'Некорректная дата')
+        with transaction() as conn:
+            meta=conn.execute('SELECT first_date,last_date,format_version FROM delivery_schedule_meta WHERE id=1').fetchone()
+            rows=[dict(row) for row in conn.execute("""SELECT work_date,person,department,
+                venue,venue_color,status FROM delivery_schedule
+                WHERE work_date BETWEEN ? AND ?""",(start.isoformat(),end.isoformat()))]
+        return {'start':start.isoformat(),'end':end.isoformat(),'rows':rows,
+                'meta':dict(meta) if meta else None}
+
     @app.put('/api/delivery-schedule/venue-notes')
     def update_venue_notes(notes:VenueDeliveryNotes,work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
         user=require_admin(x_init_data)
