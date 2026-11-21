@@ -1929,6 +1929,13 @@ def catalog_refinements_styles():
     return FileResponse(_PWA_DIR / "catalog_refinements.css",media_type="text/css",
         headers={"Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"})
 
+@app.get("/beta_appearance.css", include_in_schema=False)
+def beta_appearance_styles():
+    return FileResponse(
+        _PWA_DIR / "beta_appearance.css", media_type="text/css",
+        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+    )
+
 def warehouse_versioned_html():
     html=(_PWA_DIR / "index.html").read_text(encoding="utf-8")
     return html.replace("</head>",'<meta name="warehouse-app-version" content="'+_WAREHOUSE_VERSION+'"></head>',1)
