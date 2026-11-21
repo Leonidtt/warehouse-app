@@ -258,7 +258,9 @@ function installRelease182(){
   const name=field('add-name'),photo=field('add-photo'),code=$('add-code'),codeRow=code.parentElement,gen=codeRow.querySelector('button');codeRow.classList.add('r182-code-row');codeRow.replaceChildren(code,gen);gen.textContent='Сгенерировать';code.removeAttribute('style');gen.removeAttribute('style');
   const codeSection=section('Код товара',codeRow,$('qr-preview-box'));codeSection.classList.add('r182-code-section');
   const category=field('add-category'),location=field('add-location');
-  const equipmentLocation=pair(category,location);
+  const fixedRoom=el('div','r182-office7-fixed','Хранение: Офис 7');
+  fixedRoom.setAttribute('role','note');
+  const equipmentLocation=pair(category,fixedRoom);
   const basics=section('Основное',name,equipmentLocation,codeSection);type.after(basics);
   const eq=$('equipment-fields'),cons=$('consumable-fields'),parts=['body','lens','flash','acc','add'];
   const eqInfo=section('Оборудование',field('add-serial-number'),field('add-price-eq'));
@@ -331,7 +333,7 @@ function installRelease182(){
     if(kind!==previousKind){
       previousKind=kind;
       if(equipment){
-        equipmentLocation.append(category,location);
+        equipmentLocation.append(category,fixedRoom);
         basics.append(equipmentLocation,codeSection);
         extras.append(photo);
       }else{

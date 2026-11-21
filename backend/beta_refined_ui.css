@@ -280,3 +280,21 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
 @media(prefers-reduced-motion:reduce){
   #screen-main .r182-overview .r182-total { transition:none; }
 }
+
+
+/* Fixed location for equipment; supplies keep normal location choice. */
+.r182-office7-fixed {
+  display:flex;align-items:center;min-height:43px;
+  padding:10px 12px;border:1px solid var(--ref-line);
+  border-radius:11px;background:var(--ref-surface);
+  color:var(--text-muted);font-size:12px;line-height:1.35;font-weight:640;
+}
+#room-items .room-item-card.beta-fixed-office {
+  grid-template-columns:42px minmax(0,1fr) 12px;
+}
+#room-items .room-item-card.beta-fixed-office .room-item-checkbox{display:none}
+@media(max-width:380px){
+  #room-items .room-item-card.beta-fixed-office {
+    grid-template-columns:39px minmax(0,1fr) 10px;
+  }
+}
