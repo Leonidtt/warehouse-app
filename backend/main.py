@@ -37,6 +37,11 @@ from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import effective_user, is_standalone_flash, register_184
 from release_v185 import register_185, deny_blocked
+from flash_lifecycle import (
+    standalone_flash,flash_budget,flash_number,ensure_flash_tables,
+    migrate_flash_inventory,archive_flash_code,update_flash_identity,
+    restore_flash,register_flash_lifecycle
+)
 from release_v183 import register_183
 from owner_backup import register_owner_backup
 from snapshot_export import register_snapshot_export
@@ -61,7 +66,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.14"
+APP_VERSION = "18.5.15"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -292,6 +297,7 @@ if not os.path.exists("/data"):
     except: pass
 
 prepare_migration(DB_PATH, APP_VERSION)
+prepare_migration(DB_PATH,'flash-identity-20261121')
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -914,7 +920,10 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
     actor=check_admin(x_init_data)
     validate_item_fields(req.name,req.kind,req.min_stock,[req.price,req.price_body,req.price_lens,req.price_flash,req.price_acc,req.price_add])
     req.name=req.name.strip(); req.category=req.category.strip()
-    if req.kind=="equipment" and not req.budget_tag.strip(): req.budget_tag=budget_for_equipment_name(req.name)
+    if standalone_flash(req.category,req.name,req.kind):
+        req.budget_tag=flash_budget(req.budget_tag)
+    elif req.kind=="equipment" and not req.budget_tag.strip():
+        req.budget_tag=budget_for_equipment_name(req.name)
     buyout_total = buyout_remaining = None
     if req.buyout is not None and (req.buyout.total is not None or req.buyout.remaining is not None):
         if req.kind != "equipment" or not req.buyout_status.strip():
@@ -934,7 +943,14 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
         existing = active_item(conn, code)
         if existing["kind"] != req.kind:
             raise HTTPException(409, "Тип существующего товара менять нельзя")
-        if new_code != code:
+        was_flash=standalone_flash(existing["category"],existing["name"],existing["kind"])
+        will_flash=standalone_flash(req.category,req.name,req.kind)
+        if was_flash != will_flash:
+            raise HTTPException(409, "Нельзя изменить тип «вспышка» через обычное редактирование")
+        if was_flash:
+            req.category="Вспышки"
+            new_code,req.name=update_flash_identity(conn,existing,req.budget_tag,"budget-change")
+        if new_code != code and not was_flash:
             if conn.execute("SELECT 1 FROM items WHERE code=?", (new_code,)).fetchone():
                 raise HTTPException(409, "Этот код уже используется")
             for table in ("stock", "bookings", "comments", "checkouts", "movements", "writeoffs",
@@ -979,7 +995,8 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
                 new_code, req.name, req.kind, req.min_stock, req.price,
                 req.kit_body, req.kit_lens, req.kit_flash, req.kit_acc, req.kit_add,
                 req.price_body, req.price_lens, req.price_flash, req.price_acc, req.price_add,
-                req.budget_tag, req.serial_number, req.buyout_status, req.category, code
+                req.budget_tag, req.serial_number, req.buyout_status, req.category,
+                new_code if was_flash else code
             ))
         if buyout_total is not None:
             conn.execute("""INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents)
@@ -1025,18 +1042,26 @@ def mark_lost(code: str, x_init_data: Optional[str] = Header(None)):
 def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     with transaction() as conn:
-        active_item(conn,code)
-        if conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone(): raise HTTPException(409,"Сначала верните оборудование")
-        conn.execute("UPDATE items SET is_archived=1 WHERE code=?",(code,))
-        audit(conn,actor,"Архивирование",code)
-    return {"status":"ok"}
+        item=active_item(conn,code)
+        if conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone():
+            raise HTTPException(409,"Сначала верните оборудование")
+        archived_code=code
+        if standalone_flash(item["category"],item["name"],item["kind"]):
+            archived_code=archive_flash_code(conn,item,"ordinary",actor=actor)
+        conn.execute("UPDATE items SET is_archived=1 WHERE code=?",(archived_code,))
+        audit(conn,actor,"Архивирование",code if archived_code==code else f"{code} → {archived_code}")
+    return {"status":"ok","archived_code":archived_code}
 
 @app.post("/api/items")
 async def create_item(code: str = Form(""), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), code_prefix: str = Form(""), unit: str = Form("шт."), supplier: str = Form(""), notes: str = Form(""), x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     validate_item_fields(name,kind,min_stock,[price,price_body,price_lens,price_flash,price_acc,price_add])
     code=code.strip(); name=name.strip(); category=category.strip()
-    if kind=="equipment" and not budget_tag.strip(): budget_tag=budget_for_equipment_name(name)
+    flash=standalone_flash(category,name,kind)
+    if flash:
+        budget_tag=flash_budget(budget_tag)
+    elif kind=="equipment" and not budget_tag.strip():
+        budget_tag=budget_for_equipment_name(name)
     if code and not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
     if quantity<0: raise HTTPException(400,"Количество не может быть отрицательным")
     if kind=="consumable":
@@ -1066,9 +1091,14 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
             location = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
             location_id = location["id"] if location else 1
         valid_location(conn, location_id)
-        code = code or next_item_code(conn, code_prefix)
-        if conn.execute("SELECT 1 FROM items WHERE code=?", (code,)).fetchone():
-            raise HTTPException(400, "Код уже существует")
+        if flash:
+            number,code=flash_number(conn,budget_tag)
+            name=str(number)
+            category="Вспышки"
+        else:
+            code=code or next_item_code(conn,code_prefix)
+        if conn.execute("SELECT 1 FROM items WHERE code=? COLLATE NOCASE",(code,)).fetchone():
+            raise HTTPException(409,"Код уже существует")
         conn.execute("""INSERT INTO items (
             code, name, kind, min_stock, photo, price,
             kit_body, kit_lens, kit_flash, kit_acc, kit_add,
@@ -1086,7 +1116,7 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
             conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (category,))
         audit(conn, actor, "Создание товара", code)
         audit_buyout(conn, actor, code, name, "", buyout_status.strip())
-    return {"status": "ok", "code": code}
+    return {"status": "ok", "code": code, "name": name}
 
 @app.get("/api/checkout/recipients")
 def checkout_recipients(x_init_data: Optional[str] = Header(None)):
@@ -1429,13 +1459,27 @@ def dashboard(x_init_data: Optional[str] = Header(None)):
 def archived_items(x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     with transaction() as conn:
-        return [dict(r) for r in conn.execute('SELECT code,name,kind,category FROM items WHERE is_archived=1 ORDER BY name')]
+        ensure_flash_tables(conn)
+        return [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.kind,i.category,
+            d.reason AS archive_reason,d.buyer_name AS buyer_name,
+            d.old_code AS original_code,d.archived_at AS archive_date
+            FROM items i LEFT JOIN equipment_archive_details d ON d.item_code=i.code
+            WHERE i.is_archived=1 ORDER BY COALESCE(d.archived_at,i.created_at) DESC,i.id DESC""")]
 
 @app.post('/api/archive/{code}/restore')
 def restore_item(code: str,x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     with transaction() as conn:
-        if not conn.execute('UPDATE items SET is_archived=0 WHERE code=? AND is_archived=1',(code,)).rowcount: raise HTTPException(404,'Товар не найден в архиве')
+        ensure_flash_tables(conn)
+        item=conn.execute("SELECT * FROM items WHERE code=? AND is_archived=1",(code,)).fetchone()
+        if not item: raise HTTPException(404,"Товар не найден в архиве")
+        disposed=conn.execute("SELECT reason FROM equipment_archive_details WHERE item_code=?",(code,)).fetchone()
+        if disposed and disposed["reason"]=="buyout":
+            raise HTTPException(409,"Выкупленную технику нельзя восстановить обычным способом")
+        if standalone_flash(item["category"],item["name"],item["kind"]):
+            code=restore_flash(conn,item)
+        else:
+            conn.execute("UPDATE items SET is_archived=0 WHERE code=?",(code,))
         audit(conn,actor,'Восстановление товара',code)
     return {'status':'ok'}
 
@@ -1906,6 +1950,10 @@ register_release(app, get_user, contextmanager_session)
 register_183(app, get_user, check_admin, transaction, active_item, valid_location, _move_one, audit, notify_admin_action)
 register_184(app, get_user, real_user, contextmanager_session, transaction, web_digest, list_items)
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
+register_flash_lifecycle(app,check_admin,transaction,active_item,audit)
+with transaction() as conn:
+    flash_result=migrate_flash_inventory(conn)
+    print("Main flash numbering migration:",json.dumps(flash_result,ensure_ascii=False),flush=True)
 with transaction() as conn:
     migration = 'legacy-guest-contacts-2026-11-20'
     if not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (migration,)).fetchone():
