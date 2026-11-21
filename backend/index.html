@@ -895,11 +895,18 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function haptic(type = 'light') { try { tg.HapticFeedback.impactOccurred(type); } catch(e) {} }
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
+            if (!container) return;
+            while (container.children.length >= 2) container.firstElementChild.remove();
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
+            toast.className = 'toast ' + (type === 'error' ? 'error' : 'success');
+            toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+            toast.textContent = String(message);
             container.appendChild(toast);
-            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+            setTimeout(() => {
+                if (!toast.isConnected) return;
+                toast.classList.add('beta-toast-out');
+                setTimeout(() => toast.remove(), 180);
+            }, 2300);
         }
         function notify(msg) { showToast(msg, 'error'); }
 
@@ -1789,10 +1796,18 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                         if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
                         if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${escapeOwnerText(item.holder)}</span>`;
 
-                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${escapeOwnerText(item.code)}" ${item.is_on_hand?"disabled":""} onchange="toggleSelectItem(${jsArg17(item.code)}, this)"><div class="room-item-content" onclick="openItem(${jsArg17(item.code)})"><div class="room-item-name">${escapeOwnerText(item.name)}</div><div class="room-item-meta">${escapeOwnerText(item.code)} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div></div>`; 
+                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${escapeOwnerText(item.code)}" ${item.is_on_hand?"disabled":""} onchange="toggleSelectItem(${jsArg17(item.code)}, this)"><div class="room-item-media" data-code="${escapeOwnerText(item.code)}" onclick="openItem(${jsArg17(item.code)})"></div><div class="room-item-content" onclick="openItem(${jsArg17(item.code)})"><div class="room-item-name">${escapeOwnerText(item.name)}</div><div class="room-item-meta">${escapeOwnerText(item.code)} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div><span class="room-item-tail" aria-hidden="true">›</span></div>`; 
                     });
                 } else { html = "<p>В этой комнате пусто.</p>"; }
                 list.innerHTML = html; 
+                if (typeof window.betaMyPhoto === 'function') {
+                    // Reuse cached/lazy item photography. Never fetch the stock again.
+                    const byCode=new Map(allItems.map(item=>[item.code,item]));
+                    for(const media of list.querySelectorAll('.room-item-media')){
+                        const item=byCode.get(media.dataset.code);
+                        if(item)media.replaceChildren(window.betaMyPhoto(item));
+                    }
+                }
                 setTimeout(updateBatchUI, 0);
             } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(e.message)}</p>`; } 
         }
@@ -2068,28 +2083,70 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); showToast("В архиве"); backToMain(); } catch (e) { notify(e.message); } 
         }
         
-        async function showItemHistory() { 
-            showScreen("screen-item-history"); 
-            const list = document.getElementById("item-history-list"); list.innerHTML = "<p>Загрузка...</p>"; 
-            try { 
-                const logs = await api(`/api/history`); 
-                const filtered = logs.filter(l => l.item_code === currentItem.code); 
-                if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } 
-                list.innerHTML = filtered.map(l => {
-                    let text = "";
-                    if (l.type === 'checkout') {
-                        if (l.taken_for) text = `<b>Выдал:</b> ${escapeOwnerText(l.user_name)} <b>Кому:</b> ${escapeOwnerText(l.taken_for)}`;
-                        else text = `<b>Взял:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'return') {
-                        text = `<b>Вернул:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'move') {
-                        text = `<b>Переместил:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else {
-                        text = `<b>Списал:</b> ${escapeOwnerText(l.user_name)}`;
-                    }
-                    return `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${text} (${l.quantity} шт)</div></div>`;
-                }).join(""); 
-            } catch (e) { list.innerHTML = `<p style="color:red">${escapeOwnerText(e.message)}</p>`; } 
+        function betaHistoryEntry(log, forItem=false) {
+            const entry=document.createElement('article');
+            entry.className='beta-history-entry';
+            const icon=document.createElement('span');
+            const action=(['checkout','return','move','writeoff'].includes(log.type)?log.type:'other');
+            icon.className='beta-history-mark action-'+action;
+            icon.setAttribute('aria-hidden','true');
+            icon.textContent=({checkout:'↗',return:'↙',move:'↔',writeoff:'−'})[log.type]||'·';
+            const content=document.createElement('div');
+            content.className='beta-history-detail';
+            const head=document.createElement('div');
+            head.className='beta-history-head';
+            const title=document.createElement('strong');
+            title.className='beta-history-title';
+            const operation=log.type==='checkout'?(log.taken_for?'Выдал':'Взял')
+              :({return:'Вернул',move:'Переместил',writeoff:'Списал'}[log.type]||log.type);
+            title.textContent=operation+': '+(log.user_name||'—');
+            const time=document.createElement('time');
+            time.className='beta-history-time';
+            time.textContent=String(log.date||'').replace('T',' ').slice(0,19);
+            if(log.date)time.dateTime=String(log.date);
+            head.append(title,time);
+            content.append(head);
+            if(!forItem){
+                const meta=document.createElement('div');
+                meta.className='beta-history-meta';
+                meta.textContent=[log.name||log.item_code||'Товар',
+                    log.quantity!=null?String(log.quantity)+' шт.':''].filter(Boolean).join(' · ');
+                content.append(meta);
+            } else if(log.quantity!=null){
+                const amount=document.createElement('div');
+                amount.className='beta-history-meta';
+                amount.textContent=String(log.quantity)+' шт.';
+                content.append(amount);
+            }
+            if(log.taken_for){
+                const recipient=document.createElement('div');
+                recipient.className='beta-history-target';
+                recipient.textContent='Кому: '+log.taken_for;
+                content.append(recipient);
+            }
+            entry.append(icon,content);
+            return entry;
+        }
+
+        async function showItemHistory() {
+            showScreen('screen-item-history');
+            const list=document.getElementById('item-history-list');
+            list.classList.remove('beta-history-feed');
+            list.textContent='Загрузка…';
+            try {
+                const code=currentItem?.code;
+                const logs=await api('/api/history');
+                const rows=logs.filter(log=>log.item_code===code);
+                list.replaceChildren();
+                list.classList.toggle('beta-history-feed',rows.length>0);
+                if(!rows.length){list.textContent='Нет истории по этому товару';return}
+                const fragment=document.createDocumentFragment();
+                for(const log of rows)fragment.append(betaHistoryEntry(log,true));
+                list.append(fragment);
+            }catch(error){
+                list.classList.remove('beta-history-feed');
+                list.textContent=error.message||'Не удалось загрузить историю';
+            }
         }
 
         function renderActions() { 
@@ -2687,7 +2744,20 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
         async function showHistory(){showScreen('screen-history');$('history-list').textContent='Загрузка…';try{history17=await api('/api/history');renderHistory17()}catch(e){$('history-list').textContent=e.message}}
-        function renderHistory17(){const box=$('history-list'),q=$('history-query').value.toLowerCase(),d=$('history-date').value;box.replaceChildren();for(const l of history17.filter(l=>(!$('history-type182')?.value||l.type===$('history-type182').value)&&(!d||l.date?.startsWith(d))&&[l.name,l.item_code,l.user_name,l.taken_for].join(' ').toLowerCase().includes(q))){const type={checkout:l.taken_for?'Выдал':'Взял',return:'Вернул',move:'Переместил',writeoff:'Списал'}[l.type]||l.type;card17(box,`${type}: ${l.user_name||'—'}`,`${l.name} · ${l.quantity} шт.\n${l.taken_for?'Кому: '+l.taken_for+'\n':''}${l.date}`)}if(!box.children.length)box.textContent='Ничего не найдено'}
+        function renderHistory17(){
+            const box=$('history-list'),query=$('history-query').value.toLowerCase();
+            const day=$('history-date').value,action=$('history-type182')?.value||'';
+            const rows=history17.filter(log=>(!action||log.type===action)
+                &&(!day||log.date?.startsWith(day))
+                &&[log.name,log.item_code,log.user_name,log.taken_for]
+                    .join(' ').toLowerCase().includes(query));
+            box.replaceChildren();
+            box.classList.toggle('beta-history-feed',rows.length>0);
+            if(!rows.length){box.textContent='Ничего не найдено';return}
+            const fragment=document.createDocumentFragment();
+            for(const log of rows)fragment.append(betaHistoryEntry(log));
+            box.append(fragment);
+        }
         function scan17(callback,multi=false){if(tg.initData&&tg.showScanQrPopup){try{tg.showScanQrPopup({text:multi?'Сканируйте товары. Закройте сканер, когда закончите.':'Наведите на QR товара'},v=>{if(v)callback(v.trim());return !multi});return}catch(e){}}const {o,b}=overlay17('Сканирование QR');const input=field17(b,'Код товара / USB-сканер');function accept(){if(!input.value.trim())return;callback(input.value.trim());input.value='';if(!multi)o.remove()}btn17(b,'Найти',accept);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();accept()}});input.focus();if('BarcodeDetector' in window&&navigator.mediaDevices?.getUserMedia)btn17(b,'Открыть камеру',async()=>{let detector;try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){throw Error('Камера не поддерживает QR в этом браузере')}const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});if(!o.isConnected){stream.getTracks().forEach(t=>t.stop());return}const video=document.createElement('video');video.srcObject=stream;video.playsInline=true;video.muted=true;video.style.width='100%';b.append(video);await video.play();let last='',lastAt=0,busy=false;const tick=setInterval(async()=>{if(!o.isConnected){clearInterval(tick);stream.getTracks().forEach(t=>t.stop());return}if(busy)return;busy=true;try{const rows=await detector.detect(video);const code=rows[0]?.rawValue?.trim();if(code&&(code!==last||Date.now()-lastAt>1800)){last=code;lastAt=Date.now();callback(code);if(!multi)o.remove()}}catch(e){}finally{busy=false}},250)});else card17(b,'Камера браузера здесь недоступна','Используйте обычный QR-сканер или введите код вручную.');}
 
         function scanQr(){scan17(openItem)}
@@ -2824,6 +2894,10 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
     const item=nav.querySelector('.nav-item.active:not(.hidden)');
     if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){if(nav.classList.contains('beta-tab-motion'))nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
     const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
+    if(!document.body.classList.contains('web-mode')) {
+      const clearance=Math.max(82,Math.ceil(window.innerHeight-base.top));
+      document.documentElement.style.setProperty('--beta-dock-clearance',clearance+'px');
+    }
     if(!r.width||!r.height)return;
     if(!navReady)capsule.style.transition='none';
     capsule.style.width=r.width+'px';capsule.style.height=r.height+'px';
