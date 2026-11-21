@@ -38,6 +38,7 @@ from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import active_checkout_rows, effective_user, held_camera_count, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
+from fixed_office7 import office7_location_id, consolidate_office7_stock
 from owner_backup import register_owner_backup
 from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
@@ -247,6 +248,7 @@ DELIVERY_ROSTER_RELEASE = "18.5.9-beta-delivery"
 if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
     prepare_migration(DB_PATH, DELIVERY_ROSTER_RELEASE)
+    prepare_migration(DB_PATH, "18.6.0-beta-office7")
 init_db(DB_PATH)
 
 def seed_beta_demo_items(db_path):
@@ -287,6 +289,19 @@ def seed_beta_demo_items(db_path):
     print(f"Beta demo fixtures: created {created} test items", flush=True)
 
 seed_beta_demo_items(DB_PATH)
+
+# Archive the Beta database before the first location correction.
+with sqlite3.connect(DB_PATH,timeout=15) as office_conn:
+    office_conn.row_factory=sqlite3.Row
+    office_conn.execute("BEGIN IMMEDIATE")
+    office_conn.execute("CREATE TABLE IF NOT EXISTS warehouse_release_meta(version TEXT PRIMARY KEY)")
+    if not office_conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",
+            ("18.6.0-beta-office7",)).fetchone():
+        count=consolidate_office7_stock(office_conn)
+        office_conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",
+                            ("18.6.0-beta-office7",))
+        print("Beta Office 7 available equipment aligned:",count,flush=True)
+    office_conn.commit()
 
 def verify_init_data(init_data: str, token: str) -> dict:
     try:
@@ -749,20 +764,20 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
     items = conn.execute("SELECT s.item_code, s.quantity FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (location_id,)).fetchall()
     checkouts = conn.execute("SELECT c.item_code, u.full_name, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
-    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
+    item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, kind, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
     
     result_items = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
-        data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
+        data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "kind": detail.get("kind", "equipment"), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
         
     for c in checkouts:
         detail = item_details.get(c["item_code"], {})
         holder_name = c["full_name"] or c["taken_for"] or "—"
-        data = {"code": c["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": holder_name}
+        data = {"code": c["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "kind": detail.get("kind", "equipment"), "quantity": 0, "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": True, "holder": holder_name}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
         
@@ -1018,7 +1033,9 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
             raise HTTPException(400, "У оборудования должен быть уникальный код на каждую единицу")
 
     with transaction() as conn:
-        if location_id == 0:
+        if kind == "equipment":
+            location_id = office7_location_id(conn,create=True)
+        elif location_id == 0:
             location = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
             location_id = location["id"] if location else 1
         valid_location(conn, location_id)
@@ -1154,20 +1171,25 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
     with transaction() as conn:
         co=conn.execute("SELECT id,location_id FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone()
         if not co: raise HTTPException(400,"Не выдано")
+        item=active_item(conn,code)
+        destination=office7_location_id(conn,create=True) if item["kind"]=="equipment" else co["location_id"]
         conn.execute("UPDATE checkouts SET returned_at=CURRENT_TIMESTAMP,returned_by=? WHERE id=?",(user["tg_id"],co["id"]))
-        conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,1) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+1",(code,co["location_id"]))
+        conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,1) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+1",(code,destination))
     return {"status":"ok"}
 
 @app.post("/api/move")
 def move_item(req: MoveRequest, x_init_data: Optional[str] = Header(None)):
-    user=get_user(x_init_data)
+    user=check_admin(x_init_data)
     with transaction() as conn: _move_one(conn,user,req.code,req.from_location,req.to_location,req.quantity)
     return {"status":"ok"}
 
 
 def _move_one(conn,user,code,source,dest,quantity):
     if quantity<=0 or source==dest: raise HTTPException(400,"Проверьте количество и помещения")
-    active_item(conn,code); valid_location(conn,source); valid_location(conn,dest)
+    item=active_item(conn,code)
+    if item["kind"]=="equipment":
+        raise HTTPException(409,"Оборудование закреплено за «Офисом 7». Доступны выдача и возврат.")
+    valid_location(conn,source); valid_location(conn,dest)
     row=conn.execute("SELECT quantity FROM stock WHERE item_code=? AND location_id=?",(code,source)).fetchone()
     if not row or row[0]<quantity: raise HTTPException(400,"Недостаточно товара")
     conn.execute("UPDATE stock SET quantity=quantity-? WHERE item_code=? AND location_id=?",(quantity,code,source))
@@ -1177,7 +1199,7 @@ def _move_one(conn,user,code,source,dest,quantity):
 
 @app.post("/api/move_batch")
 def move_batch(req: BatchMoveRequest, x_init_data: Optional[str] = Header(None)):
-    user=get_user(x_init_data); errors=[]; count=0
+    user=check_admin(x_init_data); errors=[]; count=0
     with transaction() as conn:
         for code in dict.fromkeys(req.codes):
             try: _move_one(conn,user,code,req.from_location,req.to_location,1); count+=1
@@ -1424,6 +1446,7 @@ def apply_warehouse_snapshot(path, actor):
             WHERE c.returned_at IS NULL
         """).fetchall()
         tables = import_snapshot(conn, path, DB_PATH)
+        consolidate_office7_stock(conn)
         apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
         conn.execute("DELETE FROM checkout_handoffs")

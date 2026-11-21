@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from warehouse_v18 import label_dimensions
 from release_v182 import label_image
+from fixed_office7 import office7_location_id
 
 
 class BatchAction(BaseModel):
@@ -86,9 +87,11 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
         changes, notices = [], []
         with transaction() as conn:
             items = [active_item(conn,code) for code in codes]
-            if action in ('move','copy','stock'):
+            if action in ('move','stock') or (action=='copy' and any(i['kind']=='consumable' for i in items)):
                 if req.location is None: raise HTTPException(400,'Выберите помещение')
                 valid_location(conn,req.location)
+            if action=='move' and any(i['kind']=='equipment' for i in items):
+                raise HTTPException(409,'Оборудование закреплено за «Офисом 7». Перемещение недоступно.')
             if action == 'move':
                 if req.source is None or req.source == req.location: raise HTTPException(400,'Выберите разные помещения')
                 valid_location(conn,req.source)
@@ -133,7 +136,8 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                     cols=('name','kind','min_stock','photo','price','kit_body','kit_lens','kit_flash','kit_acc','kit_add','price_body','price_lens','price_flash','price_acc','price_add','budget_tag','category')
                     conn.execute(f'INSERT INTO items(code,{",".join(cols)}) SELECT ?,{",".join(cols)} FROM items WHERE code=?',(new,code))
                     conn.execute('INSERT INTO item_metadata(code,unit,supplier,notes) SELECT ?,unit,supplier,notes FROM item_metadata WHERE code=?',(new,code))
-                    conn.execute('INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?)',(new,req.location,1 if kind=='equipment' else 0))
+                    destination=office7_location_id(conn,create=True) if kind=='equipment' else req.location
+                    conn.execute('INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?)',(new,destination,1 if kind=='equipment' else 0))
                     audit(conn,actor,'Массовое копирование: '+code,new)
                     changes.append(new); continue
                 elif action == 'stock':
