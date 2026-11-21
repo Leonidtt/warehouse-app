@@ -2001,6 +2001,8 @@ def register_main_asset(filename, media_type):
 
 
 register_main_asset("catalog_refinements.js", "text/javascript")
+register_main_asset("flash_lifecycle_ui.js", "text/javascript")
+register_main_asset("flash_lifecycle_ui.css", "text/css")
 for filename in ("catalog_refinements.css", "beta_appearance.css", "beta_refined_ui.css"):
     register_main_asset(filename, "text/css")
 
