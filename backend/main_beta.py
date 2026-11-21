@@ -243,8 +243,10 @@ def init_db(db_path):
     init_return_reminders(conn)
     conn.commit(); conn.close()
 
+DELIVERY_ROSTER_RELEASE = "18.5.9-beta-delivery"
 if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
+    prepare_migration(DB_PATH, DELIVERY_ROSTER_RELEASE)
 init_db(DB_PATH)
 
 def seed_beta_demo_items(db_path):
@@ -1855,6 +1857,7 @@ register_184(app, get_user, real_user, contextmanager_session, transaction, web_
 register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_ADMIN_ID)
 with transaction() as conn:
     init_delivery_schedule(conn)
+    conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES (?)", (DELIVERY_ROSTER_RELEASE,))
 register_delivery_schedule(app, get_user, transaction, audit)
 with transaction() as conn:
     budget_migration = "beta-equipment-budgets-2026-11-20"

@@ -1,4 +1,4 @@
-"""Import weekly Moscow rota and show who needs a camera. Beta only."""
+"""Import weekly Moscow rota and group camera deliveries by venue. Beta only."""
 import base64
 from collections import defaultdict
 from colorsys import hls_to_rgb, rgb_to_hls
@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from xml.etree import ElementTree as ET
 from fastapi import File, Header, HTTPException, Query, UploadFile
 from openpyxl.styles.colors import COLOR_INDEX
+from pydantic import BaseModel, Field
 from release_v184 import component_counts
 
 N='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
@@ -20,9 +21,16 @@ RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 PN='{http://schemas.openxmlformats.org/package/2006/relationships}'
 A='{http://schemas.openxmlformats.org/drawingml/2006/main}'
 THEME_COLORS=('lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink')
-DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ'}
+DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
 ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
+VENUE_ROSTER_VERSION=2
+
+
+class VenueDeliveryNotes(BaseModel):
+    venue: str = Field(min_length=1, max_length=160)
+    equipment: str = Field(default='', max_length=3000)
+    supplies: str = Field(default='', max_length=3000)
 
 def plain(value):
     return ' '.join(str(value or '').split()).strip()
@@ -149,19 +157,19 @@ def venues_by_color(venues,fills,columns):
     for column in columns:
         choices=defaultdict(set)
         for row,name in venues.items():
-            for legend in ('A','C',column):
+            for legend in ('A',column):
                 color=fills.get(legend+str(row))
                 if color:
                     choices[color].add(name)
         result[column]={color:next(iter(names)) for color,names in choices.items() if len(names)==1}
     return result
 
-def classify(text):
+def classify(text,needs_camera,venue):
     if ABSENCE.search(text):
         return 'excluded'
-    if text.strip() in ('!','?','-','—'):
+    if not venue and text in ('!','?','-','—'):
         return 'review'
-    return 'delivery'
+    return 'delivery' if needs_camera else 'no_camera'
 
 def parse_xlsx_schedule(raw):
     if len(raw)>8_000_000 or not raw.startswith(b'PK'):
@@ -192,31 +200,35 @@ def parse_xlsx_schedule(raw):
                 continue
             if department not in DEPARTMENTS or not person:
                 continue
-            # Column B ("Неделя") uses Ф for a different purpose.
-            if not any(PHOTO.search(cells.get(col+str(row),'')) for col in 'CK'):
-                continue
+            # B and C are ignored. K is the roster flag; a weekday flag applies to that day only.
+            roster_photo=PHOTO.search(cells.get('K'+str(row),'')) is not None
             for col,day in days.items():
                 address=col+str(row)
                 assignment=cells.get(address,'')
+                daily_photo=PHOTO.search(assignment) is not None
+                if daily_photo and PHOTO.fullmatch(assignment):
+                    assignment=''
                 fill=fills.get(address,'')
                 colored_venue=colors[col].get(fill,'')
-                if assignment or colored_venue:
+                if assignment or colored_venue or daily_photo:
+                    venue=colored_venue or guess_venue(assignment,venues.values())
                     rows.append({
                         'work_date':day,'person':person,'department':department,
-                        'assignment':assignment,'venue':colored_venue or guess_venue(assignment,venues.values()),
+                        'assignment':assignment,'venue':venue,
                         'venue_color':fill if colored_venue else '',
-                        'status':classify(assignment),'sheet':sheet
+                        'status':classify(assignment,roster_photo or daily_photo,venue),'sheet':sheet
                     })
     if count<1 or len(coverage)<7 or len(rows)>12000:
         raise ValueError('Не удалось прочитать недельный график')
     if not rows:
-        raise ValueError('В файле нет записей с отметкой «Ф»')
-    return {'rows':rows,'first_date':min(coverage),'last_date':max(coverage)}
+        raise ValueError('В файле нет назначений сотрудников')
+    return {'rows':rows,'first_date':min(coverage),'last_date':max(coverage),
+            'format_version':VENUE_ROSTER_VERSION}
 
 def save_schedule(conn,data,source):
     rows=data['rows']
     if not isinstance(rows,list) or not 0<len(rows)<=12000:
-        raise ValueError('В файле нет записей с отметкой Ф')
+        raise ValueError('В файле нет назначений сотрудников')
     entries=[(r['work_date'],r['person'],r['department'],r['assignment'],
               r.get('venue',''),r.get('venue_color',''),r['status'],r.get('sheet','')) for r in rows]
     first_date,last_date=data['first_date'],data['last_date']
@@ -224,11 +236,12 @@ def save_schedule(conn,data,source):
     conn.executemany("""INSERT INTO delivery_schedule
         (work_date,person,department,assignment,venue,venue_color,status,sheet) VALUES (?,?,?,?,?,?,?,?)""",
         entries)
-    conn.execute("""INSERT INTO delivery_schedule_meta(id,source,updated_at,first_date,last_date)
-        VALUES(1,?,datetime('now'),?,?) ON CONFLICT(id) DO UPDATE SET
+    conn.execute("""INSERT INTO delivery_schedule_meta(id,source,updated_at,first_date,last_date,format_version)
+        VALUES(1,?,datetime('now'),?,?,?) ON CONFLICT(id) DO UPDATE SET
         source=excluded.source,updated_at=excluded.updated_at,
-        first_date=excluded.first_date,last_date=excluded.last_date""",
-        (source,first_date,last_date))
+        first_date=excluded.first_date,last_date=excluded.last_date,
+        format_version=excluded.format_version""",
+        (source,first_date,last_date,data.get('format_version',1)))
 
 def init_delivery_schedule(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule(
@@ -241,7 +254,14 @@ def init_delivery_schedule(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_delivery_schedule_date ON delivery_schedule(work_date,status)")
     conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule_meta(
         id INTEGER PRIMARY KEY CHECK(id=1),source TEXT NOT NULL,
-        updated_at TEXT NOT NULL,first_date TEXT NOT NULL,last_date TEXT NOT NULL)""")
+        updated_at TEXT NOT NULL,first_date TEXT NOT NULL,last_date TEXT NOT NULL,
+        format_version INTEGER NOT NULL DEFAULT 1)""")
+    if 'format_version' not in {column[1] for column in conn.execute('PRAGMA table_info(delivery_schedule_meta)')}:
+        conn.execute('ALTER TABLE delivery_schedule_meta ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1')
+    conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule_notes(
+        work_date TEXT NOT NULL,venue TEXT NOT NULL,
+        equipment TEXT NOT NULL,supplies TEXT NOT NULL,
+        PRIMARY KEY(work_date,venue))""")
     seed=os.environ.get('DELIVERY_SCHEDULE_BOOTSTRAP_Z64','').strip()
     if seed and not conn.execute('SELECT 1 FROM delivery_schedule_meta WHERE id=1').fetchone():
         conn.execute('SAVEPOINT delivery_schedule_seed')
@@ -291,8 +311,8 @@ def camera_availability(conn,people):
         parts=key.split()
         if not matches and len(parts)==2:
             matches=by_name[' '.join(reversed(parts))]
-        # A surname alone cannot distinguish two different contacts.
-        result[person]=None if len(matches)>1 else held.get(next(iter(matches),None),0)
+        # A missing or ambiguous contact cannot confirm whether a camera is already on hand.
+        result[person]=held[next(iter(matches))] if len(matches)==1 else None
     return result
 
 def register_delivery_schedule(app,get_user,transaction,audit):
@@ -319,7 +339,26 @@ def register_delivery_schedule(app,get_user,transaction,audit):
             for row in rows:
                 if row['status']=='delivery':
                     row['camera_count']=availability[row['person']]
-        return {'date':work_date,'rows':rows,'meta':dict(meta) if meta else None}
+            notes=[dict(row) for row in conn.execute("""SELECT venue,equipment,supplies
+                FROM delivery_schedule_notes WHERE work_date=?""",(work_date,))]
+        return {'date':work_date,'rows':rows,'notes':notes,'meta':dict(meta) if meta else None}
+
+    @app.put('/api/delivery-schedule/venue-notes')
+    def update_venue_notes(notes:VenueDeliveryNotes,work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
+        user=require_admin(x_init_data)
+        venue=plain(notes.venue)
+        day=work_date.isoformat()
+        equipment=notes.equipment.strip()
+        supplies=notes.supplies.strip()
+        with transaction() as conn:
+            if not venue or not conn.execute("""SELECT 1 FROM delivery_schedule
+                    WHERE work_date=? AND venue=? AND status<>'excluded' LIMIT 1""",(day,venue)).fetchone():
+                raise HTTPException(404,'Площадка не найдена в графике на эту дату')
+            conn.execute("""INSERT INTO delivery_schedule_notes(work_date,venue,equipment,supplies)
+                VALUES(?,?,?,?) ON CONFLICT(work_date,venue) DO UPDATE SET
+                equipment=excluded.equipment,supplies=excluded.supplies""",(day,venue,equipment,supplies))
+            audit(conn,user,'Уточнение плана площадки',day+' · '+venue)
+        return {'status':'ok'}
 
     @app.post('/api/delivery-schedule/upload')
     def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
