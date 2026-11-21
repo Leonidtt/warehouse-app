@@ -24,7 +24,7 @@ THEME_COLORS=('lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','a
 DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
 ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
-VENUE_ROSTER_VERSION=2
+VENUE_ROSTER_VERSION=3
 
 
 class VenueDeliveryNotes(BaseModel):
@@ -200,8 +200,8 @@ def parse_xlsx_schedule(raw):
                 continue
             if department not in DEPARTMENTS or not person:
                 continue
-            # B and C are ignored. K is the roster flag; a weekday flag applies to that day only.
-            roster_photo=PHOTO.search(cells.get('K'+str(row),'')) is not None
+            # A marker beside a surname may be in B, C or K, depending on the week.
+            roster_photo=any(PHOTO.search(cells.get(flag+str(row),'')) for flag in ('B','C','K'))
             for col,day in days.items():
                 address=col+str(row)
                 assignment=cells.get(address,'')
@@ -280,6 +280,43 @@ def init_delivery_schedule(conn):
         finally:
             conn.execute('RELEASE delivery_schedule_seed')
 
+    # One-off correction of the original Beta demo import, without replacing user uploads
+    # or overwriting date/venue equipment and supplies notes.
+    patch=os.environ.get('DELIVERY_ROSTER_FLAGS_Z64','').strip()
+    migration='beta-roster-surname-photo-flags-2026-11-21'
+    meta=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
+    if (patch and meta and meta['source']=='График МСК · исходная копия'
+            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(migration,)).fetchone()):
+        if len(patch)>20000:
+            raise ValueError('Roster flags payload too large')
+        decoded=zlib.decompress(base64.b64decode(patch))
+        if len(decoded)>100000:
+            raise ValueError('Roster flags expanded payload too large')
+        payload=json.loads(decoded)
+        pairs=payload.get('pairs') if isinstance(payload,dict) else None
+        if payload.get('kind')!='b-c-roster-flags' or payload.get('schema')!=1 or not isinstance(pairs,list) or len(pairs)>5000:
+            raise ValueError('Unexpected roster flags data')
+        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_roster_flag_rollback(
+            schedule_id INTEGER PRIMARY KEY,work_date TEXT NOT NULL,
+            person TEXT NOT NULL,sheet TEXT NOT NULL,previous_status TEXT NOT NULL,
+            changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+        changed=0
+        for item in pairs:
+            if not isinstance(item,list) or len(item)!=2 or not all(isinstance(v,str) and 0<len(v)<160 for v in item):
+                raise ValueError('Invalid roster flag entry')
+            sheet,person=item
+            records=conn.execute("""SELECT id,work_date,person,sheet,status FROM delivery_schedule
+                WHERE sheet=? AND person=? AND status='no_camera'""",(sheet,person)).fetchall()
+            if not records:
+                continue
+            conn.executemany("""INSERT OR IGNORE INTO delivery_roster_flag_rollback
+                (schedule_id,work_date,person,sheet,previous_status)
+                VALUES(?,?,?,?,?)""",[(r['id'],r['work_date'],r['person'],r['sheet'],r['status']) for r in records])
+            changed+=conn.execute("""UPDATE delivery_schedule SET status='delivery'
+                WHERE sheet=? AND person=? AND status='no_camera'""",(sheet,person)).rowcount
+        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(migration,))
+        print('Beta surname-side camera flags restored:',changed,flush=True)
+
 def camera_availability(conn,people):
     if not people:
         return {}
@@ -307,8 +344,11 @@ def camera_availability(conn,people):
         if held_camera_count(row)
     }
     held=defaultdict(int)
+    handed={r['checkout_id'] for r in conn.execute('SELECT checkout_id FROM checkout_handoffs')}
     for row in active_checkout_rows(conn):
-        if row['item_code'] in cameras:
+        # A checkout for somebody else is not yet in their hands until "Отдал".
+        delivered=(row['user_id']==row['giver_id'] or not row['taken_for'] or row['id'] in handed)
+        if row['item_code'] in cameras and delivered:
             index_name(row['user_id'],row['taken_for'] or row['full_name'])
             held[row['user_id']]+=1
 
