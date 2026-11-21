@@ -1418,7 +1418,7 @@ def rename_category(old: str, req: CategoryChange, x_init_data: Optional[str] = 
     actor=check_admin(x_init_data); name=req.name.strip()
     if not name or len(name)>80: raise HTTPException(400,'Название до 80 символов')
     with transaction() as conn:
-        if old.strip().casefold()=='вспышки' and name.strip().casefold()!='вспышки':
+        if (old.strip().casefold()=='вспышки') != (name.strip().casefold()=='вспышки'):
             raise HTTPException(409,"Категория «Вспышки» закреплена за нумеруемым оборудованием")
         if not conn.execute('SELECT 1 FROM categories WHERE name=?',(old,)).fetchone(): raise HTTPException(404,'Категория не найдена')
         if any(r[0].casefold()==name.casefold() and r[0]!=old for r in conn.execute('SELECT name FROM categories')): raise HTTPException(409,'Такая категория уже существует')

@@ -99,6 +99,8 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
             for item in items:
                 code = item['code']; kind=item['kind']
                 flash=standalone_flash(item['category'],item['name'],kind)
+                if action=='category' and kind=='equipment' and not flash and value.strip().casefold()=='вспышки':
+                    raise HTTPException(409,f'{code}: перевод в категорию «Вспышки» требует новой карточки')
                 if flash:
                     if action=='name':
                         raise HTTPException(409,f'{code}: название вспышки — её номер')
@@ -173,7 +175,7 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                     if action=='delete' and total:
                         raise HTTPException(409,f'{code}: нельзя удалить товар с остатком; используйте архив')
                     paid=conn.execute("SELECT remaining_cents FROM equipment_buyout_amounts WHERE item_code=?",(code,)).fetchone()
-                    if action=='archive' and paid and paid['remaining_cents']==0 and item['buyout_status']:
+                    if action in ('archive','delete') and paid and paid['remaining_cents']==0 and item['buyout_status']:
                         raise HTTPException(409,f'{code}: используйте архив «Выкуплено»')
                     if flash:
                         code=archive_flash_code(conn,item,'ordinary',actor=actor)

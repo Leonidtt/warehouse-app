@@ -288,6 +288,8 @@ def register_flash_lifecycle(app, check_admin, transaction, active_item, audit):
                 "SELECT location_id,quantity FROM stock WHERE item_code=? AND quantity<>0",(code,))]
             held=[row["id"] for row in conn.execute(
                 "SELECT id FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,))]
+            if len(held)>1 or sum(row["quantity"] for row in stocks)>1 or (held and any(row["quantity"]>0 for row in stocks)):
+                raise HTTPException(409,"Обнаружены противоречивые остатки или выдачи — сначала проверьте учёт")
             for checkout_id in held:
                 conn.execute("UPDATE checkouts SET returned_at=CURRENT_TIMESTAMP,returned_by=? WHERE id=?",
                              (actor["tg_id"],checkout_id))
