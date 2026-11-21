@@ -23,6 +23,7 @@ RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 PN='{http://schemas.openxmlformats.org/package/2006/relationships}'
 A='{http://schemas.openxmlformats.org/drawingml/2006/main}'
 THEME_COLORS=('lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink')
+FROZEN_REVIEW_DATE = date(2026, 11, 21)
 DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ','СТАЖЕРЫ П','СТАЖЁРЫ П'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
 ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
@@ -274,6 +275,14 @@ def init_delivery_schedule(conn):
         work_date TEXT NOT NULL,venue TEXT NOT NULL,
         equipment TEXT NOT NULL,supplies TEXT NOT NULL,
         PRIMARY KEY(work_date,venue))""")
+    if FROZEN_REVIEW_DATE:
+        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_review_snapshot(
+            work_date TEXT PRIMARY KEY,
+            delivery_json TEXT NOT NULL,
+            staff_json TEXT NOT NULL)""")
+        if conn.execute('SELECT 1 FROM delivery_review_snapshot WHERE work_date=?',
+                        (FROZEN_REVIEW_DATE.isoformat(),)).fetchone():
+            return
     seed=os.environ.get('DELIVERY_SCHEDULE_BOOTSTRAP_Z64','').strip()
     if seed and not conn.execute('SELECT 1 FROM delivery_schedule_meta WHERE id=1').fetchone():
         conn.execute('SAVEPOINT delivery_schedule_seed')
@@ -376,6 +385,10 @@ def init_delivery_schedule(conn):
         finally:
             conn.execute('RELEASE verified_roster')
 
+    if FROZEN_REVIEW_DATE:
+        freeze_review_snapshot(conn)
+
+
 def camera_availability(conn,people):
     if not people:
         return {}
@@ -422,53 +435,98 @@ def camera_availability(conn,people):
         result[person]=held[next(iter(matches))] if len(matches)==1 else None
     return result
 
+def delivery_data(conn,work_date):
+    meta=conn.execute('SELECT * FROM delivery_schedule_meta WHERE id=1').fetchone()
+    rows=[dict(row) for row in conn.execute("""SELECT person,department,assignment,venue,venue_color,status
+        FROM delivery_schedule WHERE work_date=? ORDER BY
+        CASE status WHEN 'delivery' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,department,person""",(work_date,))]
+    availability=camera_availability(conn,{row['person'] for row in rows if row['status']=='delivery'})
+    for row in rows:
+        if row['status']=='delivery':
+            row['camera_count']=availability[row['person']]
+    notes=[dict(row) for row in conn.execute("""SELECT venue,equipment,supplies
+        FROM delivery_schedule_notes WHERE work_date=?""",(work_date,))]
+    return {'date':work_date,'rows':rows,'notes':notes,'meta':dict(meta) if meta else None}
+
+
+def staff_data(conn,work_date):
+    start=work_date-timedelta(days=work_date.weekday())
+    end=start+timedelta(days=6)
+    meta=conn.execute('SELECT first_date,last_date,format_version FROM delivery_schedule_meta WHERE id=1').fetchone()
+    rows=[dict(row) for row in conn.execute("""SELECT work_date,person,department,
+        venue,venue_color,status,assignment FROM delivery_schedule
+        WHERE work_date BETWEEN ? AND ?""",(start.isoformat(),end.isoformat()))]
+    return {'start':start.isoformat(),'end':end.isoformat(),'rows':rows,
+            'meta':dict(meta) if meta else None}
+
+
+def freeze_review_snapshot(conn):
+    work_date=FROZEN_REVIEW_DATE.isoformat()
+    delivery=delivery_data(conn,work_date)
+    if not delivery['rows']:
+        print('Beta delivery review snapshot unavailable for '+work_date,flush=True)
+        return
+    staff=staff_data(conn,FROZEN_REVIEW_DATE)
+    delivery['review_date']=staff['review_date']=work_date
+    conn.execute('INSERT INTO delivery_review_snapshot VALUES (?,?,?)',
+                 (work_date,json.dumps(delivery,ensure_ascii=False),json.dumps(staff,ensure_ascii=False)))
+    print(f"Beta delivery review frozen for {work_date}: {len(delivery['rows'])} day rows, "
+          f"{len(staff['rows'])} week rows",flush=True)
+
+
+def can_view_delivery_schedule(user):
+    role='boss' if FROZEN_REVIEW_DATE else 'admin'
+    return bool(user.get('is_registered') and user.get('role')==role and not user.get('preview_role'))
+
+
 def register_delivery_schedule(app,get_user,transaction,audit):
-    def require_admin(init_data):
+    def require_reader(init_data):
+        if not can_view_delivery_schedule(get_user(init_data)):
+            raise HTTPException(403,'Недоступно для этой роли')
+
+    def require_editor(init_data):
         user=get_user(init_data)
         if not user.get('is_registered') or user.get('role')!='admin':
             raise HTTPException(403,'Недоступно для этой роли')
+        if FROZEN_REVIEW_DATE:
+            raise HTTPException(403,'График заморожен до согласования')
         return user
+
+    def review_snapshot(conn,key):
+        work_date=FROZEN_REVIEW_DATE.isoformat()
+        row=conn.execute('SELECT delivery_json,staff_json FROM delivery_review_snapshot WHERE work_date=?',
+                         (work_date,)).fetchone()
+        if row is None:
+            raise HTTPException(503,'Снимок графика пока недоступен')
+        return json.loads(row[key])
 
     @app.get('/api/delivery-schedule')
     def delivery_on_date(work_date:str=Query(alias='date'),x_init_data:str=Header(None)):
-        require_admin(x_init_data)
-        try:
-            if date.fromisoformat(work_date).isoformat()!=work_date:
-                raise ValueError
-        except ValueError:
-            raise HTTPException(400,'Некорректная дата')
+        require_reader(x_init_data)
         with transaction() as conn:
-            meta=conn.execute('SELECT * FROM delivery_schedule_meta WHERE id=1').fetchone()
-            rows=[dict(row) for row in conn.execute("""SELECT person,department,assignment,venue,venue_color,status
-                FROM delivery_schedule WHERE work_date=? ORDER BY
-                CASE status WHEN 'delivery' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,department,person""",(work_date,))]
-            availability=camera_availability(conn,{row['person'] for row in rows if row['status']=='delivery'})
-            for row in rows:
-                if row['status']=='delivery':
-                    row['camera_count']=availability[row['person']]
-            notes=[dict(row) for row in conn.execute("""SELECT venue,equipment,supplies
-                FROM delivery_schedule_notes WHERE work_date=?""",(work_date,))]
-        return {'date':work_date,'rows':rows,'notes':notes,'meta':dict(meta) if meta else None}
+            if FROZEN_REVIEW_DATE:
+                return review_snapshot(conn,'delivery_json')
+            try:
+                if date.fromisoformat(work_date).isoformat()!=work_date:
+                    raise ValueError
+            except ValueError:
+                raise HTTPException(400,'Некорректная дата') from None
+            return delivery_data(conn,work_date)
 
     @app.get('/api/delivery-schedule/week')
     def staff_week(work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
-        require_admin(x_init_data)
-        try:
-            start=work_date-timedelta(days=work_date.weekday())
-            end=start+timedelta(days=6)
-        except OverflowError:
-            raise HTTPException(400,'Некорректная дата')
+        require_reader(x_init_data)
         with transaction() as conn:
-            meta=conn.execute('SELECT first_date,last_date,format_version FROM delivery_schedule_meta WHERE id=1').fetchone()
-            rows=[dict(row) for row in conn.execute("""SELECT work_date,person,department,
-                venue,venue_color,status,assignment FROM delivery_schedule
-                WHERE work_date BETWEEN ? AND ?""",(start.isoformat(),end.isoformat()))]
-        return {'start':start.isoformat(),'end':end.isoformat(),'rows':rows,
-                'meta':dict(meta) if meta else None}
+            if FROZEN_REVIEW_DATE:
+                return review_snapshot(conn,'staff_json')
+            try:
+                return staff_data(conn,work_date)
+            except OverflowError:
+                raise HTTPException(400,'Некорректная дата') from None
 
     @app.put('/api/delivery-schedule/venue-notes')
     def update_venue_notes(notes:VenueDeliveryNotes,work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
-        user=require_admin(x_init_data)
+        user=require_editor(x_init_data)
         venue=plain(notes.venue)
         day=work_date.isoformat()
         equipment=notes.equipment.strip()
@@ -485,7 +543,7 @@ def register_delivery_schedule(app,get_user,transaction,audit):
 
     @app.post('/api/delivery-schedule/upload')
     def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
-        user=require_admin(x_init_data)
+        user=require_editor(x_init_data)
         if not file.filename or not file.filename.lower().endswith('.xlsx'):
             raise HTTPException(400,'Выберите файл .xlsx')
         raw=file.file.read(8000001)

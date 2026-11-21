@@ -43,7 +43,7 @@ from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
 from return_reminders import PLANS, init_return_reminders, queue_return_reminder, register_return_reminders
 from pwa_assets import render_icon_png
-from delivery_schedule import init_delivery_schedule, register_delivery_schedule
+from delivery_schedule import can_view_delivery_schedule, init_delivery_schedule, register_delivery_schedule
 
 import urllib3
 urllib3.disable_warnings()
@@ -487,7 +487,9 @@ class LogErrorRequest(BaseModel):
     error: str
 
 @app.get("/api/me")
-def get_me(x_init_data: Optional[str] = Header(None)): return get_user(x_init_data)
+def get_me(x_init_data: Optional[str] = Header(None)):
+    user=get_user(x_init_data)
+    return {**user,'can_view_delivery_schedule':can_view_delivery_schedule(user)}
 
 @app.post("/api/log_error")
 async def log_error(req: LogErrorRequest, x_init_data: Optional[str] = Header(None)):

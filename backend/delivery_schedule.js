@@ -1,4 +1,4 @@
-/* Beta: Excel rota and camera deliveries for administrators. */
+/* Beta: staff rota and camera delivery plan. */
 function installDeliverySchedule(){
   const main=document.getElementById('screen-main');
   if(!main||document.getElementById('delivery-schedule-panel'))return;
@@ -13,7 +13,7 @@ function installDeliverySchedule(){
   const heading=el('summary','delivery-heading');
   const count=el('span','delivery-count');
   heading.append(el('strong','','Что привезти'),count);
-  const body=el('div','delivery-body'),bar=el('div','delivery-bar');
+  const body=el('div','delivery-body'),bar=el('div','delivery-bar hidden');
   const prev=el('button','delivery-control delivery-arrow','‹');
   prev.type='button';prev.title='Предыдущий день';prev.setAttribute('aria-label','Предыдущий день');
   const day=el('input','delivery-date');day.type='date';day.setAttribute('aria-label','Дата доставки');
@@ -35,13 +35,13 @@ function installDeliverySchedule(){
   const activity=main.querySelector('#main-activity');
   if(activity)activity.after(panel);else main.querySelector('#items-list')?.before(panel);
   panel.classList.add('hidden');
-  let revision=0,pending=null,rendered=null;
-  const permitted=()=>!!currentUser?.is_registered&&currentUser.role==='admin';
+  let revision=0,pending=null,rendered=null,reviewDate='';
+  const permitted=()=>currentUser?.can_view_delivery_schedule===true;
   const staff=installStaffSchedule(panel,{el,localDate,offset,permitted});
   const toggleAccess=()=>{
     const show=permitted();panel.classList.toggle('hidden',!show);
     staff.setAccess(show);
-    if(!show){panel.open=false;count.textContent='';source.textContent='';list.replaceChildren();rendered=null;}
+    if(!show){panel.open=false;count.textContent='';source.textContent='';metrics.replaceChildren();list.replaceChildren();rendered=null;reviewDate='';bar.classList.add('hidden');}
     return show;
   };
   const names=(people,{showCount=false}={})=>[...people]
@@ -56,7 +56,7 @@ function installDeliverySchedule(){
     row.append(el('strong','delivery-line-label',label),el('span','delivery-names',names(people,{showCount})));
     return row;
   };
-  function showVenuePlan(date,venue,people,notes){
+  function showVenuePlan(date,venue,people,notes,readOnly){
     const {o,b}=overlay17(venueLabel(venue));
     const extras=people.filter(row=>row.status==='no_camera');
     if(extras.length){
@@ -70,6 +70,15 @@ function installDeliverySchedule(){
       b.append(detail);
     }
     if(!venue)return;
+    if(readOnly){
+      for(const [label,value] of [['Задачи по технике',notes?.equipment],['Расходники',notes?.supplies]]){
+        if(!value)continue;
+        const note=el('p','delivery-names',value);
+        note.style.whiteSpace='pre-wrap';
+        b.append(el('h3','delivery-detail-title',label),note);
+      }
+      return;
+    }
     const form=el('form','delivery-notes-form');
     const field=(label,value,placeholder)=>{
       const wrapper=el('label','delivery-note-field',label);
@@ -125,13 +134,16 @@ function installDeliverySchedule(){
     const entries=data.rows||[];
     const ignored=entries.filter(x=>x.status==='excluded');
     count.textContent='';
-    source.textContent='';
+    reviewDate=data.review_date||'';
+    bar.classList.toggle('hidden',!!reviewDate);
+    if(reviewDate)day.value=reviewDate;
+    source.textContent=reviewDate?reviewDate.split('-').reverse().join('.')+' · Шаблон на согласовании':'';
     if(!data.meta){
       list.append(el('p','delivery-muted','Загрузите график через кнопку Excel.'));
       return;
     }
     day.title=data.meta.source||'Дата доставки';
-    if(data.meta.format_version<2){
+    if(!reviewDate&&data.meta.format_version<2){
       source.textContent='Загрузите Excel заново для полного состава площадок.';
     }
     if(data.date<data.meta.first_date||data.date>data.meta.last_date){
@@ -177,7 +189,7 @@ function installDeliverySchedule(){
         title.type='button';
         title.title='Состав и план · '+venueLabel(venue);
         title.setAttribute('aria-label',title.title);
-        title.onclick=()=>showVenuePlan(data.date,venue,people,notesByVenue.get(venue));
+        title.onclick=()=>showVenuePlan(data.date,venue,people,notesByVenue.get(venue),!!reviewDate);
       }
       heading.append(title);
       section.append(heading);
@@ -196,6 +208,7 @@ function installDeliverySchedule(){
   };
   const reload=(force=false)=>{
     if(!toggleAccess())return;
+    if(reviewDate&&rendered)return;
     const selected=day.value||localDate();
     day.value=selected;
     if(!force&&pending?.date===selected)return pending.promise;
@@ -213,7 +226,7 @@ function installDeliverySchedule(){
         const openSections=[...list.querySelectorAll('.delivery-ignored')].map(section=>section.open);
         draw(result);
         list.querySelectorAll('.delivery-ignored').forEach((section,index)=>{section.open=!!openSections[index]});
-        rendered={date:selected,signature};
+        rendered={date:reviewDate||selected,signature};
       }).catch(err=>{
         if(id!==revision||!permitted())return;
         rendered=null;
@@ -255,7 +268,7 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
   heading.append(el('strong','','График сотрудников'),el('span','delivery-count',''));
   const body=el('div','delivery-body');
   const bar=el('div','delivery-bar');
-  const datePicker=el('div','delivery-date-picker');
+  const datePicker=el('div','delivery-date-picker hidden');
   const previous=el('button','delivery-control delivery-arrow','‹');
   const next=el('button','delivery-control delivery-arrow','›');
   for(const [button,label] of [[previous,'Предыдущая неделя'],[next,'Следующая неделя']]){
@@ -282,6 +295,7 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
 
   function draw(data,selected){
     content.replaceChildren();
+    datePicker.classList.toggle('hidden',!!data.review_date);
     range.textContent=formatDate(data.start)+' – '+formatDate(data.end);
     if(!data.meta){
       content.append(el('p','delivery-muted','Загрузите график через Excel в блоке «Что привезти».'));
@@ -381,7 +395,8 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
       const result=await api('/api/delivery-schedule/week?date='+encodeURIComponent(day),{cache:'no-store'});
       if(revision!==request||!panel.open||!permitted())return;
       draw(result,day);
-      loaded=day;
+      if(result.review_date)dateInput.value=result.review_date;
+      loaded=dateInput.value;
     }catch(error){
       if(revision!==request||!panel.open||!permitted())return;
       loaded='';
@@ -401,6 +416,8 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
         panel.open=false;
         content.replaceChildren();
         loaded='';
+        range.textContent='';
+        datePicker.classList.add('hidden');
         ++request;
       }
     }
