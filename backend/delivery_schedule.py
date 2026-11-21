@@ -317,6 +317,51 @@ def init_delivery_schedule(conn):
         conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(migration,))
         print('Beta surname-side camera flags restored:',changed,flush=True)
 
+    # The original one-time Beta import omitted rows whose surname-side F flag
+    # was not duplicated in K. Merge these private Excel-derived rows only into
+    # the untouched initial test import; never replace a user-uploaded schedule.
+    extra=os.environ.get('DELIVERY_ROSTER_SUPPLEMENT_Z64','').strip()
+    extra_marker='beta-roster-surname-supplement-2026-11-21'
+    meta=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
+    if (extra and meta and meta['source']=='График МСК · исходная копия'
+            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(extra_marker,)).fetchone()):
+        if len(extra)>20000:
+            raise ValueError('Roster supplement payload too large')
+        raw=zlib.decompress(base64.b64decode(extra))
+        if len(raw)>180000:
+            raise ValueError('Roster supplement expanded too large')
+        payload=json.loads(raw)
+        if (not isinstance(payload,dict) or payload.get('k')!='b-c-supplement'
+                or payload.get('v')!=1 or not isinstance(payload.get('r'),list)
+                or len(payload['r'])>1500):
+            raise ValueError('Unexpected roster supplement data')
+        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_roster_supplement_rollback(
+            schedule_id INTEGER PRIMARY KEY,work_date TEXT NOT NULL,
+            person TEXT NOT NULL,sheet TEXT NOT NULL,
+            inserted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+        inserted=0
+        for record in payload['r']:
+            if (not isinstance(record,list) or len(record)!=8
+                    or not all(isinstance(v,str) and len(v)<160 for v in record)
+                    or record[6] not in ('delivery','review','excluded')
+                    or not 2020<=date.fromisoformat(record[0]).year<=2040):
+                raise ValueError('Invalid roster supplement row')
+            work_date,person,department,assignment,venue,venue_color,status,sheet=record
+            exists=conn.execute("""SELECT 1 FROM delivery_schedule
+                WHERE work_date=? AND person=? AND department=? AND sheet=? LIMIT 1""",
+                (work_date,person,department,sheet)).fetchone()
+            if exists:
+                continue
+            cursor=conn.execute("""INSERT INTO delivery_schedule
+                (work_date,person,department,assignment,venue,venue_color,status,sheet)
+                VALUES(?,?,?,?,?,?,?,?)""",record)
+            conn.execute("""INSERT INTO delivery_roster_supplement_rollback
+                (schedule_id,work_date,person,sheet) VALUES(?,?,?,?)""",
+                (cursor.lastrowid,work_date,person,sheet))
+            inserted+=1
+        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(extra_marker,))
+        print('Beta surname-side roster events merged:',inserted,flush=True)
+
 def camera_availability(conn,people):
     if not people:
         return {}
