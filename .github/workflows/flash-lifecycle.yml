@@ -30,3 +30,10 @@ jobs:
         run: python -m unittest discover -s backend/tests -p 'test_flash_lifecycle.py' -v
       - name: Check client JavaScript syntax
         run: node --check backend/flash_lifecycle_ui.js
+      - name: Install Main runtime dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
+      - name: Cold-start Main on a throwaway SQLite database
+        run: |
+          sudo mkdir -p /data
+          sudo chown "$USER":"$USER" /data
+          python backend/tests/smoke_main_bootstrap.py
