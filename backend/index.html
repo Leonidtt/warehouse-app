@@ -2887,7 +2887,21 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
   const tabOrder=['screen-main','screen-platforms','screen-th','screen-rooms','screen-settings'];
   const nav=document.querySelector('.bottom-nav');
   const capsule=document.createElement('span');capsule.className='beta-tab-capsule';capsule.setAttribute('aria-hidden','true');
-  if(nav)nav.prepend(capsule);
+  if(nav){
+    nav.setAttribute('role','navigation');
+    nav.setAttribute('aria-label','Основные разделы');
+    for(const item of nav.querySelectorAll('.nav-item')){
+      item.setAttribute('role','button');
+      item.tabIndex=0;
+      item.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();item.click();
+        }
+      });
+      item.addEventListener('click',()=>haptic('light'),{passive:true});
+    }
+    nav.prepend(capsule);
+  }
   let navReady=false,navFrame=0,lastNav=null;
   function positionCapsule(){
     if(!nav)return;
