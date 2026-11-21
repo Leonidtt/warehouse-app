@@ -189,7 +189,8 @@ class FlashLifecycleTests(unittest.TestCase):
     def test_buyout_archive_closes_checkout_as_sale_and_releases_slot(self):
         self.item("кц1","1",budget="КЦ",model="Godox V1")
         self.db.execute("INSERT INTO equipment_buyout_amounts VALUES('кц1',10000,0)")
-        self.db.execute("INSERT INTO stock VALUES('кц1',3,1)")
+        # Checked-out equipment has zero available units in the storeroom.
+        self.db.execute("INSERT INTO stock VALUES('кц1',3,0)")
         self.db.execute("INSERT INTO checkouts(item_code,user_id) VALUES('кц1',9)")
         self.db.commit()
         client=self.client()
