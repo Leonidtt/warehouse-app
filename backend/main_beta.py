@@ -1416,10 +1416,22 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
 
 def apply_warehouse_snapshot(path, actor):
     with transaction() as conn:
+        confirmed_handoffs = conn.execute("""
+            SELECT h.handed_at,c.id,c.item_code,c.user_id,c.giver_id,c.taken_at,c.taken_for
+            FROM checkout_handoffs h JOIN checkouts c ON c.id=h.checkout_id
+            WHERE c.returned_at IS NULL
+        """).fetchall()
         tables = import_snapshot(conn, path, DB_PATH)
         apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
         conn.execute("DELETE FROM checkout_handoffs")
+        # Warehouse snapshots omit handoffs. Keep Beta confirmations for the same open checkout.
+        conn.executemany("""
+            INSERT INTO checkout_handoffs(checkout_id,handed_at)
+            SELECT id,? FROM checkouts
+            WHERE id=? AND item_code=? AND user_id=? AND giver_id IS ?
+                AND taken_at IS ? AND taken_for IS ? AND returned_at IS NULL
+        """,confirmed_handoffs)
         conn.execute("DELETE FROM equipment_buyout_amounts")
         conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
         audit(conn, actor, "Импорт снимка", "Складские данные из Основы")

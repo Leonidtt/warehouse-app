@@ -7,11 +7,16 @@
     groupFor(item){
       if(item?.kind==='consumable')return 'consumable';
       const category=normal(item?.category),name=normal(item?.name);
+      if(/ноутбук|лэптоп|макбук|macbook|laptop/.test(category)||
+        /^(ноутбук|лэптоп|макбук|macbook|apple macbook|thinkpad|lenovo thinkpad|dell latitude)(?:\s|$)/u.test(name))return 'laptop';
+      if(/принтер|фотопечать|термосублимац|printer/.test(category)||
+        /^(принтер|фотопринтер|dnp|hiti|mitsubishi)(?:\s|$)/u.test(name)||
+        /(?:^|\s)(?:ds[- ]?620|ds[- ]?820|rx[- ]?1(?:hs)?|qw[- ]?410)(?:\s|$)/u.test(name))return 'printer';
       if(/вспыш|строб|спидлайт/.test(category)||/^(?:(?:фото)?вспышк\p{L}*|speedlite|speedlight)(?:\s|$)/u.test(name))return 'flash';
-      if(/объектив|оптик|линз/.test(category)||/^(?:объектив\p{L}*|линз\p{L}*|lens)(?:\s|$)/u.test(name))return 'lens';
+      if(/объектив|оптик|линз/.test(category)||/^(?:объектив\p{L}*|линз\p{L}*|lens)(?:\s|$)/u.test(name))return '';
       if(hasPart(item?.kit_body)||/фотокамер|фотоаппарат|фотокомплект|зеркалк|беззеркалк|тушк|камер/.test(category)||
-        /^(комплект|фотоаппарат|камера|тушка|canon eos|sony a[0-9]|nikon d[0-9]|fujifilm x)/iu.test(name))return 'camera';
-      return 'accessory';
+        /^(фотокомплект|комплект|фотоаппарат|камера|тушка|canon eos|sony a[0-9]|nikon d[0-9]|fujifilm x)/iu.test(name))return 'camera';
+      return '';
     },
     refresh(){}
   };
@@ -22,10 +27,11 @@
     const toolbar=main.querySelector('.r184-tools');
     if(!toolbar)return;
     const allPanels=main.querySelectorAll('.r184-filter-panel');
+    const filterPanel=allPanels[0];
     const sortSelect=allPanels[1]?.querySelector('select');
     const filters=toolbar.querySelectorAll('.r184-icon');
     const filterButton=filters[0];
-    if(!sortSelect||!filterButton)return;
+    if(!filterPanel||!sortSelect||!filterButton)return;
     const e=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
     sortSelect.classList.add('r186-sort-select');
     sortSelect.setAttribute('aria-label','Сортировка товаров');
@@ -36,23 +42,23 @@
     toolbar.replaceChildren(sortSelect,filterButton);
     const icons={
       camera:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M7 7l2-3h6l2 3"/><circle cx="12" cy="13.5" r="3.5"/>',
-      lens:'<rect x="5" y="3" width="14" height="18" rx="4"/><path d="M5 7h14M5 17h14"/><circle cx="12" cy="12" r="3.5"/>',
-      flash:'<rect x="5" y="3" width="14" height="18" rx="3"/><path d="m13 6-4 7h4l-2 5 5-8h-4z"/>',
-      accessory:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 4v16M4 10h16M13 15h4"/>',
+      flash:'<path d="m13 2-8 12h6l-1 8 9-12h-6l1-8z"/>',
+      laptop:'<rect x="4" y="4" width="16" height="12" rx="2"/><path d="M4 16l-2 3a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1l-2-3M10 17.8h4"/>',
+      printer:'<path d="M6 8V3h12v5M6 17H3V9h18v8h-3M6 14h12v7H6zM16 11h2"/>',
       consumable:'<path d="m3 8 9-5 9 5v12H3zM3 8l9 5 9-5M12 13v7M9 3v7"/>'
     };
-    const options=[['camera','Фотокамеры'],['lens','Объективы'],['flash','Вспышки'],['accessory','Аксессуары','Аксессуары / допы'],['consumable','Расходники']];
+    const options=[['camera','Фотокомплекты'],['flash','Вспышки'],['laptop','Ноутбуки'],['printer','Принтеры'],['consumable','Расходники']];
     const bar=e('div','r186-family-bar');bar.id='warehouse-category-switcher';
     bar.setAttribute('role','group');bar.setAttribute('aria-label','Быстрые категории товаров');
     const buttons=new Map();
-    for(const [key,label,accessibleLabel=label]of options){
+    for(const [key,label]of options){
       const b=e('button','r186-family');
       b.type='button';
-      b.title=accessibleLabel;
-      b.setAttribute('aria-label',accessibleLabel);
+      b.title=label;
+      b.setAttribute('aria-label',label);
       const icon=e('span','r186-family-illustration');
       icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+icons[key]+'</svg>';
-      b.append(icon,e('span','r186-family-label',label));
+      b.append(icon);
       b.onclick=()=>{
         view.selected=view.selected===key?'':key;
         const kind=document.getElementById('filter-kind');
@@ -63,7 +69,7 @@
       };
       bar.append(b);buttons.set(key,b);
     }
-    toolbar.after(bar);
+    filterPanel.after(bar);
     function refresh(){
       for(const [key,b]of buttons){
         const selected=view.selected===key;
