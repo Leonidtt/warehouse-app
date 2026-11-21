@@ -1968,6 +1968,16 @@ def catalog_refinements_styles():
     return FileResponse(_PWA_DIR / "catalog_refinements.css",media_type="text/css",
         headers={"Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"})
 
+@app.get("/beta_reference_design.js", include_in_schema=False)
+def beta_reference_design_script():
+    return FileResponse(_PWA_DIR / "beta_reference_design.js", media_type="text/javascript",
+        headers={"Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"})
+
+@app.get("/beta_reference_design.css", include_in_schema=False)
+def beta_reference_design_styles():
+    return FileResponse(_PWA_DIR / "beta_reference_design.css", media_type="text/css",
+        headers={"Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"})
+
 @app.get("/beta_refined_ui.css", include_in_schema=False)
 def beta_refined_ui_styles():
     return FileResponse(_PWA_DIR / "beta_refined_ui.css", media_type="text/css",

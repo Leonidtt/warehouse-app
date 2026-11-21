@@ -205,6 +205,7 @@
     <script src="/delivery_schedule.js?v=11"></script>
     <link rel="stylesheet" href="/catalog_refinements.css?v=4">
     <script src="/catalog_refinements.js?v=4"></script>
+<script src="/beta_reference_design.js?v=1"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -336,6 +337,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
     <link rel="stylesheet" href="/beta_refined_ui.css?v=6">
+<link rel="stylesheet" href="/beta_reference_design.css?v=1">
 </head>
 <body>
 
@@ -2845,6 +2847,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         installRelease185();
         if (typeof installDeliverySchedule === 'function') installDeliverySchedule();
         if (typeof installCatalogRefinements === 'function') installCatalogRefinements();
+        if (typeof installBetaReferenceDesign === 'function') installBetaReferenceDesign();
 
 (function installBetaMotion(){
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
