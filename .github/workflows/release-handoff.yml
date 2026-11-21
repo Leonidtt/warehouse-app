@@ -1,0 +1,34 @@
+name: Сводка релиза Основы
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  handoff:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'deployment_status' &&
+       github.event.deployment.environment == 'vigilant-art / production' &&
+       github.event.deployment_status.creator.login == 'railway-app[bot]' &&
+       github.event.deployment_status.state == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+          persist-credentials: false
+      - name: Сверить версию и входы Основы
+        run: python3 scripts/release_handoff.py --wait 60 > handoff.json
+      - name: Сохранить результат для следующего чата
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: warehouse-handoff-${{ github.event.deployment.sha || github.sha }}
+          path: handoff.json
+          if-no-files-found: error
+          retention-days: 30
