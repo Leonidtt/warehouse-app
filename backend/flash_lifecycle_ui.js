@@ -219,35 +219,6 @@ function installFlashIdentityUI(){
       await loadDashboard17();
     },'ok');
   };
-  const originalShowExtra=showExtra;
-  showExtra=async function(section){
-    const result=await originalShowExtra.apply(this,arguments);
-    if(section==='archive'){
-      const box=$('extra-content');
-      if(box){
-        const cards=[...box.querySelectorAll('.card')];
-        // Original archive rows have a restore action. Bought items are marked
-        // explicitly and cannot be restored through the normal archive UI.
-        try{
-          const rows=await api('/api/archive');
-          for(const [index,item]of rows.entries()){
-            const card=cards[index];
-            if(!card||!item.archive_reason)continue;
-            const note=document.createElement('div');note.className='r196-archive-note';
-            note.textContent=item.archive_reason==='buyout'
-              ?'Выкуплено · '+(item.buyer_name||'—')+' · '+(item.archive_date||'')
-              :'Архивировано · прежний код '+item.original_code;
-            const restore=card.querySelector('button');
-            if(restore){
-              restore.before(note);
-              if(item.archive_reason==='buyout')restore.remove();
-            }else card.append(note);
-          }
-        }catch(e){console.warn('Archive labels unavailable:',e)}
-      }
-    }
-    return result;
-  };
   refreshModels().catch(()=>{});
   syncAdd();
 }

@@ -297,7 +297,6 @@ if not os.path.exists("/data"):
     except: pass
 
 prepare_migration(DB_PATH, APP_VERSION)
-prepare_migration(DB_PATH,'flash-identity-20261121')
 init_db(DB_PATH)
 
 def verify_init_data(init_data: str, token: str) -> dict:
