@@ -9,7 +9,6 @@ function installDeliverySchedule(){
     return [val('year'),val('month'),val('day')].join('-');
   };
   const offset=(iso,n)=>{const day=new Date(iso+'T12:00:00Z');day.setUTCDate(day.getUTCDate()+n);return day.toISOString().slice(0,10);};
-  const display=iso=>new Date(iso+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'long',weekday:'long',timeZone:'UTC'});
   const panel=el('details','card delivery-panel');panel.id='delivery-schedule-panel';
   const heading=el('summary','delivery-heading');
   const count=el('span','delivery-count');
@@ -20,17 +19,16 @@ function installDeliverySchedule(){
   const day=el('input','delivery-date');day.type='date';day.setAttribute('aria-label','Дата доставки');
   const next=el('button','secondary compact delivery-arrow','›');
   next.type='button';next.title='Следующий день';next.setAttribute('aria-label','Следующий день');
-  const today=el('button','secondary compact','Сегодня'),tomorrow=el('button','secondary compact','Завтра');
-  today.type='button';tomorrow.type='button';
   day.value=localDate();
-  bar.append(prev,day,next,today,tomorrow);
-  const source=el('div','delivery-source'),list=el('div','delivery-list'),actions=el('div','delivery-actions');
-  const refresh=el('button','secondary compact','Обновить список');
-  const upload=el('button','secondary compact','Загрузить новый Excel');
+  const source=el('div','delivery-source'),list=el('div','delivery-list');
+  const refresh=el('button','secondary compact delivery-refresh','↻');
+  refresh.title='Обновить список';refresh.setAttribute('aria-label',refresh.title);
+  const upload=el('button','secondary compact','Excel');
+  upload.title='Загрузить новый Excel';upload.setAttribute('aria-label',upload.title);
   const file=el('input','hidden');file.type='file';file.accept='.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   refresh.type='button';upload.type='button';
-  actions.append(refresh,upload,file);
-  body.append(bar,actions,source,list);panel.append(heading,body);
+  bar.append(prev,day,next,refresh,upload,file);
+  body.append(bar,source,list);panel.append(heading,body);
   const activity=main.querySelector('#main-activity');
   if(activity)activity.after(panel);else main.querySelector('#items-list')?.before(panel);
   panel.classList.add('hidden');
@@ -41,28 +39,32 @@ function installDeliverySchedule(){
     if(!show){panel.open=false;count.textContent='';source.textContent='';list.replaceChildren();rendered=null;}
     return show;
   };
-  const card=row=>{
-    const item=el('article','delivery-person');
-    const top=el('div','delivery-person-top');
-    top.append(el('strong','',row.person),el('span','delivery-department',row.department));
-    item.append(top);
-    let label;
-    if(row.status==='delivery'){
-      if(row.camera_count===null)label='Нужен по графику · уточнить наличие';
-      else if(row.camera_count>0){
-        label='Камера на руках';
-        item.classList.add('delivery-held');
-      }else label='Привезти фотоаппарат';
-    }else if(row.status==='no_camera')label='Без отметки о фотоаппарате';
-    else if(row.status==='review')label='Назначение требует уточнения';
-    if(label)item.append(el('div','delivery-equipment',label));
-    if(row.assignment&&row.assignment!==row.venue){
-      item.append(el('p','delivery-note','По графику: '+row.assignment));
-    }
-    return item;
+  const names=(people,{showCount=false}={})=>[...people]
+    .sort((a,b)=>a.person.localeCompare(b.person,'ru'))
+    .map(row=>row.person+(showCount&&row.camera_count>1?' ×'+row.camera_count:'')).join(', ');
+  const needsCamera=row=>row.status==='delivery'&&row.camera_count===0;
+  const hasCamera=row=>row.status==='delivery'&&row.camera_count>0;
+  const needsReview=row=>row.status==='review'||(row.status==='delivery'&&row.camera_count===null);
+  const venueLabel=venue=>venue||'Площадку уточнить';
+  const infoRow=(label,people,css='',showCount=false)=>{
+    const row=el('div',('delivery-line '+css).trim());
+    row.append(el('strong','delivery-line-label',label),el('span','delivery-names',names(people,{showCount})));
+    return row;
   };
-  function editVenueNotes(date,venue,notes){
-    const {o,b}=overlay17(venue+' · техника и расходники');
+  function showVenuePlan(date,venue,people,notes){
+    const {o,b}=overlay17(venueLabel(venue));
+    const extras=people.filter(row=>row.status==='no_camera');
+    if(extras.length){
+      b.append(el('h3','delivery-detail-title','Без отметки «Ф»'),el('p','delivery-names',names(extras)));
+    }
+    const assignments=people.filter(row=>row.assignment&&row.assignment!==venue);
+    if(assignments.length){
+      const detail=el('details','delivery-more');
+      detail.append(el('summary','','Примечания графика'));
+      assignments.forEach(row=>detail.append(el('p','',row.person+' · '+row.assignment)));
+      b.append(detail);
+    }
+    if(!venue)return;
     const form=el('form','delivery-notes-form');
     const field=(label,value,placeholder)=>{
       const wrapper=el('label','delivery-note-field',label);
@@ -100,20 +102,31 @@ function installDeliverySchedule(){
       }
     };
   }
+  function renderSummary(venues,readyCount){
+    const section=el('section','delivery-summary');
+    section.append(el('h4','','Куда привезти фотоаппараты'));
+    if(!readyCount){
+      section.append(el('p','delivery-muted','Нет подтверждённых доставок'));
+      return section;
+    }
+    for(const {venue,ready} of venues){
+      if(ready.length)section.append(infoRow(venueLabel(venue),ready));
+    }
+    return section;
+  }
   const draw=data=>{
     list.replaceChildren();
     const entries=data.rows||[];
-    const ready=entries.filter(x=>x.status==='delivery'&&x.camera_count===0);
     const ignored=entries.filter(x=>x.status==='excluded');
-    count.textContent=ready.length?'Привезти: '+ready.length:'';
+    count.textContent='';
+    source.textContent='';
     if(!data.meta){
-      source.textContent='График ещё не загружен.';
-      list.append(el('p','delivery-muted','Администратор может загрузить Excel-файл.'));
+      list.append(el('p','delivery-muted','Загрузите график через кнопку Excel.'));
       return;
     }
-    source.textContent=display(data.date)+' · '+data.meta.source;
+    day.title=data.meta.source||'Дата доставки';
     if(data.meta.format_version<2){
-      source.append(el('p','delivery-muted','Загрузите Excel заново, чтобы увидеть полный состав площадок.'));
+      source.textContent='Загрузите Excel заново для полного состава площадок.';
     }
     if(data.date<data.meta.first_date||data.date>data.meta.last_date){
       list.append(el('p','delivery-muted','Дата вне графика: '+data.meta.first_date+' — '+data.meta.last_date));
@@ -130,9 +143,15 @@ function installDeliverySchedule(){
       if(!venues.has(row.venue))venues.set(row.venue,[]);
       venues.get(row.venue).push(row);
     }
-    const ordered=[...venues].sort(([a],[b])=>a&&b?a.localeCompare(b,'ru'):Number(!a)-Number(!b));
-    for(const [venue,people] of ordered){
+    const ordered=[...venues].map(([venue,people])=>({
+      venue,people,ready:people.filter(needsCamera)
+    })).sort((a,b)=>Number(!a.ready.length)-Number(!b.ready.length)||
+      Number(!a.venue)-Number(!b.venue)||a.venue.localeCompare(b.venue,'ru'));
+    const readyCount=ordered.reduce((total,group)=>total+group.ready.length,0);
+    count.textContent=readyCount?'Привезти: '+readyCount:'';
+    for(const {venue,people,ready} of ordered){
       const section=el('section','delivery-group');
+      const header=el('div','delivery-group-head');
       const title=el('h4','delivery-venue');
       const color=people.find(x=>/^#[0-9a-f]{6}$/i.test(x.venue_color||''))?.venue_color;
       if(color){
@@ -141,28 +160,33 @@ function installDeliverySchedule(){
         dot.setAttribute('aria-hidden','true');
         title.append(dot);
       }
-      title.append(el('span','',(venue||'Площадка не определена')+' · '+people.length));
-      section.append(title);
-      if(venue){
-        const notes=notesByVenue.get(venue);
-        const equipment=el('div','delivery-venue-notes');
-        for(const [label,value] of [['Задачи по технике',notes?.equipment],['Расходники',notes?.supplies]]){
-          equipment.append(el('strong','',label),el('p','',value||'Не указаны'));
-        }
-        const edit=el('button','secondary compact','Уточнить план');
-        edit.type='button';
-        edit.onclick=()=>editVenueNotes(data.date,venue,notes);
-        equipment.append(edit);
-        section.append(equipment);
+      title.append(el('span','',venueLabel(venue)));
+      header.append(title);
+      if(venue||people.some(row=>row.status==='no_camera'||row.assignment)){
+        const plan=el('button','secondary compact delivery-plan','Состав');
+        plan.type='button';
+        plan.title='Состав и план · '+venueLabel(venue);
+        plan.setAttribute('aria-label',plan.title);
+        plan.onclick=()=>showVenuePlan(data.date,venue,people,notesByVenue.get(venue));
+        header.append(plan);
       }
-      people.forEach(row=>section.append(card(row)));
+      section.append(header);
+      const held=people.filter(hasCamera);
+      const review=people.filter(needsReview);
+      if(ready.length)section.append(infoRow('Привезти',ready,'delivery-priority'));
+      if(held.length)section.append(infoRow('На руках',held,'delivery-held',true));
+      if(review.length)section.append(infoRow('Проверить',review,'delivery-review'));
+      if(!ready.length&&!held.length&&!review.length){
+        section.append(el('div','delivery-muted','Без отметок «Ф»'));
+      }
       list.append(section);
     }
     if(ignored.length){
       const skip=el('details','delivery-ignored');
-      skip.append(el('summary','','Не в доставке · '+ignored.length));
-      ignored.forEach(x=>skip.append(card(x)));list.append(skip);
+      skip.append(el('summary','','Отсутствуют · '+ignored.length));
+      skip.append(el('p','delivery-names',names(ignored)));list.append(skip);
     }
+    list.append(renderSummary(ordered,readyCount));
   };
   const reload=(force=false)=>{
     if(!toggleAccess())return;
@@ -197,21 +221,19 @@ function installDeliverySchedule(){
   const select=iso=>{day.value=iso;reload();};
   prev.onclick=()=>select(offset(day.value||localDate(),-1));
   next.onclick=()=>select(offset(day.value||localDate(),1));
-  today.onclick=()=>select(localDate());
-  tomorrow.onclick=()=>select(offset(localDate(),1));
   day.onchange=()=>reload();
   refresh.onclick=()=>reload(true);
   upload.onclick=()=>file.click();
   file.onchange=async()=>{
     const selected=file.files?.[0];if(!selected||!permitted())return;
-    upload.disabled=true;upload.textContent='Загружаем…';
+    upload.disabled=true;upload.setAttribute('aria-busy','true');
     try{
       const form=new FormData();form.append('file',selected,selected.name);
       const result=await api('/api/delivery-schedule/upload',{method:'POST',body:form});
       if(typeof showToast==='function')showToast('График обновлён: '+result.rows+' записей');
       await reload(true);
     }catch(error){if(typeof notify==='function')notify(error.message);else alert(error.message);}
-    finally{file.value='';upload.disabled=false;upload.textContent='Загрузить новый Excel';}
+    finally{file.value='';upload.disabled=false;upload.removeAttribute('aria-busy');}
   };
   panel.addEventListener('toggle',()=>{if(panel.open&&permitted())reload();});
   const initBefore=init;
