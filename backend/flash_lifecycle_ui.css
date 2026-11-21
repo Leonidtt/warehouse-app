@@ -1,0 +1,54 @@
+/* Flash lifecycle — familiar form controls, one clear mandatory budget. */
+#add-name[readonly],#add-code[readonly],
+#screen-edit-item.r196-flash-mode #edit-name[readonly],
+#screen-edit-item.r196-flash-mode #edit-code[readonly]{
+  background:var(--skeleton-bg,rgba(127,145,166,.1));
+  color:var(--text);font-variant-numeric:tabular-nums;
+}
+#create-item-modal.r196-flash-mode #add-budget-tag,
+#screen-edit-item.r196-flash-mode #edit-budget-tag{
+  border-color:color-mix(in srgb,var(--primary) 35%,var(--border));
+}
+#create-item-modal.r196-flash-mode #add-budget-tag:invalid,
+#screen-edit-item.r196-flash-mode #edit-budget-tag:invalid{
+  border-color:var(--danger,#c93a44);
+}
+.r196-model-suggestions{
+  display:flex;flex-direction:column;gap:2px;min-width:0;
+  margin:5px 0 7px;padding:4px;
+  border:1px solid var(--border);border-radius:11px;
+  background:var(--card-bg);
+  box-shadow:0 3px 10px rgba(0,0,0,.06);
+  max-height:225px;overflow-y:auto;
+}
+.r196-model-suggestions.hidden{display:none!important}
+.r196-model-choice{
+  display:block;width:100%;min-height:40px!important;
+  padding:9px 11px!important;margin:0!important;text-align:left;
+  border:0!important;border-radius:8px!important;
+  background:transparent!important;color:var(--text)!important;
+  font-size:13px!important;font-weight:520!important;
+  box-shadow:none!important;white-space:normal;
+  overflow-wrap:anywhere;
+}
+.r196-model-choice:active,.r196-model-choice:focus-visible{
+  background:var(--skeleton-bg)!important;
+}
+.r196-buyout-archive{
+  display:block;min-height:47px!important;width:100%;
+  margin:12px 0 6px!important;
+  color:var(--success,#168a50)!important;
+  border:1px solid color-mix(in srgb,var(--success,#168a50) 40%,var(--border))!important;
+  border-radius:12px!important;
+  font-size:13px!important;font-weight:680!important;
+  box-shadow:none!important;
+}
+.r196-buyout-archive.hidden{display:none!important}
+.r196-archive-note{
+  padding:5px 0 9px;
+  color:var(--text-muted);font-size:12px;line-height:1.4;
+  overflow-wrap:anywhere;
+}
+@media(prefers-reduced-motion:reduce){
+  .r196-model-choice,.r196-buyout-archive{transition:none!important}
+}
