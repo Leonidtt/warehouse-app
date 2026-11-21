@@ -4,6 +4,8 @@
   const hasPart=value=>!['','-','—','нет','none','0','n/a','без','не указан','не указана'].includes(normal(value));
   const view={
     selected:'camera',
+    takeSelected:'',
+    takeSort:'available',
     groupFor(item){
       if(item?.kind==='consumable')return 'consumable';
       const category=normal(item?.category),name=normal(item?.name);
@@ -48,17 +50,21 @@
       consumable:'<path d="m3 8 9-5 9 5v12H3zM3 8l9 5 9-5M12 13v7M9 3v7"/>'
     };
     const options=[['camera','Фотокомплекты'],['flash','Вспышки'],['laptop','Ноутбуки'],['printer','Принтеры'],['consumable','Расходники']];
+    function categoryButton(key,label){
+      const button=e('button','r186-family');
+      button.type='button';
+      button.title=label;
+      button.setAttribute('aria-label',label);
+      const icon=e('span','r186-family-illustration');
+      icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+icons[key]+'</svg>';
+      button.append(icon);
+      return button;
+    }
     const bar=e('div','r186-family-bar');bar.id='warehouse-category-switcher';
     bar.setAttribute('role','group');bar.setAttribute('aria-label','Быстрые категории товаров');
     const buttons=new Map();
     for(const [key,label]of options){
-      const b=e('button','r186-family');
-      b.type='button';
-      b.title=label;
-      b.setAttribute('aria-label',label);
-      const icon=e('span','r186-family-illustration');
-      icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+icons[key]+'</svg>';
-      b.append(icon);
+      const b=categoryButton(key,label);
       b.onclick=()=>{
         view.selected=view.selected===key?'':key;
         const kind=document.getElementById('filter-kind');
@@ -70,6 +76,61 @@
       bar.append(b);buttons.set(key,b);
     }
     filterPanel.after(bar);
+
+    const takeTools=document.getElementById('take-tools');
+    if(takeTools){
+      takeTools.setAttribute('role','group');
+      takeTools.setAttribute('aria-label','Категории и сортировка выдачи');
+      const takeButtons=options.slice(0,3).map(([key,label])=>{
+        const button=categoryButton(key,label);
+        button.onclick=()=>{
+          view.takeSelected=view.takeSelected===key?'':key;
+          updateTakeTools();
+          renderTakeItems();
+        };
+        takeTools.append(button);
+        return [key,button];
+      });
+      const orders=[
+        ['available','Свободные первыми'],
+        ['name-asc','Название: А–Я'],
+        ['name-desc','Название: Я–А']
+      ];
+      const sortButton=e('button','r186-family take-sort');
+      sortButton.type='button';
+      sortButton.setAttribute('aria-haspopup','dialog');
+      sortButton.innerHTML='<span class="r186-family-illustration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m-4-4 4 4 4-4M17 20V4m-4 4 4-4 4 4"/></svg></span>';
+      sortButton.onclick=()=>{
+        const {o,b}=overlay17('Сортировка');
+        b.setAttribute('role','dialog');
+        b.setAttribute('aria-label','Сортировка');
+        for(const [key,label] of orders){
+          const current=view.takeSort===key;
+          const option=btn17(b,label,()=>{
+            view.takeSort=key;
+            o.remove();
+            updateTakeTools();
+            renderTakeItems();
+            sortButton.focus();
+          },current?'':'secondary');
+          option.setAttribute('aria-pressed',String(current));
+        }
+        b.querySelector('button[aria-pressed="true"]')?.focus();
+      };
+      takeTools.append(sortButton);
+      function updateTakeTools(){
+        for(const [key,button]of takeButtons){
+          const active=view.takeSelected===key;
+          button.classList.toggle('active',active);
+          button.setAttribute('aria-pressed',String(active));
+        }
+        const label=orders.find(([key])=>key===view.takeSort)[1];
+        sortButton.title='Сортировка: '+label;
+        sortButton.setAttribute('aria-label',sortButton.title);
+        sortButton.classList.toggle('active',view.takeSort!=='available');
+      }
+      updateTakeTools();
+    }
     function refresh(){
       for(const [key,b]of buttons){
         const selected=view.selected===key;

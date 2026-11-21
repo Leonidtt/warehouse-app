@@ -445,7 +445,9 @@ class MoveRequest(BaseModel):
 class BatchMoveRequest(BaseModel):
     codes: List[str]; from_location: int; to_location: int
 class BatchCheckoutRequest(BaseModel):
-    codes: List[str]; taken_for: str = ""
+    codes: List[str]
+    taken_for: str = ""
+    recipient_id: Optional[int] = None
 class WriteoffRequest(BaseModel):
     code: str; location_id: int; quantity: int
 class BookingRequest(BaseModel):
@@ -1086,7 +1088,7 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         for code in dict.fromkeys(req.codes):
             conn.execute("SAVEPOINT batch_checkout")
             try:
-                _checkout_one(conn,user,code,req.taken_for)
+                _checkout_one(conn,user,code,req.taken_for,req.recipient_id)
                 success.append(code)
             except HTTPException as exc:
                 conn.execute("ROLLBACK TO batch_checkout")

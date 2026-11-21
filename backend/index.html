@@ -203,8 +203,8 @@
     <script src="/release-v185.js?v=1902"></script>
     <link rel="stylesheet" href="/delivery_schedule.css?v=9">
     <script src="/delivery_schedule.js?v=11"></script>
-    <link rel="stylesheet" href="/catalog_refinements.css?v=3">
-    <script src="/catalog_refinements.js?v=3"></script>
+    <link rel="stylesheet" href="/catalog_refinements.css?v=4">
+    <script src="/catalog_refinements.js?v=4"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -399,15 +399,16 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         </div>
     </div>
 
-    <!-- Панель массового взятия -->
-    <div id="take-batch-actions" class="floating-bar" style="border-color: var(--success);">
-        <div class="floating-btn-group">
-            <button class="ok" onclick="executeBatchTake()">Взять</button>
-            <button class="secondary" onclick="deselectAllTakeItems()">Снять</button>
-        </div>
-        <div>
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
-            <div style="font-weight: 700; font-size: 18px; color: var(--success);" id="take-selected-count">0</div>
+    <div id="take-batch-actions" class="floating-bar">
+        <div class="take-batch-layout">
+            <div class="take-batch-primary">
+                <button type="button" class="secondary" onclick="openBatchTakeFor()">Взять для</button>
+                <button type="button" onclick="executeBatchTake()">Взять себе</button>
+            </div>
+            <div class="take-batch-footer">
+                <span aria-live="polite">Выбрано <strong id="take-selected-count">0</strong></span>
+                <button type="button" class="secondary take-clear" onclick="deselectAllTakeItems()">Сбросить выбор</button>
+            </div>
         </div>
     </div>
 
@@ -513,10 +514,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         <div style="margin-top: 16px;">
             <div class="search-wrapper" id="take-search-wrapper">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper'); renderTakeItems()">
-                <span class="search-clear" onclick="clearSearch('take-search-input', 'take-search-wrapper'); renderTakeItems()">✕</span>
+                <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper')">
+                <span class="search-clear" onclick="clearSearch('take-search-input', 'take-search-wrapper')">✕</span>
             </div>
 
+            <div id="take-tools" class="take-tools"></div>
             <div id="take-items-list" class="grid-container" style="padding: 0;"></div>
         </div>
     </div>
@@ -685,7 +687,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 <div id="item-recipients" class="warehouse-recipient-options" aria-label="Получатели"></div>
             </div>
             <div class="beta-checkout-actions">
-                <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
+                <button type="button" class="secondary" value="cancel">Отмена</button>
                 <button type="submit" value="checkout">Выдать</button>
             </div>
         </form>
@@ -859,7 +861,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let cachedPlatforms = [], cachedTH = [], invScannedCodes = [], autoRefreshInterval = null;
         let moveFromLocId = null, selectedMoveRoomId = null, selectedMoveRoomName = "";
-        let selectedTakeItems = [], currentEqCategory = "";
+        let selectedTakeItems = [], currentEqCategory = "", batchTakePending = false;
         
         let currentStatsCategory = "";
         let currentStatsItems = [];
@@ -1516,14 +1518,24 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             updateTakeSelection();
             const list=$("take-items-list");
             const query=$("take-search-input").value.trim().toLowerCase();
-            let available=allItems.filter(i=>i.kind==="equipment" && !i.needs_repair).sort((a,b)=>Number(!!a.holders.length)-Number(!!b.holders.length)||a.name.localeCompare(b.name,"ru"));
-            if(query)available=available.filter(i=>[i.name,i.code,i.category,i.kit_body,i.kit_lens].some(v=>String(v||"").toLowerCase().includes(query)));
+            const catalog=window.warehouseCatalogView;
+            const family=catalog?.takeSelected;
+            const sort=catalog?.takeSort;
+            const available=allItems.filter(item=>item.kind==="equipment"&&!item.needs_repair
+                &&(!family||catalog.groupFor(item)===family)
+                &&(!query||[item.name,item.code,item.category,item.kit_body,item.kit_lens,item.kit_flash]
+                    .some(value=>String(value||"").toLowerCase().includes(query))));
+            available.sort((a,b)=>{
+                const byName=a.name.localeCompare(b.name,"ru");
+                if(sort==="name-asc")return byName;
+                if(sort==="name-desc")return -byName;
+                return Number(!canTakeItem(a))-Number(!canTakeItem(b))||byName;
+            });
             if(!available.length){list.innerHTML="<p class='meta' style='text-align:center;padding:18px'>Техника не найдена</p>";return;}
             list.innerHTML=available.map(i=>{
                 const holder=i.holders?.[0];
                 const disabled=!canTakeItem(i);
                 const selected=selectedTakeItems.includes(i.code)&&!disabled;
-                const location=(i.stocks||[]).map(s=>s.location_name).filter(Boolean).join(", ");
                 const model=String(i.kit_body||i.kit_lens||i.kit_flash||"").trim();
                 const metadata=[i.code,model,i.budget_tag].filter(Boolean).map(escapeOwnerText).join(" · ");
                 const state=holder?"У "+escapeOwnerText(holder.taken_for||holder.full_name||"сотрудника"):i.total<=0?"Нет на складе":"Свободно";
@@ -1531,13 +1543,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 const amount=components>0?components:Number(i.price)||0;
                 const price=currentUser.role==="admin"&&amount>0?'<span class="take-row-price beta-admin-price">'+money17(amount)+'</span>':"";
                 return '<div class="take-row card'+(disabled?' unavailable':'')+(selected?' selected':'')+'">'+
-                    '<input type="checkbox" class="take-checkbox" aria-label="Выбрать '+escapeOwnerText(i.name)+'" '+(selected?'checked ':'')+(disabled?'disabled ':'')+'onchange="toggleTakeSelect('+jsArg17(i.code)+', this)">'+
+                    '<input type="checkbox" class="take-checkbox" aria-label="Выбрать '+escapeOwnerText(i.name)+'" '+(selected?'checked ':'')+((disabled||batchTakePending)?'disabled ':'')+'onchange="toggleTakeSelect('+jsArg17(i.code)+', this)">'+
                     '<div class="take-row-main" onclick="openItem('+jsArg17(i.code)+')"><div class="take-row-name">'+escapeOwnerText(i.name)+'</div><div class="take-row-meta">'+metadata+'</div></div>'+
                     '<div class="take-row-side"><span class="take-row-state'+(disabled?' busy':'')+'">'+state+'</span>'+price+'</div></div>';
             }).join("");
         }
 
         function toggleTakeSelect(code, cb) {
+            if (batchTakePending) return;
             haptic('light');
             const item = allItems.find(i => i.code === code);
             if (!canTakeItem(item)) {
@@ -1552,28 +1565,56 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         }
 
         function updateTakeBatchUI() {
-            const bar = document.getElementById("take-batch-actions");
-            bar.style.display = selectedTakeItems.length ? "flex" : "none";
-            document.getElementById("take-selected-count").textContent = selectedTakeItems.length;
+            const bar = $("take-batch-actions");
+            const visible = currentScreen === "screen-take" && selectedTakeItems.length > 0;
+            bar.style.display = visible ? "flex" : "none";
+            $("screen-take").classList.toggle("take-has-selection", visible);
+            const count = $("take-selected-count");
+            const total = String(selectedTakeItems.length);
+            if (count.textContent !== total) count.textContent = total;
+            bar.querySelectorAll("button").forEach(button => { button.disabled = batchTakePending; });
         }
 
         function deselectAllTakeItems() {
+            if (batchTakePending) return;
             selectedTakeItems = [];
             renderTakeItems();
         }
 
-        async function executeBatchTake() {
-            renderTakeItems();
+        function openBatchTakeFor() {
+            updateTakeSelection();
             if (!selectedTakeItems.length) return;
+            return openCheckoutRecipient((name, id) => {
+                if (currentScreen === "screen-take") executeBatchTake(name, id);
+            });
+        }
+
+        async function executeBatchTake(takenFor = "", recipientId = null) {
+            if (batchTakePending || checkoutPending) return;
+            updateTakeSelection();
+            if (!selectedTakeItems.length) return;
+            const codes = [...selectedTakeItems];
+            batchTakePending = true;
+            renderTakeItems();
             try {
-                const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
-                if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
-                if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
-                selectedTakeItems = [];
-                updateTakeBatchUI();
+                const res = await api("/api/checkout_batch", {
+                    method: "POST",
+                    body: JSON.stringify({ codes, taken_for: takenFor, recipient_id: recipientId }),
+                });
+                if (res.success_count > 0) {
+                    showToast(`Взято: ${res.success_count} шт.`);
+                    selectedTakeItems = [];
+                }
+                if (res.errors?.length) alert("Ошибки:\n" + res.errors.join("\n"));
                 await Promise.all([loadItems(), loadDashboard17()]);
-                backToMain();
-            } catch (e) { notify(e.message); }
+                if (res.success_count > 0 && currentScreen === "screen-take") backToMain();
+            } catch (error) {
+                notify(error.message);
+            } finally {
+                batchTakePending = false;
+                if (currentScreen === "screen-take") renderTakeItems();
+                else updateTakeBatchUI();
+            }
         }
 
         
@@ -2116,7 +2157,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         let checkoutPending = false;
         async function doCheckout(takenFor = "", recipientId = null) {
-            if (checkoutPending) return;
+            if (checkoutPending || batchTakePending) return;
             const {code} = currentItem;
             const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
             checkoutPending = true;
@@ -2141,7 +2182,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         const recipientDialog = document.getElementById('item-recipient-dialog');
         const recipientName = document.getElementById('item-recipient-name');
         const recipientOptions = document.getElementById('item-recipients');
-        let recipientRows = [], selectedRecipient = null, recipientRequest = 0;
+        let recipientRows = [], selectedRecipient = null, recipientRequest = 0, confirmRecipient = null;
 
         function showRecipientOptions() {
             const normalize = name => name.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
@@ -2164,11 +2205,19 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             }
         }
 
-        async function doCheckoutFor() {
-            if (checkoutPending || recipientDialog.open) return;
+        function doCheckoutFor() {
+            const code = currentItem?.code;
+            if (!code) return;
+            return openCheckoutRecipient((name, id) => {
+                if (currentScreen === 'screen-item' && currentItem?.code === code) doCheckout(name, id);
+            });
+        }
+
+        async function openCheckoutRecipient(onConfirm) {
+            if (checkoutPending || batchTakePending || recipientDialog.open) return;
             const request = ++recipientRequest;
             recipientDialog.returnValue = '';
-            recipientDialog.dataset.itemCode = currentItem.code;
+            confirmRecipient = onConfirm;
             recipientRows = [];
             selectedRecipient = null;
             recipientName.value = '';
@@ -2192,18 +2241,24 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             recipientName.setCustomValidity('');
             showRecipientOptions();
         });
+        recipientDialog.querySelector('[value="cancel"]').addEventListener('click', () => recipientDialog.close('cancel'));
         recipientDialog.querySelector('form').addEventListener('submit', event => {
-            if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
             event.preventDefault();
-            recipientName.setCustomValidity('Введите фамилию.');
-            recipientName.reportValidity();
+            const name = recipientName.value.trim();
+            if (!name) {
+                recipientName.setCustomValidity('Введите фамилию.');
+                recipientName.reportValidity();
+                return;
+            }
+            const onConfirm = confirmRecipient;
+            confirmRecipient = null;
+            recipientDialog.close('checkout');
+            onConfirm?.(name, selectedRecipient);
         });
         recipientDialog.addEventListener('close', () => {
+            if (recipientDialog.open) return;
             ++recipientRequest;
-            if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
-                currentItem?.code === recipientDialog.dataset.itemCode) {
-                doCheckout(recipientName.value.trim(), selectedRecipient);
-            }
+            confirmRecipient = null;
         });
         async function doReturn() {
             const {code} = currentItem;
@@ -2483,7 +2538,8 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             if(currentScreen==="screen-edit-item"&&id==="screen-item"&&navHistory.at(-1)==="screen-item")navHistory.pop();
             else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
             currentScreen = id;
-            if(id!=="screen-room-view")$("batch-actions").style.display="none"; if(id!=="screen-take")$("take-batch-actions").style.display="none";
+            if(id!=="screen-room-view")$("batch-actions").style.display="none";
+            updateTakeBatchUI();
 
             ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed", "screen-extra", "screen-login"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
@@ -2624,7 +2680,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function scan17(callback,multi=false){if(tg.initData&&tg.showScanQrPopup){try{tg.showScanQrPopup({text:multi?'Сканируйте товары. Закройте сканер, когда закончите.':'Наведите на QR товара'},v=>{if(v)callback(v.trim());return !multi});return}catch(e){}}const {o,b}=overlay17('Сканирование QR');const input=field17(b,'Код товара / USB-сканер');function accept(){if(!input.value.trim())return;callback(input.value.trim());input.value='';if(!multi)o.remove()}btn17(b,'Найти',accept);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();accept()}});input.focus();if('BarcodeDetector' in window&&navigator.mediaDevices?.getUserMedia)btn17(b,'Открыть камеру',async()=>{let detector;try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){throw Error('Камера не поддерживает QR в этом браузере')}const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});if(!o.isConnected){stream.getTracks().forEach(t=>t.stop());return}const video=document.createElement('video');video.srcObject=stream;video.playsInline=true;video.muted=true;video.style.width='100%';b.append(video);await video.play();let last='',lastAt=0,busy=false;const tick=setInterval(async()=>{if(!o.isConnected){clearInterval(tick);stream.getTracks().forEach(t=>t.stop());return}if(busy)return;busy=true;try{const rows=await detector.detect(video);const code=rows[0]?.rawValue?.trim();if(code&&(code!==last||Date.now()-lastAt>1800)){last=code;lastAt=Date.now();callback(code);if(!multi)o.remove()}}catch(e){}finally{busy=false}},250)});else card17(b,'Камера браузера здесь недоступна','Используйте обычный QR-сканер или введите код вручную.');}
 
         function scanQr(){scan17(openItem)}
-        function scanTakeQr(){scan17(code=>{const i=allItems.find(x=>x.code===code);if(!i||i.kind!=='equipment'||i.needs_repair||i.holders.length||i.total<=0)return notify('Техника недоступна');if(!selectedTakeItems.includes(code)){selectedTakeItems.push(code);renderTakeItems();updateTakeBatchUI();showToast(i.name)}},true)}
+        function scanTakeQr(){scan17(code=>{if(batchTakePending)return;const i=allItems.find(x=>x.code===code);if(!canTakeItem(i))return notify('Техника недоступна');if(!selectedTakeItems.includes(code)){selectedTakeItems.push(code);renderTakeItems();updateTakeBatchUI();showToast(i.name)}},true)}
         function inventoryProgress17(){const id=Number($('inv-location').value);const expected=allItems.filter(i=>i.stocks.some(s=>s.location_id===id&&s.quantity>0)).map(i=>i.code);const found=invScannedCodes.filter(c=>expected.includes(c)).length;$('inv-progress').textContent=`Проверено позиций: ${found} из ${expected.length}. Лишних: ${invScannedCodes.length-found}.`; $('inv-finish-btn').classList.remove('hidden')}
         function showInventory(){invScannedCodes=[]; inventoryCounts17={};$('inv-scanned-list').replaceChildren();inventoryProgress17();showScreen('screen-inventory')}
         $('inv-location').addEventListener('change',()=>{invScannedCodes=[]; inventoryCounts17={};$('inv-scanned-list').replaceChildren();inventoryProgress17()});
