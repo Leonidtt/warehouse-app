@@ -593,18 +593,28 @@ def get_daily_report(x_init_data: Optional[str] = Header(None)):
 def get_history(x_init_data: Optional[str] = Header(None)):
     get_user(x_init_data); conn = get_conn(x_init_data); rows = []
     co = conn.execute("""
-        SELECT c.id, c.item_code, i.name, c.user_id, u.full_name, c.taken_at AS date, c.returned_at, c.taken_for, c.giver_id, g.full_name as giver_name, ret.full_name AS returner_name
+        SELECT c.id, c.item_code, i.name, c.user_id, u.full_name, c.taken_at AS date, c.returned_at, c.taken_for, c.giver_id, g.full_name as giver_name, ret.full_name AS returner_name, cr.reason AS checkout_close_reason
         FROM checkouts c 
         JOIN items i ON i.code = c.item_code 
         LEFT JOIN users u ON u.tg_id = c.user_id 
         LEFT JOIN users g ON g.tg_id = c.giver_id
         LEFT JOIN users ret ON ret.tg_id=c.returned_by
+        LEFT JOIN checkout_close_reasons cr ON cr.checkout_id=c.id
         ORDER BY c.taken_at DESC LIMIT 500
     """).fetchall()
     for r in co:
         user_display = r["giver_name"] if r["taken_for"] else r["full_name"]
         rows.append({"date": r["date"], "type": "checkout", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": user_display or "—", "taken_for": r["taken_for"]})
-        if r["returned_at"]: rows.append({"date": r["returned_at"], "type": "return", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["returner_name"] or r["full_name"] or "—", "taken_for": ""})
+        if r["returned_at"] and r["checkout_close_reason"]!="buyout": rows.append({"date": r["returned_at"], "type": "return", "item_code": r["item_code"], "name": r["name"], "quantity": 1, "user_name": r["returner_name"] or r["full_name"] or "—", "taken_for": ""})
+    for sold in conn.execute("""SELECT d.archived_at AS date,d.item_code,i.name,d.buyer_name,
+        u.full_name AS actor_name FROM equipment_archive_details d
+        JOIN items i ON i.code=d.item_code
+        LEFT JOIN users u ON u.tg_id=d.archived_by
+        WHERE d.reason='buyout' ORDER BY d.archived_at DESC LIMIT 500""").fetchall():
+        rows.append({"date":sold["date"],"type":"buyout","item_code":sold["item_code"],
+                     "name":sold["name"],"quantity":1,
+                     "user_name":sold["actor_name"] or "Администратор",
+                     "taken_for":sold["buyer_name"]})
     mv = conn.execute("SELECT m.item_code, i.name, m.quantity, m.created_at AS date, u.full_name FROM movements m JOIN items i ON i.code = m.item_code LEFT JOIN users u ON u.tg_id = m.user_id ORDER BY m.created_at DESC LIMIT 500").fetchall()
     for r in mv: rows.append({"date": r["date"], "type": "move", "item_code": r["item_code"], "name": r["name"], "quantity": r["quantity"], "user_name": r["full_name"] or "—", "taken_for": ""})
     wo = conn.execute("SELECT w.item_code, i.name, w.quantity, w.created_at AS date, u.full_name FROM writeoffs w JOIN items i ON i.code = w.item_code LEFT JOIN users u ON u.tg_id = w.user_id ORDER BY w.created_at DESC LIMIT 500").fetchall()
