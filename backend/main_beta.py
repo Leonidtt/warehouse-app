@@ -38,7 +38,7 @@ from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import active_checkout_rows, effective_user, held_camera_count, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
-from fixed_office7 import office7_location_id, consolidate_office7_stock
+from fixed_office7 import office7_location_id, consolidate_office7_stock, normalize_office
 from owner_backup import register_owner_backup
 from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
@@ -688,10 +688,12 @@ def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] 
     if req.quantity<=0: raise HTTPException(400,"Количество должно быть больше нуля")
     if req.unit_price is not None and (req.unit_price<0 or not math.isfinite(req.unit_price)): raise HTTPException(400,"Некорректная цена")
     with transaction() as conn:
-        item=active_item(conn,code); valid_location(conn,req.location_id)
+        item=active_item(conn,code)
+        location_id=office7_location_id(conn,create=True) if item["kind"]=="equipment" else req.location_id
+        valid_location(conn,location_id)
         if item["kind"]=="equipment" and (req.quantity!=1 or conn.execute("SELECT 1 FROM stock WHERE item_code=? AND quantity>0",(code,)).fetchone() or conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone()): raise HTTPException(409,"Каждая единица оборудования должна иметь собственный QR-код")
-        conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity", (code,req.location_id,req.quantity))
-        if req.unit_price is not None: conn.execute("INSERT INTO receipts(item_code,location_id,quantity,unit_price,user_id) VALUES(?,?,?,?,?)",(code,req.location_id,req.quantity,req.unit_price,actor["tg_id"]))
+        conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity", (code,location_id,req.quantity))
+        if req.unit_price is not None: conn.execute("INSERT INTO receipts(item_code,location_id,quantity,unit_price,user_id) VALUES(?,?,?,?,?)",(code,location_id,req.quantity,req.unit_price,actor["tg_id"]))
         audit(conn,actor,"Пополнение",code)
     return {"status":"ok"}
 
@@ -785,17 +787,30 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
 
 @app.post("/api/locations")
 def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("INSERT INTO locations (name) VALUES (?)", (req.name.strip(),)); conn.commit()
-    except sqlite3.IntegrityError: conn.close(); raise HTTPException(400, "Такая комната уже есть")
-    conn.close(); return {"status": "ok"}
+    check_admin(x_init_data)
+    with transaction() as conn:
+        name=req.name.strip()
+        if normalize_office(name)=='офис7':
+            office7_location_id(conn,create=True)
+            raise HTTPException(409,"«Офис 7» уже существует")
+        try: conn.execute("INSERT INTO locations (name) VALUES (?)", (name,))
+        except sqlite3.IntegrityError: raise HTTPException(400, "Такая комната уже есть")
+    return {"status": "ok"}
 
 @app.post("/api/locations/update")
 def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(None)):
-    check_admin(x_init_data); conn = get_conn(x_init_data)
-    try: conn.execute("UPDATE locations SET name = ? WHERE id = ?", (req.name.strip(), req.id)); conn.commit()
-    except Exception as e: conn.close(); raise HTTPException(400, str(e))
-    conn.close(); return {"status": "ok"}
+    check_admin(x_init_data)
+    with transaction() as conn:
+        old=conn.execute("SELECT name FROM locations WHERE id=?",(req.id,)).fetchone()
+        if not old: raise HTTPException(404,"Помещение не найдено")
+        new_name=req.name.strip()
+        if normalize_office(old["name"])=='офис7' and normalize_office(new_name)!='офис7':
+            raise HTTPException(409,"«Офис 7» закреплён за оборудованием и не может быть переименован")
+        if normalize_office(new_name)=='офис7' and normalize_office(old["name"])!='офис7':
+            raise HTTPException(409,"Имя «Офис 7» зарезервировано для оборудования")
+        try: conn.execute("UPDATE locations SET name=? WHERE id=?",(new_name,req.id))
+        except sqlite3.IntegrityError: raise HTTPException(400,"Такая комната уже есть")
+    return {"status": "ok"}
 
 @app.get("/api/stats")
 def get_stats(x_init_data: Optional[str] = Header(None)):
@@ -1212,6 +1227,8 @@ async def writeoff(req: WriteoffRequest, background_tasks: BackgroundTasks, x_in
     if req.quantity<=0: raise HTTPException(400,"Количество должно быть больше нуля")
     with transaction() as conn:
         item=active_item(conn,req.code); valid_location(conn,req.location_id)
+        if item['kind']=='equipment':
+            raise HTTPException(409,'Оборудование нельзя списывать как расходник. Используйте ремонт или архив.')
         row=conn.execute("SELECT quantity FROM stock WHERE item_code=? AND location_id=?",(req.code,req.location_id)).fetchone()
         if not row or row[0]<req.quantity: raise HTTPException(400,"Недостаточно товара")
         total=conn.execute("SELECT COALESCE(SUM(quantity),0) FROM stock WHERE item_code=?",(req.code,)).fetchone()[0]
