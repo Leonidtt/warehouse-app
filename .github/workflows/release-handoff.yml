@@ -18,15 +18,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.deployment.sha || github.sha }}
           persist-credentials: false
       - name: Сверить версию и входы Основы
-        run: python3 scripts/release_handoff.py --wait 60 > handoff.json
+        shell: bash
+        run: |
+          result=0
+          python3 scripts/release_handoff.py --wait 60 > handoff.json || result=$?
+          if [[ -s handoff.json ]]; then
+            printf '::notice title=handoff.json::%s\n' "$(<handoff.json)"
+          fi
+          exit "$result"
       - name: Сохранить результат для следующего чата
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: warehouse-handoff-${{ github.event.deployment.sha || github.sha }}
           path: handoff.json
