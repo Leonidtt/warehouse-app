@@ -298,3 +298,105 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
     grid-template-columns:39px minmax(0,1fr) 10px;
   }
 }
+
+
+/* Beta unified card rows v18.6 */
+/* Same visual grammar as Home.
+   Every preview keeps its real photo / catalogue picture. Business actions
+   remain in the respective screen; details stay in the item screen. */
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card{
+  box-sizing:border-box;
+  display:flex;align-items:center;min-width:0;width:100%;
+  min-height:54px;margin:0!important;padding:6px 8px!important;
+  border:0;border-bottom:1px solid var(--ref-line);
+  border-radius:0!important;background:transparent;box-shadow:none!important;
+  overflow:hidden;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card:last-child{border-bottom:0}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r184-item-main{
+  display:flex;flex:1 1 auto;align-items:center;gap:7px;min-width:0;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r184-thumb{
+  width:40px;height:40px;flex:0 0 40px;
+  border-radius:7px;overflow:hidden;box-shadow:none;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r184-item-info{
+  display:flex;flex:1 1 auto;flex-direction:column;justify-content:center;gap:2px;min-width:0;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-top{
+  display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-top .name{
+  flex:1 1 auto;min-width:0;margin:0!important;
+  font-size:13px;line-height:17px;font-weight:650;letter-spacing:0;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-summary{
+  min-width:0;height:15px;max-height:15px;
+  color:var(--text-muted);font-size:11.5px;line-height:15px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state{
+  display:flex;align-items:center;gap:3px;flex:0 1 auto;
+  max-width:47%;min-width:0;
+  color:var(--text-muted);font-size:10px;line-height:15px;font-weight:600;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state-label{
+  min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-dot{
+  width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:currentColor;
+}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state.free{color:var(--r185-green,#188441)}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state.held,
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state.repair{color:var(--r185-red,#c92c35)}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state.buyout{color:var(--r185-orange,#a96a00)}
+:is(#take-items-list,#room-items,#cat-stats-items,#cat-detailed-list,#my-items-list) .r190-unified-card .r1857-state.booked{color:var(--r185-purple,#884ac5)}
+#cat-stats-items.r190-unified-list,#cat-detailed-list.r190-unified-list,
+#take-items-list.r190-unified-list,#room-items.r190-room-list,
+#my-items-list.r190-my-list{
+  display:flex;flex-direction:column;gap:0;min-width:0;
+  margin:8px 0 0;padding:0!important;
+  border:1px solid var(--ref-line);border-radius:13px;
+  overflow:hidden;background:var(--ref-surface);
+}
+#take-items-list .take-row.r190-take-row{
+  display:grid;grid-template-columns:28px minmax(0,1fr);
+  align-items:center;gap:4px;min-width:0;
+  min-height:54px;margin:0!important;padding:0 5px;
+  border:0;border-bottom:1px solid var(--ref-line);
+  border-radius:0!important;background:transparent;box-shadow:none!important;
+}
+#take-items-list .take-row.r190-take-row:last-child{border-bottom:0}
+#take-items-list .take-row.r190-take-row.selected{
+  border-color:var(--ref-line)!important;
+  background:color-mix(in srgb,var(--primary) 7%,var(--ref-surface));
+}
+#take-items-list .r190-take-row>.take-checkbox{width:20px;height:20px;justify-self:center;margin:0}
+#take-items-list .r190-take-row>.r190-unified-card{
+  min-width:0;border:0;padding-left:0!important;
+}
+#room-items.r190-room-list{gap:0}
+#room-items.r190-room-list .r190-unified-card{
+  border:0;border-bottom:1px solid var(--ref-line);
+}
+#room-items.r190-room-list .r190-unified-card:last-child{border-bottom:0}
+#my-items-list .r190-unified-card.r190-my-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:8px;
+}
+#my-items-list .r190-my-row .warehouse-my-item-actions{
+  position:relative;z-index:2;display:flex;flex-direction:column;
+  justify-content:center;align-items:stretch;gap:4px;min-width:0;
+}
+#my-items-list .r190-my-row .warehouse-my-item-actions button{
+  min-height:36px;margin:0;padding:6px 9px;
+  font-size:11px;line-height:1.25;border-radius:9px;
+}
+@media(max-width:380px){
+  #my-items-list .r190-my-row .warehouse-my-item-actions{gap:3px}
+  #my-items-list .r190-my-row .warehouse-my-item-actions button{font-size:10px;padding:6px 7px}
+}
+@media(prefers-reduced-motion:reduce){
+  #take-items-list .r190-take-row,#room-items .r190-unified-card{transition:none!important}
+}
