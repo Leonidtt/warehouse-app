@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from warehouse_v18 import label_dimensions
 from release_v182 import label_image
+from flash_lifecycle import standalone_flash,flash_budget,flash_number,update_flash_identity,archive_flash_code
 
 
 class BatchAction(BaseModel):
@@ -97,6 +98,14 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                 conn.execute('INSERT OR IGNORE INTO categories(name) VALUES(?)',(value,))
             for item in items:
                 code = item['code']; kind=item['kind']
+                flash=standalone_flash(item['category'],item['name'],kind)
+                if flash:
+                    if action=='name':
+                        raise HTTPException(409,f'{code}: название вспышки — её номер')
+                    if action=='category' and value.strip().casefold()!='вспышки':
+                        raise HTTPException(409,f'{code}: категорию вспышки менять нельзя')
+                    if action=='tag' and value not in ('КЦ','ТХ'):
+                        raise HTTPException(409,f'{code}: укажите бюджет КЦ или ТХ')
                 held = conn.execute('SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL',(code,)).fetchone()
                 total = conn.execute('SELECT COALESCE(SUM(quantity),0) FROM stock WHERE item_code=?',(code,)).fetchone()[0]
                 booked = conn.execute("SELECT 1 FROM bookings WHERE item_code=? AND date_to>=date('now')",(code,)).fetchone()
@@ -107,8 +116,12 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                     move_one(conn,actor,code,req.source,req.location,row[0])
                 elif action in ('name','category','tag'):
                     if action=='tag' and kind!='equipment': raise HTTPException(400,'Метки только для оборудования')
-                    column={'name':'name','category':'category','tag':'budget_tag'}[action]
-                    conn.execute(f'UPDATE items SET {column}=? WHERE code=?',(value,code))
+                    if action=='tag' and flash:
+                        code,flash_name=update_flash_identity(conn,item,flash_budget(value),"bulk-budget-change")
+                        conn.execute("UPDATE items SET budget_tag=?,name=? WHERE code=?",(value,flash_name,code))
+                    else:
+                        column={'name':'name','category':'category','tag':'budget_tag'}[action]
+                        conn.execute(f'UPDATE items SET {column}=? WHERE code=?',(value,code))
                 elif action == 'price':
                     # Preserve component prices; the bulk price is the existing standalone price.
                     if kind=='equipment' and any(item[k] for k in ('price_body','price_lens','price_flash','price_acc','price_add')):
@@ -126,12 +139,18 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                     notices.append(f'🔧 В ремонт: {item["name"]} ({code})')
                 elif action == 'copy':
                     # A copy has a new identity: no serial, allocations, bookings or repair history.
-                    prefix=re.sub(r'[^\w.-]','',code.rsplit('-',1)[0])[:48] or 'ITEM'
-                    n=1
-                    while conn.execute('SELECT 1 FROM items WHERE code=?',(f'{prefix}-{n}',)).fetchone(): n+=1
-                    new=f'{prefix}-{n}'
-                    cols=('name','kind','min_stock','photo','price','kit_body','kit_lens','kit_flash','kit_acc','kit_add','price_body','price_lens','price_flash','price_acc','price_add','budget_tag','category')
-                    conn.execute(f'INSERT INTO items(code,{",".join(cols)}) SELECT ?,{",".join(cols)} FROM items WHERE code=?',(new,code))
+                    if flash:
+                        n,new=flash_number(conn,flash_budget(item['budget_tag']))
+                        columns=('kind','min_stock','photo','price','kit_body','kit_lens','kit_flash','kit_acc','kit_add','price_body','price_lens','price_flash','price_acc','price_add','budget_tag','category')
+                        conn.execute(f'INSERT INTO items(code,name,{",".join(columns)}) SELECT ?,?,{",".join(columns)} FROM items WHERE code=?',
+                                     (new,str(n),code))
+                    else:
+                        prefix=re.sub(r'[^\w.-]','',code.rsplit('-',1)[0])[:48] or 'ITEM'
+                        n=1
+                        while conn.execute('SELECT 1 FROM items WHERE code=?',(f'{prefix}-{n}',)).fetchone(): n+=1
+                        new=f'{prefix}-{n}'
+                        cols=('name','kind','min_stock','photo','price','kit_body','kit_lens','kit_flash','kit_acc','kit_add','price_body','price_lens','price_flash','price_acc','price_add','budget_tag','category')
+                        conn.execute(f'INSERT INTO items(code,{",".join(cols)}) SELECT ?,{",".join(cols)} FROM items WHERE code=?',(new,code))
                     conn.execute('INSERT INTO item_metadata(code,unit,supplier,notes) SELECT ?,unit,supplier,notes FROM item_metadata WHERE code=?',(new,code))
                     conn.execute('INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?)',(new,req.location,1 if kind=='equipment' else 0))
                     audit(conn,actor,'Массовое копирование: '+code,new)
@@ -153,7 +172,11 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
                         raise HTTPException(409,f'{code}: сначала верните товар, завершите ремонт и отмените активную бронь')
                     if action=='delete' and total:
                         raise HTTPException(409,f'{code}: нельзя удалить товар с остатком; используйте архив')
-                    # Tombstone keeps codes and all linked history; not restorable in the ordinary archive.
+                    paid=conn.execute("SELECT remaining_cents FROM equipment_buyout_amounts WHERE item_code=?",(code,)).fetchone()
+                    if action=='archive' and paid and paid['remaining_cents']==0 and item['buyout_status']:
+                        raise HTTPException(409,f'{code}: используйте архив «Выкуплено»')
+                    if flash:
+                        code=archive_flash_code(conn,item,'ordinary',actor=actor)
                     conn.execute('UPDATE items SET is_archived=? WHERE code=?',(2 if action=='delete' else 1,code))
                 audit(conn,actor,'Массовое действие: '+action,code)
                 changes.append(code)
