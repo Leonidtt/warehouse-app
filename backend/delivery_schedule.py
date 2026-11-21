@@ -461,7 +461,7 @@ def register_delivery_schedule(app,get_user,transaction,audit):
         with transaction() as conn:
             meta=conn.execute('SELECT first_date,last_date,format_version FROM delivery_schedule_meta WHERE id=1').fetchone()
             rows=[dict(row) for row in conn.execute("""SELECT work_date,person,department,
-                venue,venue_color,status FROM delivery_schedule
+                venue,venue_color,status,assignment FROM delivery_schedule
                 WHERE work_date BETWEEN ? AND ?""",(start.isoformat(),end.isoformat()))]
         return {'start':start.isoformat(),'end':end.isoformat(),'rows':rows,
                 'meta':dict(meta) if meta else None}

@@ -24,6 +24,7 @@ function installRelease182(){
     select.value=category;
     $('filter-status').value=status;
     $('filter-kind').value='equipment';
+    window.dispatchEvent(new CustomEvent('warehouse-kind-selected',{detail:{kind:'equipment'}}));
     $('filter-location').value='';
     $('search-input').value='';
     filterItems();
