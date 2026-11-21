@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from datetime import date
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
-from release_v184 import effective_user, register_184
+from release_v184 import active_checkout_rows, effective_user, held_camera_count, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
 from owner_backup import register_owner_backup
@@ -840,7 +840,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
     stock_map={}; holder_map={}
     for row in conn.execute("SELECT s.item_code,s.location_id,l.name AS location_name,s.quantity FROM stock s JOIN locations l ON l.id=s.location_id WHERE s.quantity>0"):
         v=dict(row); key=v.pop("item_code"); stock_map.setdefault(key,[]).append(v)
-    for row in conn.execute("SELECT c.item_code,c.id,c.user_id,u.full_name,c.taken_at,c.taken_for,c.giver_id,g.full_name AS giver_name FROM checkouts c LEFT JOIN users u ON u.tg_id=c.user_id LEFT JOIN users g ON g.tg_id=c.giver_id WHERE c.returned_at IS NULL"):
+    for row in active_checkout_rows(conn):
         v=dict(row); key=v.pop("item_code"); holder_map.setdefault(key,[]).append(v)
     for it in items:
         stocks=stock_map.get(it['code'],[]); holders=holder_map.get(it['code'],[])
@@ -850,7 +850,8 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         
         item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "kit_acc": it["kit_acc"], "kit_add": it["kit_add"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         
-        item_data.update({"has_photo":bool(it["has_photo"]),"site":it["site"],"vessel":it["vessel"],"unit":it["unit"]})
+        item_data.update({"has_photo":bool(it["has_photo"]),"site":it["site"],"vessel":it["vessel"],"unit":it["unit"],
+                          "held_camera_count":held_camera_count(it) if it["kind"]=="equipment" else 0})
         if is_admin: 
             item_data["price"] = it["price"]
             item_data["price_body"] = it["price_body"]

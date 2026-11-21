@@ -354,7 +354,7 @@ function heldPeople1857(items){
   for(const i of items||[]){
     if(i.kind!=='equipment'||i.is_archived)continue;
     const cat=String(i.category||'').trim().toLowerCase(),name=String(i.name||'').trim().toLowerCase();
-    const camera_count=Number(present(i.kit_body)||['фотоаппараты','камеры'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name));
+    const camera_count=i.held_camera_count??Number(present(i.kit_body)||['фотоаппараты','камеры'].includes(cat)||/^(фотоаппарат|камера)(?:\s|$)/u.test(name));
     const flash_count=Number(present(i.kit_flash)||isStandaloneFlash1853(i));
     for(const h of i.holders||[]){
       const person=String(h.taken_for||h.full_name||'Не указан').trim()||'Не указан',key=JSON.stringify([h.user_id??null,person]);

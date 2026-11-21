@@ -14,7 +14,7 @@ from xml.etree import ElementTree as ET
 from fastapi import File, Header, HTTPException, Query, UploadFile
 from openpyxl.styles.colors import COLOR_INDEX
 from pydantic import BaseModel, Field
-from release_v184 import component_counts
+from release_v184 import active_checkout_rows, held_camera_count
 
 N='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
@@ -286,31 +286,39 @@ def camera_availability(conn,people):
     def name_key(value):
         return plain(value).casefold().replace('ё','е')
 
-    by_name,by_surname=defaultdict(set),defaultdict(set)
-    for row in conn.execute("SELECT tg_id,full_name FROM users WHERE TRIM(COALESCE(full_name,''))<>''"):
-        key=name_key(row['full_name'])
-        by_name[key].add(row['tg_id'])
-        by_surname[key.split(' ',1)[0]].add(row['tg_id'])
+    def nominative_name(key):
+        surname, separator, rest=key.partition(' ')
+        surname=re.sub(r'(ов|ев|ин)ой$',r'\1а',surname)
+        surname=re.sub(r'(ск|цк)ой$',r'\1ая',surname)
+        return surname+separator+rest
 
+    by_name,by_surname=defaultdict(set),defaultdict(set)
+    def index_name(user_id,name):
+        key=nominative_name(name_key(name))
+        if key:
+            by_name[key].add(user_id)
+            by_surname[key.split(' ',1)[0]].add(user_id)
+
+    for row in conn.execute("SELECT tg_id,full_name FROM users"):
+        index_name(row['tg_id'],row['full_name'])
+    cameras={
+        row['code'] for row in conn.execute("""SELECT code,kit_body,category,name FROM items
+            WHERE kind='equipment' AND is_archived=0""")
+        if held_camera_count(row)
+    }
     held=defaultdict(int)
-    for row in conn.execute("""
-        SELECT c.user_id,i.kit_body,i.kit_flash,i.category,i.name
-        FROM checkouts c JOIN items i ON i.code=c.item_code
-        LEFT JOIN checkout_handoffs h ON h.checkout_id=c.id
-        WHERE c.returned_at IS NULL AND i.kind='equipment' AND i.is_archived=0
-          AND (TRIM(COALESCE(c.taken_for,''))='' OR h.handed_at IS NOT NULL)
-    """):
-        camera,_=component_counts(row)
-        if camera or name_key(row['category'])=='фотокомплекты':
+    for row in active_checkout_rows(conn):
+        if row['item_code'] in cameras:
+            index_name(row['user_id'],row['taken_for'] or row['full_name'])
             held[row['user_id']]+=1
 
     result={}
     for person in people:
-        key=name_key(person)
+        key=nominative_name(name_key(person))
         matches=by_name[key] if ' ' in key else by_surname[key]
         parts=key.split()
         if not matches and len(parts)==2:
-            matches=by_name[' '.join(reversed(parts))]
+            matches=by_name[nominative_name(' '.join(reversed(parts)))]
         # A missing or ambiguous contact cannot confirm whether a camera is already on hand.
         result[person]=held[next(iter(matches))] if len(matches)==1 else None
     return result

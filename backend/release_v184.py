@@ -26,10 +26,26 @@ def effective_user(user, raw, digest, session):
     return user
 
 
+def component_present(value):
+    return str(value or '').strip().casefold() not in ('','-','—','нет','none','0','n/a','без','не указан')
+
+
+def held_camera_count(row):
+    category = str(row['category'] or '').strip().casefold()
+    name = str(row['name'] or '').strip().casefold()
+    return int(component_present(row['kit_body']) or category in ('фотоаппараты','камеры')
+               or re.match(r'^(фотоаппарат|камера)(?:\s|$)',name) is not None)
+
+
+def active_checkout_rows(conn):
+    return conn.execute("""SELECT c.item_code,c.id,c.user_id,u.full_name,c.taken_at,c.taken_for,
+        c.giver_id,g.full_name AS giver_name FROM checkouts c
+        LEFT JOIN users u ON u.tg_id=c.user_id LEFT JOIN users g ON g.tg_id=c.giver_id
+        WHERE c.returned_at IS NULL""")
+
+
 def component_counts(row):
-    def present(v):
-        return str(v or '').strip().casefold() not in ('','-','—','нет','none','0','n/a','без','не указан')
-    body, flash = int(present(row['kit_body'])), int(present(row['kit_flash']))
+    body, flash = int(component_present(row['kit_body'])), int(component_present(row['kit_flash']))
     cat = str(row['category'] or '').strip().casefold()
     name = str(row['name'] or '').strip().casefold()
     if not body and (cat in ('фотоаппараты','камеры') or re.match(r'^(фотоаппарат|камера)\b',name)):
