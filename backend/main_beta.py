@@ -247,6 +247,7 @@ DELIVERY_ROSTER_RELEASE = "18.5.9-beta-delivery"
 if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
     prepare_migration(DB_PATH, DELIVERY_ROSTER_RELEASE)
+    prepare_migration(DB_PATH, "18.5.9-beta-foyer-fix")
 init_db(DB_PATH)
 
 def seed_beta_demo_items(db_path):

@@ -24,7 +24,7 @@ THEME_COLORS=('lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','a
 DEPARTMENTS={'АДМИН КЦ','АДМИН ТХ','ПЕЧАТНИК КЦ','ТХ','КЦ','РЕЗЕРВ','СТАЖЕРЫ','СТАЖЁРЫ'}
 PHOTO=re.compile(r'(?<![А-ЯЁ])Ф(?![А-ЯЁ])',re.I)
 ABSENCE=re.compile(r'\b(?:БОЛЕЕТ|БОЛЬНИЧ\w*|ОТПУСК\w*|ВЫХ|ВЫХОДН\w*|ОТГУЛ\w*)\b',re.I)
-VENUE_ROSTER_VERSION=3
+VENUE_ROSTER_VERSION=4
 
 
 class VenueDeliveryNotes(BaseModel):
@@ -200,8 +200,8 @@ def parse_xlsx_schedule(raw):
                 continue
             if department not in DEPARTMENTS or not person:
                 continue
-            # A marker beside a surname may be in B, C or K, depending on the week.
-            roster_photo=any(PHOTO.search(cells.get(flag+str(row),'')) for flag in ('B','C','K'))
+            # B is a venue marker (foyer), not a camera flag. Use only the roster's K flag.
+            roster_photo=PHOTO.search(cells.get('K'+str(row),'')) is not None
             for col,day in days.items():
                 address=col+str(row)
                 assignment=cells.get(address,'')
@@ -280,87 +280,35 @@ def init_delivery_schedule(conn):
         finally:
             conn.execute('RELEASE delivery_schedule_seed')
 
-    # One-off correction of the original Beta demo import, without replacing user uploads
-    # or overwriting date/venue equipment and supplies notes.
-    patch=os.environ.get('DELIVERY_ROSTER_FLAGS_Z64','').strip()
-    migration='beta-roster-surname-photo-flags-2026-11-21'
-    meta=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
-    if (patch and meta and meta['source']=='График МСК · исходная копия'
-            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(migration,)).fetchone()):
-        if len(patch)>20000:
-            raise ValueError('Roster flags payload too large')
-        decoded=zlib.decompress(base64.b64decode(patch))
-        if len(decoded)>100000:
-            raise ValueError('Roster flags expanded payload too large')
-        payload=json.loads(decoded)
-        pairs=payload.get('pairs') if isinstance(payload,dict) else None
-        if payload.get('kind')!='b-c-roster-flags' or payload.get('schema')!=1 or not isinstance(pairs,list) or len(pairs)>5000:
-            raise ValueError('Unexpected roster flags data')
-        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_roster_flag_rollback(
-            schedule_id INTEGER PRIMARY KEY,work_date TEXT NOT NULL,
-            person TEXT NOT NULL,sheet TEXT NOT NULL,previous_status TEXT NOT NULL,
-            changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-        changed=0
-        for item in pairs:
-            if not isinstance(item,list) or len(item)!=2 or not all(isinstance(v,str) and 0<len(v)<160 for v in item):
-                raise ValueError('Invalid roster flag entry')
-            sheet,person=item
-            records=conn.execute("""SELECT id,work_date,person,sheet,status FROM delivery_schedule
-                WHERE sheet=? AND person=? AND status='no_camera'""",(sheet,person)).fetchall()
-            if not records:
-                continue
-            conn.executemany("""INSERT OR IGNORE INTO delivery_roster_flag_rollback
-                (schedule_id,work_date,person,sheet,previous_status)
-                VALUES(?,?,?,?,?)""",[(r['id'],r['work_date'],r['person'],r['sheet'],r['status']) for r in records])
-            changed+=conn.execute("""UPDATE delivery_schedule SET status='delivery'
-                WHERE sheet=? AND person=? AND status='no_camera'""",(sheet,person)).rowcount
-        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(migration,))
-        print('Beta surname-side camera flags restored:',changed,flush=True)
+    # Column B means "Фойе" (foyer), never a camera.
+    # Reverse only rows inserted by the previous faulty Beta supplement,
+    # keeping the original rows, uploaded schedules and venue notes intact.
+    revert_tag='beta-foyer-b-supplement-reverted-2026-11-21'
+    source_row=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
+    if (source_row and source_row['source']=='График МСК · исходная копия'
+            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(revert_tag,)).fetchone()):
+        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_foyer_reverted_rows(
+            original_id INTEGER PRIMARY KEY,work_date TEXT NOT NULL,
+            person TEXT NOT NULL,department TEXT NOT NULL,assignment TEXT NOT NULL,
+            venue TEXT NOT NULL,venue_color TEXT NOT NULL,status TEXT NOT NULL,
+            sheet TEXT NOT NULL,reverted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+        # Archive exact rows before removing them; IDs in this ledger came from
+        # the supplementary import, not from the original Excel roster.
+        conn.execute("""INSERT OR IGNORE INTO delivery_foyer_reverted_rows(
+            original_id,work_date,person,department,assignment,venue,venue_color,status,sheet)
+            SELECT s.id,s.work_date,s.person,s.department,s.assignment,
+                s.venue,s.venue_color,s.status,s.sheet
+            FROM delivery_schedule s JOIN delivery_roster_supplement_rollback b
+              ON b.schedule_id=s.id AND b.work_date=s.work_date
+              AND b.person=s.person AND b.sheet=s.sheet
+            WHERE s.status='delivery'""") if conn.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+                       AND name='delivery_roster_supplement_rollback'""").fetchone() else None
+        removed=conn.execute("""DELETE FROM delivery_schedule WHERE id IN
+            (SELECT original_id FROM delivery_foyer_reverted_rows)""").rowcount
+        # No manual user edits are touched: uploaded schedules have their own source.
+        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(revert_tag,))
+        print('Beta erroneous foyer-as-camera rows reverted:',removed,flush=True)
 
-    # The original one-time Beta import omitted rows whose surname-side F flag
-    # was not duplicated in K. Merge these private Excel-derived rows only into
-    # the untouched initial test import; never replace a user-uploaded schedule.
-    extra=os.environ.get('DELIVERY_ROSTER_SUPPLEMENT_Z64','').strip()
-    extra_marker='beta-roster-surname-supplement-2026-11-21'
-    meta=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
-    if (extra and meta and meta['source']=='График МСК · исходная копия'
-            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(extra_marker,)).fetchone()):
-        if len(extra)>20000:
-            raise ValueError('Roster supplement payload too large')
-        raw=zlib.decompress(base64.b64decode(extra))
-        if len(raw)>180000:
-            raise ValueError('Roster supplement expanded too large')
-        payload=json.loads(raw)
-        if (not isinstance(payload,dict) or payload.get('k')!='b-c-supplement'
-                or payload.get('v')!=1 or not isinstance(payload.get('r'),list)
-                or len(payload['r'])>1500):
-            raise ValueError('Unexpected roster supplement data')
-        conn.execute("""CREATE TABLE IF NOT EXISTS delivery_roster_supplement_rollback(
-            schedule_id INTEGER PRIMARY KEY,work_date TEXT NOT NULL,
-            person TEXT NOT NULL,sheet TEXT NOT NULL,
-            inserted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-        inserted=0
-        for record in payload['r']:
-            if (not isinstance(record,list) or len(record)!=8
-                    or not all(isinstance(v,str) and len(v)<160 for v in record)
-                    or record[6] not in ('delivery','review','excluded')
-                    or not 2020<=date.fromisoformat(record[0]).year<=2040):
-                raise ValueError('Invalid roster supplement row')
-            work_date,person,department,assignment,venue,venue_color,status,sheet=record
-            exists=conn.execute("""SELECT 1 FROM delivery_schedule
-                WHERE work_date=? AND person=? AND department=? AND sheet=? LIMIT 1""",
-                (work_date,person,department,sheet)).fetchone()
-            if exists:
-                continue
-            cursor=conn.execute("""INSERT INTO delivery_schedule
-                (work_date,person,department,assignment,venue,venue_color,status,sheet)
-                VALUES(?,?,?,?,?,?,?,?)""",record)
-            conn.execute("""INSERT INTO delivery_roster_supplement_rollback
-                (schedule_id,work_date,person,sheet) VALUES(?,?,?,?)""",
-                (cursor.lastrowid,work_date,person,sheet))
-            inserted+=1
-        conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(extra_marker,))
-        print('Beta surname-side roster events merged:',inserted,flush=True)
 
 def camera_availability(conn,people):
     if not people:
