@@ -1,5 +1,7 @@
 """Import weekly Moscow rota and group camera deliveries by venue. Beta only."""
 import base64
+import bz2
+import hashlib
 from collections import defaultdict
 from colorsys import hls_to_rgb, rgb_to_hls
 import io
@@ -152,12 +154,12 @@ def guess_venue(assignment,names):
             return name
     return ''
 
-def venues_by_color(venues,fills,columns):
+def venues_by_color(venues,fills,columns,name_col='A'):
     result={}
     for column in columns:
         choices=defaultdict(set)
         for row,name in venues.items():
-            for legend in ('A',column):
+            for legend in (name_col,column):
                 color=fills.get(legend+str(row))
                 if color:
                     choices[color].add(name)
@@ -202,7 +204,7 @@ def parse_xlsx_schedule(raw):
             continue
         venues={row:cells.get(name_col+str(row),'') for row in range(4,first_department)}
         venues={row:name for row,name in venues.items() if name and name.upper() not in ('МОСКВА','ПИТЕР','НИЖНИЙ НОВГОРОД','ТЕСТ')}
-        colors=venues_by_color(venues,fills,days)
+        colors=venues_by_color(venues,fills,days,name_col)
         # The photo flag is the dedicated column AFTER the Sunday schedule,
         # not B ("Ф" there means the foyer) nor a weekday assignment.
         camera_col=chr(ord(max(days))+1)
@@ -319,6 +321,58 @@ def init_delivery_schedule(conn):
         conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(revert_tag,))
         print('Beta erroneous foyer-as-camera rows reverted:',removed,flush=True)
 
+
+
+    # Private full-roster recovery, derived from the owner's exact Excel copy,
+    # delivered via Railway Variables only. Never commit names/roster to Git.
+    source_row=conn.execute("SELECT source FROM delivery_schedule_meta WHERE id=1").fetchone()
+    verified_blob=os.environ.get('DELIVERY_VERIFIED_ROSTER_BZ64','').strip()
+    marker='beta-verified-full-weekly-roster-2026-11-21'
+    if (verified_blob and source_row and source_row['source']=='График МСК · исходная копия'
+            and not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",(marker,)).fetchone()):
+        conn.execute('SAVEPOINT verified_roster')
+        try:
+            if len(verified_blob)>20000:
+                raise ValueError('Verified roster payload too large')
+            compressed=base64.b64decode(verified_blob,validate=True)
+            decompressor=bz2.BZ2Decompressor()
+            decoded=decompressor.decompress(compressed,max_length=650000)
+            if not decompressor.eof or len(decoded)>650000:
+                raise ValueError('Verified roster expanded too large')
+            if hashlib.sha256(decoded).hexdigest()!='d2b60df9a5dfbfd51ad580d77bed9f859c46b6ba08b27745864a5f8431b46402':
+                raise ValueError('Verified roster checksum mismatch')
+            payload=json.loads(decoded)
+            if (not isinstance(payload,dict) or payload.get('v')!=5
+                    or payload.get('first_date')!='2026-09-28'
+                    or payload.get('last_date')!='2027-02-28'
+                    or not isinstance(payload.get('rows'),list) or len(payload['rows'])!=3011):
+                raise ValueError('Verified roster metadata mismatch')
+            fields=('work_date','person','department','assignment','venue','venue_color','status','sheet')
+            rows=[]
+            for entry in payload['rows']:
+                if (not isinstance(entry,list) or len(entry)!=8
+                        or not all(isinstance(x,str) and len(x)<500 for x in entry)
+                        or entry[6] not in ('delivery','review','excluded','no_camera')
+                        or entry[2] not in DEPARTMENTS):
+                    raise ValueError('Invalid verified roster entry')
+                day=date.fromisoformat(entry[0]).isoformat()
+                if not payload['first_date']<=day<=payload['last_date']:
+                    raise ValueError('Verified roster out-of-range date')
+                rows.append(dict(zip(fields,entry)))
+            conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule_pre_verified_20261121
+                AS SELECT * FROM delivery_schedule""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule_meta_pre_verified_20261121
+                AS SELECT * FROM delivery_schedule_meta""")
+            save_schedule(conn,{'rows':rows,'first_date':payload['first_date'],
+                'last_date':payload['last_date'],'format_version':VENUE_ROSTER_VERSION},
+                'График МСК · проверенный Excel')
+            conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",(marker,))
+            print('Beta complete verified Excel roster imported:',len(rows),flush=True)
+        except (ValueError,TypeError,KeyError,IndexError,EOFError,OSError) as exc:
+            conn.execute('ROLLBACK TO verified_roster')
+            print('Beta verified roster import error:',type(exc).__name__,str(exc)[:110],flush=True)
+        finally:
+            conn.execute('RELEASE verified_roster')
 
 def camera_availability(conn,people):
     if not people:
