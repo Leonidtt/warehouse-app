@@ -131,7 +131,7 @@ function installDeliverySchedule(){
     head.append(top);table.append(caption,head);
     const rows=el('tbody');
     for(const g of groups.filter(g=>g.needed.length||g.review.length)){
-      const row=el('tr'),label=el('td');
+      const row=el('tr','delivery-site-row '+(g.ready.length?'delivery-site-to-bring':g.review.length?'delivery-site-needs-review':g.held.length?'delivery-site-on-hand':'delivery-site-empty')),label=el('td');
       const btn=el('button','delivery-venue-link',venueLabel(g.venue));
       btn.type='button';btn.title='Перейти к площадке';
       btn.onclick=()=>document.getElementById(g.anchor)?.scrollIntoView({block:'nearest',behavior:'smooth'});
@@ -181,11 +181,16 @@ function installDeliverySchedule(){
     })).sort((a,b)=>b.ready.length-a.ready.length||
       Number(!a.venue)-Number(!b.venue)||a.venue.localeCompare(b.venue,'ru'));
     const {bring}=renderMetrics(ordered);
+    const pending=ordered.reduce((n,g)=>n+g.ready.filter(x=>x.camera_count===null).length,0);
     count.textContent='Привезти · '+bring;
+    if(pending){
+      const hint=el('p','delivery-uncertainty',String(pending)+' выдач не удалось подтвердить по имени — они включены в план «Привезти».');
+      list.append(hint);
+    }
     ordered.forEach((g,i)=>g.anchor='delivery-place-'+i);
     list.append(venueTable(ordered));
     for(const {venue,people,ready,held,review,anchor} of ordered){
-      const section=el('section','delivery-group');
+      const section=el('section','delivery-group '+(ready.length?'delivery-group-to-bring':review.length?'delivery-group-needs-review':held.length?'delivery-group-on-hand':'delivery-group-empty'));
       section.id=anchor;
       const heading=el('h4','delivery-group-head');
       const hasPlan=venue||people.some(row=>row.status==='no_camera'||row.assignment);
@@ -197,7 +202,9 @@ function installDeliverySchedule(){
         dot.setAttribute('aria-hidden','true');
         title.append(dot);
       }
-      title.append(el('span','',venueLabel(venue)));
+      title.append(el('span','delivery-venue-name',venueLabel(venue)));
+      if(ready.length)title.append(el('span','delivery-venue-count',ready.length+' привезти'));
+      else if(held.length)title.append(el('span','delivery-venue-count delivered',held.length+' на руках'));
       if(hasPlan){
         title.type='button';
         title.title='Состав и план · '+venueLabel(venue);
