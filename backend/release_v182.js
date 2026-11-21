@@ -42,6 +42,7 @@ function installRelease182(){
     widget.append(el('h2','r182-featured-title',label),content);
 
     const total=button('',()=>filterTo(category),'r182-total');
+    total.setAttribute('aria-label','Показать все товары: '+label);
     const totalCopy=el('span','r182-total-copy');
     totalCopy.append(el('strong','',countNum(counts.total)),el('span','r182-muted','Всего'));
     total.append(totalCopy);
@@ -52,6 +53,7 @@ function installRelease182(){
     const numbers=el('div','r182-numbers');
     for(const [key,statusLabel,status] of states){
       const tile=button('',()=>filterTo(category,status),'r182-stat');
+      tile.setAttribute('aria-label',label+': '+statusLabel+' — '+countNum(counts[key]));
       tile.append(el('strong','r182-color-'+key,countNum(counts[key])),el('span','',statusLabel));
       numbers.append(tile);
     }
@@ -63,19 +65,19 @@ function installRelease182(){
     const {categories,booked,daily:d,low:short,consumables=0}=data;
     booked17=new Set(booked);
     const byName=new Map(categories.map(category=>[category.name,category]));
-    const heading=el('div','r187-overview-heading');
-    heading.append(el('span','r187-overview-kicker','ТЕХНИКА'),el('span','r187-overview-hint','Нажмите, чтобы открыть список'));
-    const grid=el('div','r182-summary r182-featured r187-all-gear');
-    for(const [category,label] of [
-      ['Фотокомплекты','Фотоаппараты'],
-      ['Вспышки','Вспышки'],
-      ['Ноутбуки','Ноутбуки'],
-      ['Принтеры','Принтеры DNP']
-    ]){
-      grid.append(categoryWidget(category,label,byName.get(category)));
-    }
-    dashboard.className='r182-overview card r187-equipment-overview';
-    dashboard.replaceChildren(heading,grid);
+    // Two identical, full-size rows. Never shrink the familiar camera/flash tiles.
+    const primary=el('div','r182-summary r182-featured r188-top');
+    primary.append(
+      categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
+      categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
+    );
+    const secondary=el('div','r182-summary r182-featured r188-bottom');
+    secondary.append(
+      categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),
+      categoryWidget('Принтеры','Принтеры',byName.get('Принтеры')),
+    );
+    dashboard.className='r182-overview card';
+    dashboard.replaceChildren(primary,secondary);
 
     daily.replaceChildren();
     daily.className=d?'r182-daily':'hidden';
