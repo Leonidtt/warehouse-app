@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import Header, HTTPException, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
+from flash_lifecycle import standalone_flash
 from PIL import ImageFont
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -112,7 +113,13 @@ def register_v18(app, get_user, check_admin, transaction, active_item, audit, we
             raise HTTPException(400,'Проверьте поля')
         codes=list(dict.fromkeys(req.codes))
         with transaction() as conn:
-            for code in codes: active_item(conn,code)
+            for code in codes:
+                item=active_item(conn,code)
+                if 'category' in fields:
+                    before=standalone_flash(item['category'],item['name'],item['kind'])
+                    after=standalone_flash(fields['category'],item['name'],item['kind'])
+                    if before!=after or (before and fields['category'].casefold()!='вспышки'):
+                        raise HTTPException(409,f'{code}: категорию вспышки нельзя менять массово')
             if fields.get('category'): conn.execute('INSERT OR IGNORE INTO categories(name) VALUES(?)',(fields['category'],))
             for code in codes:
                 if 'category' in fields: conn.execute('UPDATE items SET category=? WHERE code=?',(fields['category'],code))

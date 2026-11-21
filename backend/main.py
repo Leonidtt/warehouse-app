@@ -1054,6 +1054,9 @@ def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
         item=active_item(conn,code)
         if conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone():
             raise HTTPException(409,"Сначала верните оборудование")
+        paid=conn.execute("SELECT remaining_cents FROM equipment_buyout_amounts WHERE item_code=?",(code,)).fetchone()
+        if item["kind"]=="equipment" and paid and paid["remaining_cents"]==0 and item["buyout_status"]:
+            raise HTTPException(409,"Полностью выкупленное оборудование архивируйте с пометкой «Выкуплено»")
         archived_code=code
         if standalone_flash(item["category"],item["name"],item["kind"]):
             archived_code=archive_flash_code(conn,item,"ordinary",actor=actor)
@@ -1415,6 +1418,8 @@ def rename_category(old: str, req: CategoryChange, x_init_data: Optional[str] = 
     actor=check_admin(x_init_data); name=req.name.strip()
     if not name or len(name)>80: raise HTTPException(400,'Название до 80 символов')
     with transaction() as conn:
+        if old.strip().casefold()=='вспышки' and name.strip().casefold()!='вспышки':
+            raise HTTPException(409,"Категория «Вспышки» закреплена за нумеруемым оборудованием")
         if not conn.execute('SELECT 1 FROM categories WHERE name=?',(old,)).fetchone(): raise HTTPException(404,'Категория не найдена')
         if any(r[0].casefold()==name.casefold() and r[0]!=old for r in conn.execute('SELECT name FROM categories')): raise HTTPException(409,'Такая категория уже существует')
         conn.execute('UPDATE categories SET name=? WHERE name=?',(name,old)); conn.execute('UPDATE items SET category=? WHERE category=?',(name,old)); audit(conn,actor,'Переименование категории',old+' → '+name)
