@@ -19,7 +19,7 @@ function installV18(openRoleMenu){
   for(const [id,k,label] of navNames){const n=$(id);n.querySelector('.icon').innerHTML=ico(k);n.lastElementChild.textContent=label;n.tabIndex=0;n.setAttribute('role','button');n.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click()}}}
   const brand=document.createElement('div');brand.className='v18-desktop-only v18-laptop-title';brand.textContent='Склад';nav.prepend(brand);
   function navExtra(label,k,fn,admin=false){const el=document.createElement('div');el.className='nav-item v18-desktop-only'+(admin?' v18-admin hidden':'');el.innerHTML='<span class="icon">'+ico(k)+'</span><span>'+safe(label)+'</span>';el.tabIndex=0;el.setAttribute('role','button');el.onclick=()=>{fn()};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};nav.append(el);return el}
-  const selectKind=k=>{if(currentScreen!=='screen-main')backToMain();$('filter-kind').value=k;$('filter-status').value='';filterItems();$('items-list').scrollIntoView({block:'start',behavior:'smooth'})};
+  const selectKind=k=>{if(currentScreen!=='screen-main')backToMain();$('filter-kind').value=k;$('filter-status').value='';window.dispatchEvent(new CustomEvent('warehouse-kind-selected',{detail:{kind:k}}));filterItems();$('items-list').scrollIntoView({block:'start',behavior:'smooth'})};
   navExtra('Оборудование','take',()=>selectKind('equipment'));navExtra('Расходники','box',()=>selectKind('consumable'));navExtra('Финансы','chart',()=>showExtra('finance'),true);
   const main=$('screen-main'),qr=main.querySelector('.qr-btn-main'),take=main.querySelector('.take-btn');const quick=document.createElement('div');quick.className='v18-quick';qr.before(quick);quick.append(qr,take);qr.innerHTML=ico('scan')+' Сканировать';take.innerHTML=ico('take')+' Взять технику';
   const shortcuts=document.createElement('div');shortcuts.className='v18-shortcuts';quick.after(shortcuts);shortcuts.append(btn('Избранное',()=>showCollection('favorites'),'star'),btn('Недавние',()=>showCollection('recent'),'clock'),btn('Комплекты',showKits,'grid'),btn('Уведомления',showNotifications,'bell'),btn('Обновить',()=>refresh(true),'refresh'));
@@ -73,7 +73,7 @@ function installV18(openRoleMenu){
   group('Экспорт и печать',[[ $('export-stock-btn'),'Выгрузить склад в Excel','file'],[btn('',()=>downloadFile('/api/v18/history.xlsx','history.xlsx')),'История в Excel','file'],[$('export-qr-btn'),'Печать QR-этикеток','scan'],[btn('',configureLabels),'Размер этикетки','settings']]);
   const maintenance=group('Обслуживание',[[$('owner-terminal-btn'),'Терминал','web'],[btn('',sendOwnerBackup182),'Скачать резервную копию базы','file'],[btn('',()=>{if(confirm('Очистить настройки этого браузера?')){Object.keys(localStorage).filter(k=>k.startsWith('warehouse_main_')).forEach(k=>localStorage.removeItem(k));location.reload()}}),'Сбросить настройки браузера','refresh']],true);
   maintenance.id='beta-maintenance-settings';
-  const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад v18.5.13';settings.replaceChildren(settings_header,groups,footer);
+  const footer=document.createElement('p');footer.className='v18-muted';footer.style.textAlign='center';footer.textContent='Склад v18.5.14';settings.replaceChildren(settings_header,groups,footer);
   $('screen-login').querySelector('.login-card p').textContent='Открой склад в Telegram, выбери «Сайт» в настройках или профиле и введи одноразовый код.';$('screen-login').querySelector('.login-card h1').textContent='Склад · v18.4';
   $('user-info').onclick=()=>{
     const {o,b}=overlay17('Мой профиль');
@@ -137,7 +137,7 @@ function installV18(openRoleMenu){
   const labelQuery=()=>{const d=labelSettings();return 'width_mm='+d.width+'&height_mm='+d.height};
   function configureLabels(){const {o,b}=overlay17('Размер QR-этикетки');const d=labelSettings(),w=field17(b,'Ширина, мм (30–100)',d.width,'number'),h=field17(b,'Высота, мм (40–150)',d.height,'number');btn17(b,'Сохранить',()=>{const width=Number(w.value),height=Number(h.value);if(!Number.isInteger(width)||!Number.isInteger(height)||width<30||width>100||height<40||height>150)throw Error('Проверьте размеры');cacheSet17('label_dimensions',JSON.stringify({width,height}));o.remove();showToast('Размер сохранён')},'ok');btn17(b,'По умолчанию 50 × 80 мм',()=>{w.value=50;h.value=80})}
   showLabelPreview17=async(code,name,img)=>image17(img,'/api/label/'+encodeURIComponent(code)+'?name='+encodeURIComponent(name)+'&'+labelQuery());
-  showQr=async()=>{const {code,name,kind}=currentItem;if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'))}};
+  showQr=async()=>{const {code,name,kind}=currentItem;if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'));btn17(b,'Excel для B21S',()=>downloadLabelExport17([{code}],'xlsx'))}};
   $('export-qr-btn').onclick=()=>downloadFile('/api/export_labels?'+labelQuery(),'labels.pdf');exportStock=()=>downloadFile('/api/v18/stock.xlsx','warehouse_stock.xlsx');
   downloadFile=async(url,filename)=>{try{const response=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!response.ok){const e=await response.json().catch(()=>({}));throw Error(e.detail||'HTTP '+response.status)}const blob=await response.blob(),a=document.createElement('a'),obj=URL.createObjectURL(blob);a.href=obj;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(obj),10000)}catch(e){notify('Ошибка скачивания: '+e.message)}};
   deleteItemFromEdit=async()=>{const {code,name}=currentItem;if(!await ask('Отправить в архив?',name,'В архив'))return;try{await api('/api/items/'+encodeURIComponent(code),{method:'DELETE'});backToMain();const {o,b}=overlay17('Товар в архиве');card17(b,name,'Можно восстановить без потери остатка.');btn17(b,'Отменить архивирование',async()=>{await api('/api/archive/'+encodeURIComponent(code)+'/restore',{method:'POST'});o.remove();showToast('Товар восстановлен');refresh(true)},'ok')}catch(e){notify(e.message)}};
@@ -217,6 +217,28 @@ async function chooseConsumableLabels17(){
   }catch(error){list.textContent=error.message}
 }
 
+async function downloadLabelExport17(items,format,settings={}){
+  const excel=format==='xlsx';
+  const response=await fetch('/api/export_labels'+(excel?'?format=xlsx':''),{
+    method:'POST',
+    credentials:'same-origin',
+    headers:{...authHeaders17(),'Content-Type':'application/json'},
+    body:JSON.stringify({codes:items.map(item=>item.code),...settings}),
+  });
+  if(!response.ok){
+    const error=await response.json().catch(()=>({}));
+    throw Error(typeof error.detail==='string'?error.detail:'Не удалось скачать этикетки');
+  }
+  const href=URL.createObjectURL(await response.blob());
+  const link=document.createElement('a');
+  link.href=href;
+  link.download=excel?'B21S-qr-labels.xlsx':items.length===1?items[0].code+'.pdf':'qr-consumables.pdf';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(href),10000);
+}
+
 function showLabelPrint17(items){
   if(currentUser?.role!=='admin'||!items.length)return;
   const {o,b}=overlay17('Печать QR');
@@ -251,10 +273,16 @@ function showLabelPrint17(items){
   density.append(dpi);
   controls.append(density);
 
-  function parameters(){
-    const w=width.valueAsNumber,h=height.valueAsNumber,n=copies.valueAsNumber,d=Number(dpi.value);
-    if(!Number.isInteger(w)||!Number.isInteger(h)||w<30||w>100||h<40||h>150)throw Error('Введите размер от 30 × 40 до 100 × 150 мм');
+  function copyCount(){
+    const n=copies.valueAsNumber;
     if(!Number.isInteger(n)||n<1||n>20)throw Error('Введите от 1 до 20 копий на позицию');
+    return n;
+  }
+
+  function parameters(){
+    const w=width.valueAsNumber,h=height.valueAsNumber,d=Number(dpi.value);
+    if(!Number.isInteger(w)||!Number.isInteger(h)||w<30||w>100||h<40||h>150)throw Error('Введите размер от 30 × 40 до 100 × 150 мм');
+    const n=copyCount();
     const pages=items.length*n;
     if(pages>500||pages*Math.round(w/25.4*d)*Math.round(h/25.4*d)>100000000)throw Error('Уменьшите число копий или размер этикетки');
     return {width_mm:w,height_mm:h,copies:n,dpi:d};
@@ -328,26 +356,8 @@ function showLabelPrint17(items){
       window.print();
     }catch(error){cleanup();throw error}
   },'ok');
-  btn17(actions,'Скачать PDF',async()=>{
-    const response=await fetch('/api/export_labels',{
-      method:'POST',
-      credentials:'same-origin',
-      headers:{...authHeaders17(),'Content-Type':'application/json'},
-      body:JSON.stringify({codes:items.map(item=>item.code),...parameters()}),
-    });
-    if(!response.ok){
-      const error=await response.json().catch(()=>({}));
-      throw Error(typeof error.detail==='string'?error.detail:'Не удалось скачать этикетки');
-    }
-    const href=URL.createObjectURL(await response.blob());
-    const link=document.createElement('a');
-    link.href=href;
-    link.download=items.length===1?items[0].code+'.pdf':'qr-consumables.pdf';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(()=>URL.revokeObjectURL(href),10000);
-  });
+  btn17(actions,'Скачать PDF',()=>downloadLabelExport17(items,'pdf',parameters()));
+  btn17(actions,'Excel для B21S',()=>downloadLabelExport17(items,'xlsx',{copies:copyCount()}));
   if(items.length===1)btn17(b,'Скачать PNG',()=>{
     const path=previewPath(items[0].code,parameters());
     return downloadFile(path,items[0].code+'.png');

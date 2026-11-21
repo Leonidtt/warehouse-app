@@ -1,0 +1,109 @@
+/* Beta premium compact catalog and stable Home actions. */
+#screen-main .r186-sort-tools{display:flex;align-items:center;gap:8px;margin:8px 0 9px;min-width:0}
+#screen-main .r186-sort-select{
+  flex:1 1 auto;width:auto;min-width:0;max-width:none;height:38px;
+  margin:0;padding:7px 24px 7px 10px;border:1px solid var(--border);
+  border-radius:10px;box-shadow:none;background:var(--card-bg);color:var(--text);
+  font-size:12px;line-height:1.2;
+}
+#screen-main .r186-sort-select:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+#screen-main button.r186-filter{
+  flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  width:auto;min-width:80px;min-height:38px;margin:0;padding:6px 9px;
+  border:1px solid var(--border);border-radius:10px;box-shadow:none;
+  color:var(--text);background:var(--card-bg);font-size:11px;font-weight:650;
+}
+#screen-main button.r186-filter.active{border-color:var(--primary);color:var(--primary)}
+.r186-filter svg{width:15px;height:15px;flex:0 0 15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.r186-family-bar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0 0 11px;min-width:0}
+:is(#screen-main,#screen-take) button.r186-family{
+  display:grid;place-items:center;
+  width:100%;min-width:0;min-height:44px;margin:0;padding:5px;
+  border:1px solid var(--border);border-radius:12px;box-shadow:none;
+  background:var(--card-bg);color:var(--text-muted);
+}
+:is(#screen-main,#screen-take) button.r186-family.active{
+  border-color:color-mix(in srgb,var(--primary) 62%,var(--border));
+  background:color-mix(in srgb,var(--primary) 9%,var(--card-bg));color:var(--primary);
+}
+:is(#screen-main,#screen-take) button.r186-family:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.r186-family-illustration{display:block;width:23px;height:23px}
+.r186-family-illustration svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#screen-main .beta-activity { margin: 0 0 13px; }
+#screen-main .beta-activity-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+}
+#screen-main .beta-activity-title { display: none; }
+#screen-main .beta-activity.has-items .beta-activity-bar {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-bottom: 7px;
+}
+#screen-main .beta-activity.has-items .beta-activity-title {
+  display: block;
+  min-width: 0;
+  padding: 0 3px;
+  opacity: 1;
+  overflow: visible;
+}
+#screen-main .beta-activity-title h2 { font-size: 15px; white-space: normal; }
+#screen-main button.beta-history-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+@media(max-width:380px){
+  .r186-family-bar{gap:4px}
+  :is(#screen-main,#screen-take) button.r186-family{border-radius:10px}
+  #screen-main button.r186-filter{min-width:72px;padding:6px 5px}
+}
+@media(prefers-reduced-motion:no-preference){
+  :is(#screen-main,#screen-take) button.r186-family{transition:background-color .17s ease,border-color .17s ease,color .17s ease,transform .15s cubic-bezier(.2,.75,.2,1)}
+  :is(#screen-main,#screen-take) button.r186-family:active{transform:scale(.975)}
+}
+@media(prefers-reduced-motion:reduce){:is(#screen-main,#screen-take) button.r186-family{transition:none}}
+
+#screen-take .take-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+  gap: 6px;
+  margin: 0 0 11px;
+}
+#screen-take.take-has-selection #take-items-list { margin-bottom: 120px; }
+#take-batch-actions .take-batch-layout { width: 100%; min-width: 0; }
+.take-batch-primary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+#take-batch-actions button { margin: 0; font-size: 14px; }
+#take-batch-actions .take-batch-primary button { min-height: 44px; padding: 8px 6px; }
+.take-batch-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 -4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+#take-batch-actions .take-clear {
+  width: auto;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--primary);
+  font-size: 12px;
+}

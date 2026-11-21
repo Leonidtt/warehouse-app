@@ -185,16 +185,18 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-    <link rel="stylesheet" href="/warehouse-v18.css?v=1903">
-    <script src="/warehouse-v18.js?v=18513"></script>
+    <link rel="stylesheet" href="/warehouse-v18.css?v=18514">
+    <script src="/warehouse-v18.js?v=18514"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1877">
-    <script src="/release-v182.js?v=18513"></script>
+    <script src="/release-v182.js?v=18514"></script>
     <link rel="stylesheet" href="/release-v183.css?v=1877">
     <script src="/release-v183.js?v=1877"></script>
     <link rel="stylesheet" href="/release-v184.css?v=18513">
-    <script src="/release-v184.js?v=18513-filter-reset"></script>
+    <script src="/release-v184.js?v=18514"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1877">
     <script src="/release-v185.js?v=1902"></script>
+    <link rel="stylesheet" href="/catalog_refinements.css?v=18514">
+    <script src="/catalog_refinements.js?v=18514"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -253,8 +255,6 @@
   .modal-overlay .modal-content{animation:beta-sheet-in var(--beta-motion) var(--beta-ease) both}
   .toast{animation:beta-toast-in 180ms var(--beta-ease);transition:opacity 150ms ease,transform 150ms var(--beta-ease)}
   button,.nav-item,.room-card,summary{transition:background-color var(--beta-release) ease,border-color var(--beta-release) ease,color var(--beta-release) ease,opacity var(--beta-release) ease,transform var(--beta-release) var(--beta-ease)}
-  #screen-main .v18-quick>button{transition:background-color var(--beta-release) ease,border-color var(--beta-release) ease,transform var(--beta-release) var(--beta-ease)}
-  #screen-main .v18-quick>button:active:not(:disabled){transform:scale(.985);transition-duration:var(--beta-press)}
   .nav-item:active{transform:none}
   summary:active{transform:none}
   @supports selector(details::details-content) and (interpolate-size:allow-keywords){
@@ -267,14 +267,44 @@
     #create-item-modal.hidden{opacity:0;pointer-events:none}
   }
 }
-@keyframes beta-screen-in{from{transform:translateY(4px)}to{transform:none}}
-@keyframes beta-tab-in{from{transform:translateX(var(--beta-tab-shift,8px))}to{transform:none}}
+@keyframes beta-screen-in{
+  from{opacity:.92;transform:translateY(6px)}
+  to{opacity:1;transform:none}
+}
+@keyframes beta-tab-in{
+  from{opacity:.96;transform:translateX(var(--beta-tab-shift,8px))}
+  to{opacity:1;transform:none}
+}
 
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
-@keyframes beta-sheet-in{from{opacity:.82;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes beta-sheet-in{
+  from{opacity:.88;transform:translateY(14px) scale(.99)}
+  to{opacity:1;transform:none}
+}
 @keyframes beta-toast-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 </style>
+
+<style>
+/* Beta micro-spacing: keep all existing buttons in their familiar places. */
+#screen-main .v18-quick{gap:9px;margin-top:10px;margin-bottom:12px;align-items:stretch}
+#screen-main .v18-quick>button{min-height:48px!important;padding:10px 7px!important;border-radius:12px!important;line-height:1.23}
+#screen-main .v18-overview-details{margin-top:12px;margin-bottom:12px}
+#screen-main .v18-title-row{margin-top:12px;margin-bottom:9px}
+#screen-main #main-search-wrapper{margin-bottom:9px}
+#screen-main .v18-shortcuts{gap:8px}
+#screen-main button:focus-visible,#screen-main summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(max-width:360px){
+  #screen-main .v18-quick{gap:7px}
+  #screen-main .v18-quick>button{font-size:13px!important;min-height:46px!important}
+}
+@media(prefers-reduced-motion:no-preference){
+  #screen-main .v18-quick>button{transition:background-color var(--beta-release) ease,border-color var(--beta-release) ease,transform var(--beta-release) var(--beta-ease)}
+  #screen-main .v18-quick>button:active:not(:disabled){transform:scale(.975);transition-duration:var(--beta-press)}
+}
+</style>
+    <link rel="stylesheet" href="/beta_appearance.css?v=18514">
+    <link rel="stylesheet" href="/beta_refined_ui.css?v=18514">
 </head>
 <body>
 
@@ -349,15 +379,16 @@
         </div>
     </div>
 
-    <!-- Панель массового взятия -->
-    <div id="take-batch-actions" class="floating-bar" style="border-color: var(--success);">
-        <div class="floating-btn-group">
-            <button class="ok" onclick="executeBatchTake()">Взять</button>
-            <button class="secondary" onclick="deselectAllTakeItems()">Снять</button>
-        </div>
-        <div>
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
-            <div style="font-weight: 700; font-size: 18px; color: var(--success);" id="take-selected-count">0</div>
+    <div id="take-batch-actions" class="floating-bar">
+        <div class="take-batch-layout">
+            <div class="take-batch-primary">
+                <button type="button" class="secondary" onclick="openBatchTakeFor()">Взять для</button>
+                <button type="button" onclick="executeBatchTake()">Взять себе</button>
+            </div>
+            <div class="take-batch-footer">
+                <span aria-live="polite">Выбрано <strong id="take-selected-count">0</strong></span>
+                <button type="button" class="secondary take-clear" onclick="deselectAllTakeItems()">Сбросить выбор</button>
+            </div>
         </div>
     </div>
 
@@ -402,7 +433,7 @@
             </div>
         </section>
 
-        <div id="my-bookings-section" class="hidden" style="margin-bottom: 24px;">
+        <div id="my-bookings-section" class="hidden">
             <h2 style="font-size: 18px; margin-bottom: 12px; font-weight: 700; letter-spacing: -0.5px;">🗓 Мои брони</h2>
             <div id="my-bookings-list"></div>
         </div>
@@ -460,13 +491,14 @@
             <button class="sticky-scan" onclick="scanTakeQr()">📷</button>
         </div>
         
-        <div style="margin-top: 16px;">
+        <div>
             <div class="search-wrapper" id="take-search-wrapper">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper'); renderTakeItems()">
-                <span class="search-clear" onclick="clearSearch('take-search-input', 'take-search-wrapper'); renderTakeItems()">✕</span>
+                <input type="text" id="take-search-input" placeholder="Поиск оборудования..." oninput="handleSearchInput(this, 'take-search-wrapper')">
+                <span class="search-clear" onclick="clearSearch('take-search-input', 'take-search-wrapper')">✕</span>
             </div>
 
+            <div id="take-tools" class="take-tools"></div>
             <div id="take-items-list" class="grid-container" style="padding: 0;"></div>
         </div>
     </div>
@@ -477,7 +509,7 @@
             <div class="sticky-title">Площадки</div>
             <div style="width: 80px;"></div>
         </div>
-        <div style="margin-top: 16px;">
+        <div>
             <div class="search-wrapper" id="plat-search-wrapper">
                 <span class="search-icon">🔍</span>
                 <input type="text" id="platform-search" placeholder="Поиск по площадке..." oninput="handleSearchInput(this, 'plat-search-wrapper'); filterPlatforms()">
@@ -494,7 +526,7 @@
             <div class="sticky-title">Теплоходы</div>
             <div style="width: 80px;"></div>
         </div>
-        <div style="margin-top: 16px;">
+        <div>
             <div class="search-wrapper" id="th-search-wrapper">
                 <span class="search-icon">🔍</span>
                 <input type="text" id="th-search" placeholder="Поиск по теплоходу..." oninput="handleSearchInput(this, 'th-search-wrapper'); filterTH()">
@@ -590,10 +622,10 @@
             <div id="item-stock-rows" class="beta-item-tiles"></div>
             <div id="actions"></div>
 
-            <section class="beta-item-disclosure hidden" id="item-kit-section">
-                <h3>Комплектация</h3>
+            <details class="beta-item-disclosure hidden" id="item-kit-section" open>
+                <summary>Комплектация</summary>
                 <div id="kit-box" class="beta-item-tiles"></div>
-            </section>
+            </details>
             <details class="beta-item-disclosure" id="item-extra-section">
                 <summary>Дополнительно</summary>
                 <div id="item-facts" class="beta-item-tiles"></div>
@@ -622,7 +654,7 @@
                 <button class="secondary" onclick="markLost()" id="lost-btn">Не нашёл на месте</button>
             </details>
             <button type="button" class="beta-item-history" onclick="showItemHistory()">История</button>
-            <button type="button" class="secondary" onclick="showEditForm()" id="edit-btn">Редактировать</button>
+            <button type="button" class="secondary hidden" onclick="showEditForm()" id="edit-btn">Редактировать</button>
         </article>
     </div>
 
@@ -635,7 +667,7 @@
                 <div id="item-recipients" class="warehouse-recipient-options" aria-label="Получатели"></div>
             </div>
             <div class="beta-checkout-actions">
-                <button type="submit" class="secondary" value="cancel" formnovalidate>Отмена</button>
+                <button type="button" class="secondary" value="cancel">Отмена</button>
                 <button type="submit" value="checkout">Выдать</button>
             </div>
         </form>
@@ -810,7 +842,7 @@
         let currentItem = null, locations = [], allItems = [], currentUser = null, selectedItems = [], currentRoomId = null;
         let cachedPlatforms = [], cachedTH = [], invScannedCodes = [], autoRefreshInterval = null;
         let moveFromLocId = null, selectedMoveRoomId = null, selectedMoveRoomName = "";
-        let selectedTakeItems = [], currentEqCategory = "";
+        let selectedTakeItems = [], currentEqCategory = "", batchTakePending = false;
         
         let currentStatsCategory = "";
         let currentStatsItems = [];
@@ -833,11 +865,18 @@
         function haptic(type = 'light') { try { tg.HapticFeedback.impactOccurred(type); } catch(e) {} }
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
+            if (!container) return;
+            while (container.children.length >= 2) container.firstElementChild.remove();
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
+            toast.className = 'toast ' + (type === 'error' ? 'error' : 'success');
+            toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+            toast.textContent = String(message);
             container.appendChild(toast);
-            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+            setTimeout(() => {
+                if (!toast.isConnected) return;
+                toast.classList.add('beta-toast-out');
+                setTimeout(() => toast.remove(), 180);
+            }, 2300);
         }
         function notify(msg) { showToast(msg, 'error'); }
 
@@ -1467,14 +1506,24 @@
             updateTakeSelection();
             const list=$("take-items-list");
             const query=$("take-search-input").value.trim().toLowerCase();
-            let available=allItems.filter(i=>i.kind==="equipment" && !i.needs_repair).sort((a,b)=>Number(!!a.holders.length)-Number(!!b.holders.length)||a.name.localeCompare(b.name,"ru"));
-            if(query)available=available.filter(i=>[i.name,i.code,i.category,i.kit_body,i.kit_lens].some(v=>String(v||"").toLowerCase().includes(query)));
+            const catalog=window.warehouseCatalogView;
+            const family=catalog?.takeSelected;
+            const sort=catalog?.takeSort;
+            const available=allItems.filter(item=>item.kind==="equipment"&&!item.needs_repair
+                &&(!family||catalog.groupFor(item)===family)
+                &&(!query||[item.name,item.code,item.category,item.kit_body,item.kit_lens,item.kit_flash]
+                    .some(value=>String(value||"").toLowerCase().includes(query))));
+            available.sort((a,b)=>{
+                const byName=a.name.localeCompare(b.name,"ru");
+                if(sort==="name-asc")return byName;
+                if(sort==="name-desc")return -byName;
+                return Number(!canTakeItem(a))-Number(!canTakeItem(b))||byName;
+            });
             if(!available.length){list.innerHTML="<p class='meta' style='text-align:center;padding:18px'>Техника не найдена</p>";return;}
             list.innerHTML=available.map(i=>{
                 const holder=i.holders?.[0];
                 const disabled=!canTakeItem(i);
                 const selected=selectedTakeItems.includes(i.code)&&!disabled;
-                const location=(i.stocks||[]).map(s=>s.location_name).filter(Boolean).join(", ");
                 const model=String(i.kit_body||i.kit_lens||i.kit_flash||"").trim();
                 const metadata=[i.code,model,i.budget_tag].filter(Boolean).map(escapeOwnerText).join(" · ");
                 const state=holder?"У "+escapeOwnerText(holder.taken_for||holder.full_name||"сотрудника"):i.total<=0?"Нет на складе":"Свободно";
@@ -1482,13 +1531,14 @@
                 const amount=components>0?components:Number(i.price)||0;
                 const price=currentUser.role==="admin"&&amount>0?'<span class="take-row-price beta-admin-price">'+money17(amount)+'</span>':"";
                 return '<div class="take-row card'+(disabled?' unavailable':'')+(selected?' selected':'')+'">'+
-                    '<input type="checkbox" class="take-checkbox" aria-label="Выбрать '+escapeOwnerText(i.name)+'" '+(selected?'checked ':'')+(disabled?'disabled ':'')+'onchange="toggleTakeSelect('+jsArg17(i.code)+', this)">'+
+                    '<input type="checkbox" class="take-checkbox" aria-label="Выбрать '+escapeOwnerText(i.name)+'" '+(selected?'checked ':'')+((disabled||batchTakePending)?'disabled ':'')+'onchange="toggleTakeSelect('+jsArg17(i.code)+', this)">'+
                     '<div class="take-row-main" onclick="openItem('+jsArg17(i.code)+')"><div class="take-row-name">'+escapeOwnerText(i.name)+'</div><div class="take-row-meta">'+metadata+'</div></div>'+
                     '<div class="take-row-side"><span class="take-row-state'+(disabled?' busy':'')+'">'+state+'</span>'+price+'</div></div>';
             }).join("");
         }
 
         function toggleTakeSelect(code, cb) {
+            if (batchTakePending) return;
             haptic('light');
             const item = allItems.find(i => i.code === code);
             if (!canTakeItem(item)) {
@@ -1503,28 +1553,56 @@
         }
 
         function updateTakeBatchUI() {
-            const bar = document.getElementById("take-batch-actions");
-            bar.style.display = selectedTakeItems.length ? "flex" : "none";
-            document.getElementById("take-selected-count").textContent = selectedTakeItems.length;
+            const bar = $("take-batch-actions");
+            const visible = currentScreen === "screen-take" && selectedTakeItems.length > 0;
+            bar.style.display = visible ? "flex" : "none";
+            $("screen-take").classList.toggle("take-has-selection", visible);
+            const count = $("take-selected-count");
+            const total = String(selectedTakeItems.length);
+            if (count.textContent !== total) count.textContent = total;
+            bar.querySelectorAll("button").forEach(button => { button.disabled = batchTakePending; });
         }
 
         function deselectAllTakeItems() {
+            if (batchTakePending) return;
             selectedTakeItems = [];
             renderTakeItems();
         }
 
-        async function executeBatchTake() {
-            renderTakeItems();
+        function openBatchTakeFor() {
+            updateTakeSelection();
             if (!selectedTakeItems.length) return;
+            return openCheckoutRecipient((name, id) => {
+                if (currentScreen === "screen-take") executeBatchTake(name, id);
+            });
+        }
+
+        async function executeBatchTake(takenFor = "", recipientId = null) {
+            if (batchTakePending || checkoutPending) return;
+            updateTakeSelection();
+            if (!selectedTakeItems.length) return;
+            const codes = [...selectedTakeItems];
+            batchTakePending = true;
+            renderTakeItems();
             try {
-                const res = await api("/api/checkout_batch", { method: "POST", body: JSON.stringify({ codes: selectedTakeItems, taken_for: "" }) });
-                if (res.success_count > 0) showToast(`Взято: ${res.success_count} шт.`);
-                if (res.errors && res.errors.length > 0) alert("Ошибки:\n" + res.errors.join("\n"));
-                selectedTakeItems = [];
-                updateTakeBatchUI();
+                const res = await api("/api/checkout_batch", {
+                    method: "POST",
+                    body: JSON.stringify({ codes, taken_for: takenFor, recipient_id: recipientId }),
+                });
+                if (res.success_count > 0) {
+                    showToast(`Взято: ${res.success_count} шт.`);
+                    selectedTakeItems = [];
+                }
+                if (res.errors?.length) alert("Ошибки:\n" + res.errors.join("\n"));
                 await Promise.all([loadItems(), loadDashboard17()]);
-                backToMain();
-            } catch (e) { notify(e.message); }
+                if (res.success_count > 0 && currentScreen === "screen-take") backToMain();
+            } catch (error) {
+                notify(error.message);
+            } finally {
+                batchTakePending = false;
+                if (currentScreen === "screen-take") renderTakeItems();
+                else updateTakeBatchUI();
+            }
         }
 
         
@@ -1688,10 +1766,18 @@
                         if (item.needs_repair) badges += `<span class="badge repair">🔧 Ремонт</span>`;
                         if (item.is_on_hand) badges += `<span class="badge on-hand">В работе у ${escapeOwnerText(item.holder)}</span>`;
 
-                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${escapeOwnerText(item.code)}" ${item.is_on_hand?"disabled":""} onchange="toggleSelectItem(${jsArg17(item.code)}, this)"><div class="room-item-content" onclick="openItem(${jsArg17(item.code)})"><div class="room-item-name">${escapeOwnerText(item.name)}</div><div class="room-item-meta">${escapeOwnerText(item.code)} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div></div>`; 
+                        html += `<div class="card room-item-card"><input type="checkbox" class="room-item-checkbox" data-code="${escapeOwnerText(item.code)}" ${item.is_on_hand?"disabled":""} onchange="toggleSelectItem(${jsArg17(item.code)}, this)"><div class="room-item-media" data-code="${escapeOwnerText(item.code)}" onclick="openItem(${jsArg17(item.code)})"></div><div class="room-item-content" onclick="openItem(${jsArg17(item.code)})"><div class="room-item-name">${escapeOwnerText(item.name)}</div><div class="room-item-meta">${escapeOwnerText(item.code)} ${item.is_on_hand ? '(На руках)' : `· ${item.quantity || 1} шт`}</div><div style="margin-top:auto; padding-top:8px; display:flex; flex-wrap:wrap;">${badges}</div></div><span class="room-item-tail" aria-hidden="true" onclick="openItem(${jsArg17(item.code)})">›</span></div>`; 
                     });
                 } else { html = "<p>В этой комнате пусто.</p>"; }
                 list.innerHTML = html; 
+                if (typeof window.betaMyPhoto === 'function') {
+                    // Reuse cached/lazy item photography. Never fetch the stock again.
+                    const byCode=new Map(allItems.map(item=>[item.code,item]));
+                    for(const media of list.querySelectorAll('.room-item-media')){
+                        const item=byCode.get(media.dataset.code);
+                        if(item)media.replaceChildren(window.betaMyPhoto(item));
+                    }
+                }
                 setTimeout(updateBatchUI, 0);
             } catch (e) { list.innerHTML = `<p style="color:var(--danger)">${escapeOwnerText(e.message)}</p>`; } 
         }
@@ -1755,7 +1841,7 @@
                 document.getElementById("item-title").textContent = currentItem.name; 
                 
                 document.getElementById("repair-btn").style.display = currentItem.kind === 'consumable' ? 'none' : 'block'; 
-                document.getElementById("edit-btn").style.display = currentUser.role === 'admin' ? 'block' : 'none'; 
+                $('edit-btn').classList.toggle('hidden', currentUser.role !== 'admin');
                 
                 const item = currentItem;
                 const isEquipment = item.kind === 'equipment';
@@ -1767,7 +1853,7 @@
                 const facts = [
                     ['Тип', isEquipment ? 'Оборудование' : 'Расходник'],
                     ['Бюджет', item.budget_tag],
-                    ['Совместимость', isStandaloneFlash1853(item) && flashSuffixBrand1853(item.kit_flash)],
+                    ['Совместимость', isStandaloneFlash1853(item) && (flashSuffixBrand1853(item.kit_flash) || flashSuffixBrand1853(item.name))],
                     ['Серийный номер', isEquipment && item.serial_number],
                     ['На выкупе у', isEquipment && item.buyout_status],
                 ];
@@ -1797,6 +1883,7 @@
                 }
                 if (isEquipment && !kit.childElementCount && !standaloneFlash) kit.append(itemTile('Комплектация', 'Не указана'));
                 kitSection.classList.toggle('hidden', !kit.childElementCount);
+                kitSection.open = true;
 
 
                 const status = $('item-status-box');
@@ -1984,28 +2071,82 @@
             try { await api(`/api/items/${encodeURIComponent(currentItem.code)}`, { method: "DELETE" }); showToast("В архиве"); backToMain(); } catch (e) { notify(e.message); } 
         }
         
-        async function showItemHistory() { 
-            showScreen("screen-item-history"); 
-            const list = document.getElementById("item-history-list"); list.innerHTML = "<p>Загрузка...</p>"; 
-            try { 
-                const logs = await api(`/api/history`); 
-                const filtered = logs.filter(l => l.item_code === currentItem.code); 
-                if (!filtered.length) { list.innerHTML = "<p>Нет истории по этому товару</p>"; return; } 
-                list.innerHTML = filtered.map(l => {
-                    let text = "";
-                    if (l.type === 'checkout') {
-                        if (l.taken_for) text = `<b>Выдал:</b> ${escapeOwnerText(l.user_name)} <b>Кому:</b> ${escapeOwnerText(l.taken_for)}`;
-                        else text = `<b>Взял:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'return') {
-                        text = `<b>Вернул:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else if (l.type === 'move') {
-                        text = `<b>Переместил:</b> ${escapeOwnerText(l.user_name)}`;
-                    } else {
-                        text = `<b>Списал:</b> ${escapeOwnerText(l.user_name)}`;
-                    }
-                    return `<div class="card" style="display:block;"><div class="meta">${new Date(l.date + 'Z').toLocaleString('ru-RU')}</div><div>${text} (${l.quantity} шт)</div></div>`;
-                }).join(""); 
-            } catch (e) { list.innerHTML = `<p style="color:red">${escapeOwnerText(e.message)}</p>`; } 
+        const historyDayFormat17 = new Intl.DateTimeFormat('sv-SE', {
+            timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const historyTimeFormat17 = new Intl.DateTimeFormat('ru-RU', {
+            timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'medium',
+        });
+        function historyInstant17(value) {
+            const stamp=String(value??'').replace(' ','T');
+            return new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(stamp)?stamp:stamp+'Z');
+        }
+        function betaHistoryEntry(log, forItem=false) {
+            const entry=document.createElement('article');
+            entry.className='beta-history-entry';
+            const icon=document.createElement('span');
+            const action=(['checkout','return','move','writeoff'].includes(log.type)?log.type:'other');
+            icon.className='beta-history-mark action-'+action;
+            icon.setAttribute('aria-hidden','true');
+            icon.textContent=({checkout:'↗',return:'↙',move:'↔',writeoff:'−'})[log.type]||'·';
+            const content=document.createElement('div');
+            content.className='beta-history-detail';
+            const head=document.createElement('div');
+            head.className='beta-history-head';
+            const title=document.createElement('strong');
+            title.className='beta-history-title';
+            const operation=log.type==='checkout'?(log.taken_for?'Выдал':'Взял')
+              :({return:'Вернул',move:'Переместил',writeoff:'Списал'}[log.type]||log.type);
+            title.textContent=operation+': '+(log.user_name||'—');
+            const time=document.createElement('time');
+            time.className='beta-history-time';
+            const instant=historyInstant17(log.date);
+            const valid=!Number.isNaN(instant.getTime());
+            time.textContent=valid?historyTimeFormat17.format(instant):String(log.date??'');
+            if(valid)time.dateTime=instant.toISOString();
+            head.append(title,time);
+            content.append(head);
+            if(!forItem){
+                const meta=document.createElement('div');
+                meta.className='beta-history-meta';
+                meta.textContent=[log.name||log.item_code||'Товар',
+                    log.quantity!=null?String(log.quantity)+' шт.':''].filter(Boolean).join(' · ');
+                content.append(meta);
+            } else if(log.quantity!=null){
+                const amount=document.createElement('div');
+                amount.className='beta-history-meta';
+                amount.textContent=String(log.quantity)+' шт.';
+                content.append(amount);
+            }
+            if(log.taken_for){
+                const recipient=document.createElement('div');
+                recipient.className='beta-history-target';
+                recipient.textContent='Кому: '+log.taken_for;
+                content.append(recipient);
+            }
+            entry.append(icon,content);
+            return entry;
+        }
+
+        async function showItemHistory() {
+            showScreen('screen-item-history');
+            const list=document.getElementById('item-history-list');
+            list.classList.remove('beta-history-feed');
+            list.textContent='Загрузка…';
+            try {
+                const code=currentItem?.code;
+                const logs=await api('/api/history');
+                const rows=logs.filter(log=>log.item_code===code);
+                list.replaceChildren();
+                list.classList.toggle('beta-history-feed',rows.length>0);
+                if(!rows.length){list.textContent='Нет истории по этому товару';return}
+                const fragment=document.createDocumentFragment();
+                for(const log of rows)fragment.append(betaHistoryEntry(log,true));
+                list.append(fragment);
+            }catch(error){
+                list.classList.remove('beta-history-feed');
+                list.textContent=error.message||'Не удалось загрузить историю';
+            }
         }
 
         function renderActions() { 
@@ -2084,7 +2225,7 @@
         async function markLost() { if (!confirm("Сообщить всем, что вещи нет?")) return; try { const res = await api(`/api/items/${encodeURIComponent(currentItem.code)}/lost`, { method: "POST" }); showToast(res.message); } catch (e) { notify(e.message); } }
         let checkoutPending = false;
         async function doCheckout(takenFor = "", recipientId = null) {
-            if (checkoutPending) return;
+            if (checkoutPending || batchTakePending) return;
             const {code} = currentItem;
             const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
             checkoutPending = true;
@@ -2109,7 +2250,7 @@
         const recipientDialog = document.getElementById('item-recipient-dialog');
         const recipientName = document.getElementById('item-recipient-name');
         const recipientOptions = document.getElementById('item-recipients');
-        let recipientRows = [], selectedRecipient = null, recipientRequest = 0;
+        let recipientRows = [], selectedRecipient = null, recipientRequest = 0, confirmRecipient = null;
 
         function showRecipientOptions() {
             const normalize = name => name.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
@@ -2132,11 +2273,19 @@
             }
         }
 
-        async function doCheckoutFor() {
-            if (checkoutPending || recipientDialog.open) return;
+        function doCheckoutFor() {
+            const code = currentItem?.code;
+            if (!code) return;
+            return openCheckoutRecipient((name, id) => {
+                if (currentScreen === 'screen-item' && currentItem?.code === code) doCheckout(name, id);
+            });
+        }
+
+        async function openCheckoutRecipient(onConfirm) {
+            if (checkoutPending || batchTakePending || recipientDialog.open) return;
             const request = ++recipientRequest;
             recipientDialog.returnValue = '';
-            recipientDialog.dataset.itemCode = currentItem.code;
+            confirmRecipient = onConfirm;
             recipientRows = [];
             selectedRecipient = null;
             recipientName.value = '';
@@ -2160,18 +2309,24 @@
             recipientName.setCustomValidity('');
             showRecipientOptions();
         });
+        recipientDialog.querySelector('[value="cancel"]').addEventListener('click', () => recipientDialog.close('cancel'));
         recipientDialog.querySelector('form').addEventListener('submit', event => {
-            if (event.submitter?.value === 'cancel' || recipientName.value.trim()) return;
             event.preventDefault();
-            recipientName.setCustomValidity('Введите фамилию.');
-            recipientName.reportValidity();
+            const name = recipientName.value.trim();
+            if (!name) {
+                recipientName.setCustomValidity('Введите фамилию.');
+                recipientName.reportValidity();
+                return;
+            }
+            const onConfirm = confirmRecipient;
+            confirmRecipient = null;
+            recipientDialog.close('checkout');
+            onConfirm?.(name, selectedRecipient);
         });
         recipientDialog.addEventListener('close', () => {
+            if (recipientDialog.open) return;
             ++recipientRequest;
-            if (recipientDialog.returnValue === 'checkout' && currentScreen === 'screen-item' &&
-                currentItem?.code === recipientDialog.dataset.itemCode) {
-                doCheckout(recipientName.value.trim(), selectedRecipient);
-            }
+            confirmRecipient = null;
         });
         async function doReturn() {
             const {code} = currentItem;
@@ -2451,7 +2606,8 @@
             if(currentScreen==="screen-edit-item"&&id==="screen-item"&&navHistory.at(-1)==="screen-item")navHistory.pop();
             else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
             currentScreen = id;
-            if(id!=="screen-room-view")$("batch-actions").style.display="none"; if(id!=="screen-take")$("take-batch-actions").style.display="none";
+            if(id!=="screen-room-view")$("batch-actions").style.display="none";
+            updateTakeBatchUI();
 
             ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed", "screen-extra", "screen-login"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
@@ -2626,36 +2782,29 @@
 
         async function markRepair(){const code=currentItem.code;try{const rows=await api(itemPath17(code,'/repairs'));const active=rows.find(r=>!r.finished_at);if(active){if(currentUser.role!=='admin')return notify('Завершить ремонт может администратор');const cost=prompt('Итоговая стоимость ремонта',String(active.cost||0));if(cost===null)return;await api(itemPath17(code,'/repairs/finish'),{method:'POST',body:JSON.stringify({description:active.description,cost:Number(cost)})})}else if(currentItem.needs_repair){await api(itemPath17(code,'/repair'),{method:'POST'})}else{const description=prompt('Что сломалось?');if(!description?.trim())return;await api(itemPath17(code,'/repairs'),{method:'POST',body:JSON.stringify({description:description.trim(),cost:0})})}showToast('Статус обновлён');openItem(code);loadItems();loadDashboard17()}catch(e){notify(e.message)}}
         async function showHistory(){showScreen('screen-history');$('history-list').textContent='Загрузка…';try{history17=await api('/api/history');renderHistory17()}catch(e){$('history-list').textContent=e.message}}
-        const historyDayFormat17 = new Intl.DateTimeFormat('sv-SE', {
-            timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
-        });
-        const historyTimeFormat17 = new Intl.DateTimeFormat('ru-RU', {
-            timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'medium',
-        });
-        function renderHistory17() {
-            const box = $('history-list');
-            const query = $('history-query').value.toLowerCase();
-            const day = $('history-date').value;
-            const action = $('history-type182')?.value;
+        function renderHistory17(){
+            const box=$('history-list'),query=$('history-query').value.toLowerCase();
+            const day=$('history-date').value,action=$('history-type182')?.value||'';
+            const rows=history17.filter(log=>{
+                if(action&&log.type!==action)return false;
+                if(day){
+                    const instant=historyInstant17(log.date);
+                    if(Number.isNaN(instant.getTime())||historyDayFormat17.format(instant)!==day)return false;
+                }
+                return [log.name,log.item_code,log.user_name,log.taken_for]
+                    .join(' ').toLowerCase().includes(query);
+            });
             box.replaceChildren();
-            for (const row of history17) {
-                if (action && row.type !== action) continue;
-                if (![row.name, row.item_code, row.user_name, row.taken_for].join(' ').toLowerCase().includes(query)) continue;
-                const stamp = String(row.date ?? '').replace(' ', 'T');
-                const instant = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(stamp) ? stamp : stamp + 'Z');
-                const valid = !Number.isNaN(instant.getTime());
-                if (day && (!valid || historyDayFormat17.format(instant) !== day)) continue;
-                const time = valid ? historyTimeFormat17.format(instant) : row.date;
-                const actionLabel = {checkout: row.taken_for ? 'Выдал' : 'Взял', return: 'Вернул', move: 'Переместил', writeoff: 'Списал'}[row.type] || row.type;
-                const recipient = row.taken_for ? 'Кому: ' + row.taken_for + '\n' : '';
-                card17(box, `${actionLabel}: ${row.user_name || '—'}`, `${row.name} · ${row.quantity} шт.\n${recipient}${time}`);
-            }
-            if (!box.children.length) box.textContent = 'Ничего не найдено';
+            box.classList.toggle('beta-history-feed',rows.length>0);
+            if(!rows.length){box.textContent='Ничего не найдено';return}
+            const fragment=document.createDocumentFragment();
+            for(const log of rows)fragment.append(betaHistoryEntry(log));
+            box.append(fragment);
         }
         function scan17(callback,multi=false){if(tg.initData&&tg.showScanQrPopup){try{tg.showScanQrPopup({text:multi?'Сканируйте товары. Закройте сканер, когда закончите.':'Наведите на QR товара'},v=>{if(v)callback(v.trim());return !multi});return}catch(e){}}const {o,b}=overlay17('Сканирование QR');const input=field17(b,'Код товара / USB-сканер');function accept(){if(!input.value.trim())return;callback(input.value.trim());input.value='';if(!multi)o.remove()}btn17(b,'Найти',accept);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();accept()}});input.focus();if('BarcodeDetector' in window&&navigator.mediaDevices?.getUserMedia)btn17(b,'Открыть камеру',async()=>{let detector;try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){throw Error('Камера не поддерживает QR в этом браузере')}const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});if(!o.isConnected){stream.getTracks().forEach(t=>t.stop());return}const video=document.createElement('video');video.srcObject=stream;video.playsInline=true;video.muted=true;video.style.width='100%';b.append(video);await video.play();let last='',lastAt=0,busy=false;const tick=setInterval(async()=>{if(!o.isConnected){clearInterval(tick);stream.getTracks().forEach(t=>t.stop());return}if(busy)return;busy=true;try{const rows=await detector.detect(video);const code=rows[0]?.rawValue?.trim();if(code&&(code!==last||Date.now()-lastAt>1800)){last=code;lastAt=Date.now();callback(code);if(!multi)o.remove()}}catch(e){}finally{busy=false}},250)});else card17(b,'Камера браузера здесь недоступна','Используйте обычный QR-сканер или введите код вручную.');}
 
         function scanQr(){scan17(openItem)}
-        function scanTakeQr(){scan17(code=>{const i=allItems.find(x=>x.code===code);if(!canTakeItem(i))return notify('Техника недоступна');if(!selectedTakeItems.includes(code)){selectedTakeItems.push(code);renderTakeItems();showToast(i.name)}},true)}
+        function scanTakeQr(){scan17(code=>{if(batchTakePending)return;const i=allItems.find(x=>x.code===code);if(!canTakeItem(i))return notify('Техника недоступна');if(!selectedTakeItems.includes(code)){selectedTakeItems.push(code);renderTakeItems();updateTakeBatchUI();showToast(i.name)}},true)}
         function inventoryProgress17(){const id=Number($('inv-location').value);const expected=allItems.filter(i=>i.stocks.some(s=>s.location_id===id&&s.quantity>0)).map(i=>i.code);const found=invScannedCodes.filter(c=>expected.includes(c)).length;$('inv-progress').textContent=`Проверено позиций: ${found} из ${expected.length}. Лишних: ${invScannedCodes.length-found}.`; $('inv-finish-btn').classList.remove('hidden')}
         function showInventory(){invScannedCodes=[]; inventoryCounts17={};$('inv-scanned-list').replaceChildren();inventoryProgress17();showScreen('screen-inventory')}
         $('inv-location').addEventListener('change',()=>{invScannedCodes=[]; inventoryCounts17={};$('inv-scanned-list').replaceChildren();inventoryProgress17()});
@@ -2722,6 +2871,7 @@
         installRelease183();
         const openRoleMenu=installRelease184();
         installRelease185();
+        if (typeof installCatalogRefinements === 'function') installCatalogRefinements();
 
 (function installBetaMotion(){
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2779,13 +2929,31 @@
   const tabOrder=['screen-main','screen-platforms','screen-th','screen-rooms','screen-settings'];
   const nav=document.querySelector('.bottom-nav');
   const capsule=document.createElement('span');capsule.className='beta-tab-capsule';capsule.setAttribute('aria-hidden','true');
-  if(nav)nav.prepend(capsule);
+  if(nav){
+    nav.setAttribute('role','navigation');
+    nav.setAttribute('aria-label','Основные разделы');
+    for(const item of nav.querySelectorAll('.nav-item')){
+      item.setAttribute('role','button');
+      item.tabIndex=0;
+      item.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();item.click();
+        }
+      });
+      item.addEventListener('click',()=>haptic('light'),{passive:true});
+    }
+    nav.prepend(capsule);
+  }
   let navReady=false,navFrame=0,lastNav=null;
   function positionCapsule(){
     if(!nav)return;
     const item=nav.querySelector('.nav-item.active:not(.hidden)');
     if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){if(nav.classList.contains('beta-tab-motion'))nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
     const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
+    if(window.matchMedia('(max-width:899px)').matches) {
+      const clearance=Math.max(82,Math.ceil(window.innerHeight-base.top));
+      document.documentElement.style.setProperty('--beta-dock-clearance',clearance+'px');
+    }
     if(!r.width||!r.height)return;
     if(!navReady)capsule.style.transition='none';
     capsule.style.width=r.width+'px';capsule.style.height=r.height+'px';

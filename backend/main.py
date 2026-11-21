@@ -8,12 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Literal
 import qrcode
 import io
 import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as ExcelImage
+from openpyxl.styles import Alignment, Font
 import base64
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -58,7 +61,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.13"
+APP_VERSION = "18.5.14"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -433,7 +436,9 @@ class MoveRequest(BaseModel):
 class BatchMoveRequest(BaseModel):
     codes: List[str]; from_location: int; to_location: int
 class BatchCheckoutRequest(BaseModel):
-    codes: List[str]; taken_for: str = ""
+    codes: List[str]
+    taken_for: str = ""
+    recipient_id: Optional[int] = None
 class WriteoffRequest(BaseModel):
     code: str; location_id: int; quantity: int
 class BookingRequest(BaseModel):
@@ -1127,7 +1132,7 @@ async def checkout_batch(req: BatchCheckoutRequest, x_init_data: Optional[str] =
         for code in dict.fromkeys(req.codes):
             conn.execute("SAVEPOINT batch_checkout")
             try:
-                _checkout_one(conn,user,code,req.taken_for)
+                _checkout_one(conn,user,code,req.taken_for,req.recipient_id)
                 success.append(code)
             except HTTPException as exc:
                 conn.execute("ROLLBACK TO batch_checkout")
@@ -1790,8 +1795,44 @@ class LabelSelection(BaseModel):
     width_mm: int = 50
     height_mm: int = 80
 
+def labels_xlsx(rows, copies):
+    if len(rows) * copies > 500:
+        raise HTTPException(400, "Выберите до 500 этикеток с учётом копий")
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Этикетки"
+    sheet.append(["Код", "Название", "QR"])
+    sheet.freeze_panes = "A2"
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for column, width in (("A", 28), ("B", 42), ("C", 17)):
+        sheet.column_dimensions[column].width = width
+
+    for row in rows:
+        png = io.BytesIO()
+        qrcode.make(row["code"], border=4).save(png, format="PNG")
+        for _ in range(copies):
+            sheet.append([row["code"], row["name"]])
+            index = sheet.max_row
+            for cell in sheet[index][:2]:
+                cell.data_type = "s"
+                cell.alignment = Alignment(vertical="center", wrap_text=True)
+            sheet.row_dimensions[index].height = 86
+            qr = ExcelImage(io.BytesIO(png.getvalue()))
+            qr.width = qr.height = 112
+            sheet.add_image(qr, f"C{index}")
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="B21S-qr-labels.xlsx"'},
+    )
+
+
 @app.post('/api/export_labels')
-def export_selected_labels(req: LabelSelection, x_init_data: Optional[str] = Header(None)):
+def export_selected_labels(req: LabelSelection, format: Literal["pdf", "xlsx"] = "pdf", x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     codes = list(dict.fromkeys(req.codes))
     if any(not 1 <= len(code) <= 64 for code in codes):
@@ -1805,7 +1846,11 @@ def export_selected_labels(req: LabelSelection, x_init_data: Optional[str] = Hea
         }
     if len(rows) != len(codes):
         raise HTTPException(404, "Один из выбранных товаров недоступен")
-    return labels_pdf([rows[code] for code in codes], req.dpi, req.width_mm, req.height_mm, req.copies)
+    selected = [rows[code] for code in codes]
+    if format == "xlsx":
+        return labels_xlsx(selected, req.copies)
+    return labels_pdf(selected, req.dpi, req.width_mm, req.height_mm, req.copies)
+
 
 @app.put('/api/items/{code}/photo')
 async def update_photo(code:str,photo:UploadFile=File(...),x_init_data:Optional[str]=Header(None)):
@@ -1889,6 +1934,18 @@ def warehouse_version():
 @app.get("/pull-refresh.js", include_in_schema=False)
 def pull_refresh_script():
     return FileResponse(_MAIN_PWA_DIR / "pull_refresh.js",media_type="text/javascript",headers={"Cache-Control":"no-cache,no-store,must-revalidate"})
+
+def register_main_asset(filename, media_type):
+    def asset():
+        return FileResponse(_MAIN_PWA_DIR / filename, media_type=media_type,
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+    app.add_api_route("/" + filename, asset, methods=["GET"], include_in_schema=False)
+
+
+register_main_asset("catalog_refinements.js", "text/javascript")
+for filename in ("catalog_refinements.css", "beta_appearance.css", "beta_refined_ui.css"):
+    register_main_asset(filename, "text/css")
+
 
 @app.get("/pwa/", include_in_schema=False)
 def main_pwa_home():
