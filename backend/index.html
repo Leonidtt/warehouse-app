@@ -234,26 +234,27 @@
 #screen-settings .v18-settings-group[open]>summary .beta-settings-preview{display:none}
 #screen-settings .v18-settings-group>summary>.v18-icon{flex-shrink:0}
 @media(prefers-reduced-motion:no-preference){
-  :root{--beta-motion:360ms;--beta-tab-motion:440ms;--beta-ease:cubic-bezier(.25,.8,.25,1)}
+  :root{--beta-motion:220ms;--beta-tab-motion:200ms;--beta-press:90ms;--beta-release:140ms;--beta-ease:cubic-bezier(.2,.75,.25,1)}
   /* Animate content, never the screen or its sticky header. Avoid a second fade when animation ends. */
   .screen.beta-screen-enter > :not(.sticky-header):not(.floating-bar):not(.hidden){animation:beta-screen-in var(--beta-motion) var(--beta-ease)}
   .screen.beta-tab-enter > :not(.sticky-header):not(.floating-bar):not(.hidden){animation:beta-tab-in var(--beta-tab-motion) var(--beta-ease)}
   .screen.beta-tab-enter,.screen.beta-screen-enter{overflow-x:clip}
   .bottom-nav .nav-item,.bottom-nav .nav-item *{-webkit-tap-highlight-color:transparent}
   button,summary,[role="button"]{-webkit-tap-highlight-color:transparent}
-  button:active:not(:disabled){opacity:1}
+  button:active:not(:disabled){opacity:1;transition-duration:var(--beta-press)}
 
   .bottom-nav.beta-tab-motion .nav-item{position:relative;z-index:1}
   .bottom-nav.beta-tab-motion .nav-item.active{background:transparent!important}
-  .beta-tab-capsule{position:absolute;left:0;top:0;z-index:0;pointer-events:none;background:var(--r182-active,var(--skeleton-bg));border-radius:28px;opacity:0;transition:transform var(--beta-tab-motion) var(--beta-ease),width var(--beta-tab-motion) var(--beta-ease),height var(--beta-tab-motion) var(--beta-ease),opacity 180ms ease}
+  .beta-tab-capsule{position:absolute;left:0;top:0;z-index:0;pointer-events:none;background:var(--r182-active,var(--skeleton-bg));border-radius:28px;opacity:0;transition:transform var(--beta-tab-motion) var(--beta-ease),opacity 120ms ease}
   .bottom-nav.beta-tab-motion .beta-tab-capsule{opacity:1}
-  .bottom-nav.beta-tab-motion .nav-item.active .icon{animation:beta-tab-icon var(--beta-tab-motion) var(--beta-ease)}
   @media(min-width:900px){.web-mode .beta-tab-capsule{border-radius:11px}}
 
-  .modal-overlay{animation:beta-overlay-in 200ms ease both}
+  .modal-overlay{animation:beta-overlay-in 140ms ease both}
   .modal-overlay .modal-content{animation:beta-sheet-in var(--beta-motion) var(--beta-ease) both}
-  .toast{animation:beta-toast-in 260ms var(--beta-ease);transition:opacity 250ms ease,transform 250ms var(--beta-ease)}
-  button,.nav-item,.room-card,summary{transition:background-color 180ms ease,border-color 180ms ease,color 180ms ease,opacity 180ms ease,transform 160ms var(--beta-ease)}
+  .toast{animation:beta-toast-in 180ms var(--beta-ease);transition:opacity 150ms ease,transform 150ms var(--beta-ease)}
+  button,.nav-item,.room-card,summary{transition:background-color var(--beta-release) ease,border-color var(--beta-release) ease,color var(--beta-release) ease,opacity var(--beta-release) ease,transform var(--beta-release) var(--beta-ease)}
+  #screen-main .v18-quick>button{transition:background-color var(--beta-release) ease,border-color var(--beta-release) ease,transform var(--beta-release) var(--beta-ease)}
+  #screen-main .v18-quick>button:active:not(:disabled){transform:scale(.985);transition-duration:var(--beta-press)}
   .nav-item:active{transform:none}
   summary:active{transform:none}
   @supports selector(details::details-content) and (interpolate-size:allow-keywords){
@@ -262,17 +263,16 @@
     .beta-setting-details::details-content{transition:height var(--beta-motion) var(--beta-ease),content-visibility var(--beta-motion) allow-discrete}
   }
   @supports (transition-behavior:allow-discrete){
-    #create-item-modal{transition:opacity 200ms ease,display 280ms allow-discrete;opacity:1}
+    #create-item-modal{transition:opacity 150ms ease,display 150ms allow-discrete;opacity:1}
     #create-item-modal.hidden{opacity:0;pointer-events:none}
   }
 }
-@keyframes beta-screen-in{from{transform:translateY(6px)}to{transform:none}}
-@keyframes beta-tab-in{from{transform:translateX(var(--beta-tab-shift,14px))}to{transform:none}}
-@keyframes beta-tab-icon{0%{transform:scale(.96)}65%{transform:scale(1.025)}100%{transform:none}}
+@keyframes beta-screen-in{from{transform:translateY(4px)}to{transform:none}}
+@keyframes beta-tab-in{from{transform:translateX(var(--beta-tab-shift,8px))}to{transform:none}}
 
 @keyframes beta-overlay-in{from{opacity:0}to{opacity:1}}
-@keyframes beta-sheet-in{from{opacity:.5;transform:translateY(20px)}to{opacity:1;transform:none}}
-@keyframes beta-toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes beta-sheet-in{from{opacity:.82;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes beta-toast-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 </style>
 </head>
@@ -2725,7 +2725,7 @@
 
 (function installBetaMotion(){
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const timing={duration:360,easing:'cubic-bezier(.25,.8,.25,1)'};
+  const timing={duration:220,easing:'cubic-bezier(.2,.75,.25,1)'};
   const shortLabels={
     'Активные сеансы сайта':'Сеансы','Акцентный цвет':'Акцент','Что нового в v18.5.2':'Что нового',
     'Массовое редактирование':'Массовая правка','Архив и восстановление':'Архив','Шаблоны товаров':'Шаблоны',
@@ -2817,12 +2817,12 @@
         const done=screenEnds.get(screen);if(done)done();
         screen.classList.remove('beta-tab-enter','beta-screen-enter');
       }
-      target.style.setProperty('--beta-tab-shift',to>from?'14px':'-14px');
+      target.style.setProperty('--beta-tab-shift',to>from?'8px':'-8px');
       target.classList.remove('beta-tab-enter','beta-screen-enter');target.classList.add(cls);
       let timeout;
       const done=()=>{clearTimeout(timeout);target.classList.remove(cls);target.style.removeProperty('--beta-tab-shift');target.removeEventListener('animationend',finish);screenEnds.delete(target)};
       const finish=e=>{if(e.target.parentElement===target&&e.animationName===animationName)done()};
-      screenEnds.set(target,done);target.addEventListener('animationend',finish);timeout=setTimeout(done,tab?520:440);
+      screenEnds.set(target,done);target.addEventListener('animationend',finish);timeout=setTimeout(done,tab?280:300);
     }
     queueCapsule();
     return result;
@@ -2870,10 +2870,10 @@
       snapshot.style.pointerEvents='none';snapshot.style.animation='none';
       const sheet=snapshot.querySelector('.modal-content');if(sheet)sheet.style.animation='none';
       remove();document.body.append(snapshot);
-      const animation=snapshot.animate([{opacity:1},{opacity:0}],{duration:200,easing:'ease',fill:'forwards'});
-      if(sheet)sheet.animate([{transform:'none'},{transform:'translateY(18px)'}],{duration:200,easing:'ease',fill:'forwards'});
+      const animation=snapshot.animate([{opacity:1},{opacity:0}],{duration:150,easing:'ease',fill:'forwards'});
+      if(sheet)sheet.animate([{transform:'none'},{transform:'translateY(8px)'}],{duration:150,easing:'ease',fill:'forwards'});
       animation.onfinish=()=>snapshot.remove();
-      setTimeout(()=>snapshot.remove(),350);
+      setTimeout(()=>snapshot.remove(),240);
     };
     return result;
   };
