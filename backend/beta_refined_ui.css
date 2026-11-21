@@ -262,15 +262,15 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
 
 /* 18.6 Beta: preserve original large camera/flash design; below use same tiles.
    Same source sprite and image scale, same typography, no new decorative chrome. */
-#screen-main .r182-overview > .r188-bottom > :nth-child(1) .r182-total::before {
+#screen-main .r182-overview > .r188-disclosure .r188-bottom > :nth-child(1) .r182-total::before {
   background-position: 100% 66.667%;
 }
-#screen-main .r182-overview > .r188-bottom > :nth-child(2) .r182-total::before {
+#screen-main .r182-overview > .r188-disclosure .r188-bottom > :nth-child(2) .r182-total::before {
   background-image: url('/catalog-dnp-black-v1852.webp');
   background-size: 100% 100%;
   background-position: center;
 }
-#screen-main .r182-overview > .r188-bottom .r182-total::before {
+#screen-main .r182-overview > .r188-disclosure .r188-bottom .r182-total::before {
   width: min(50%, 74px);
   aspect-ratio: 1;
 }

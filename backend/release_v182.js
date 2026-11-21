@@ -65,19 +65,25 @@ function installRelease182(){
     const {categories,booked,daily:d,low:short,consumables=0}=data;
     booked17=new Set(booked);
     const byName=new Map(categories.map(category=>[category.name,category]));
-    // Two identical, full-size rows. Never shrink the familiar camera/flash tiles.
+    // Preserve the open/closed state when overview data refreshes.
+    const expanded=dashboard.querySelector('details.r188-disclosure')?.open??false;
     const primary=el('div','r182-summary r182-featured r188-top');
     primary.append(
       categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
       categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
     );
+    const detail=el('details','r182-disclosure r188-disclosure');
+    detail.open=expanded;
+    const title=el('summary');
+    title.append(el('span','','Ноутбуки и принтеры'),icon('right'));
     const secondary=el('div','r182-summary r182-featured r188-bottom');
     secondary.append(
       categoryWidget('Ноутбуки','Ноутбуки',byName.get('Ноутбуки')),
       categoryWidget('Принтеры','Принтеры',byName.get('Принтеры')),
     );
+    detail.append(title,secondary);
     dashboard.className='r182-overview card';
-    dashboard.replaceChildren(primary,secondary);
+    dashboard.replaceChildren(primary,detail);
 
     daily.replaceChildren();
     daily.className=d?'r182-daily':'hidden';
