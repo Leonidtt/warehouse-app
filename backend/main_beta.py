@@ -222,6 +222,15 @@ def init_db(db_path):
         total_cents INTEGER NOT NULL CHECK(total_cents>=0),
         remaining_cents INTEGER NOT NULL CHECK(remaining_cents BETWEEN 0 AND total_cents)
     )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS equipment_buyout_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_code TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+        user_id INTEGER NOT NULL,
+        request_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_buyout_payments_item ON equipment_buyout_payments(item_code,id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_checkouts_code_return ON checkouts(item_code,returned_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(item_code,date_from,date_to)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_location ON stock(location_id)")
@@ -482,6 +491,11 @@ class LocationUpdate(BaseModel):
 class BuyoutAmounts(BaseModel):
     total: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     remaining: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
+class BuyoutPaymentRequest(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    request_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class ItemUpdate(BaseModel):
@@ -917,10 +931,19 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
         WHERE c.item_code = ? AND c.returned_at IS NULL
     """, (code,)).fetchall()
     buyout = None
-    if is_admin and str(item["buyout_status"] or "").strip():
-        buyout = conn.execute(
-            "SELECT total_cents,remaining_cents FROM equipment_buyout_amounts WHERE item_code=?", (code,)
-        ).fetchone()
+    payments = []
+    if is_admin:
+        if str(item["buyout_status"] or "").strip():
+            buyout = conn.execute(
+                "SELECT total_cents,remaining_cents FROM equipment_buyout_amounts WHERE item_code=?", (code,)
+            ).fetchone()
+        payments = conn.execute("""
+            SELECT p.id,p.amount_cents,p.created_at,p.user_id,
+                   COALESCE(NULLIF(TRIM(u.full_name),''),'Администратор') AS admin_name
+            FROM equipment_buyout_payments p
+            LEFT JOIN users u ON u.tg_id=p.user_id
+            WHERE p.item_code=? ORDER BY p.id DESC
+        """, (code,)).fetchall()
     conn.close()
     
     c_at = item["created_at"] if "created_at" in item.keys() else ""
@@ -941,7 +964,52 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
                 "remaining": buyout["remaining_cents"] / 100,
                 "paid": (buyout["total_cents"] - buyout["remaining_cents"]) / 100,
             }
+        result["buyout_payments"] = [
+            {"id": p["id"], "amount": p["amount_cents"] / 100,
+             "created_at": p["created_at"], "admin_name": p["admin_name"]}
+            for p in payments
+        ]
     return result
+
+@app.post("/api/items/{code}/buyout/payments")
+def add_buyout_payment(code: str, req: BuyoutPaymentRequest,
+                       x_init_data: Optional[str] = Header(None)):
+    actor = check_admin(x_init_data)
+    cents = int(req.amount * 100)
+    with transaction() as conn:
+        item = active_item(conn, code)
+        if item["kind"] != "equipment" or not str(item["buyout_status"] or "").strip():
+            raise HTTPException(409, "Техника не оформлена на выкуп")
+        amounts = conn.execute("""
+            SELECT remaining_cents FROM equipment_buyout_amounts WHERE item_code=?
+        """, (code,)).fetchone()
+        if not amounts:
+            raise HTTPException(409, "Сначала укажите полную сумму выкупа в карточке")
+        earlier = conn.execute("""
+            SELECT item_code,amount_cents,user_id FROM equipment_buyout_payments
+            WHERE request_id=?
+        """, (req.request_id,)).fetchone()
+        if earlier:
+            if (earlier["item_code"], earlier["amount_cents"], earlier["user_id"]) != (
+                    code, cents, actor["tg_id"]):
+                raise HTTPException(409, "Идентификатор платежа уже использован")
+            return {"status": "ok", "already_saved": True,
+                    "remaining": amounts["remaining_cents"] / 100}
+        if cents > amounts["remaining_cents"]:
+            raise HTTPException(409, "Платёж больше оставшейся суммы выкупа")
+        conn.execute("""
+            UPDATE equipment_buyout_amounts
+            SET remaining_cents=remaining_cents-? WHERE item_code=?
+        """, (cents, code))
+        conn.execute("""
+            INSERT INTO equipment_buyout_payments(item_code,amount_cents,user_id,request_id)
+            VALUES(?,?,?,?)
+        """, (code, cents, actor["tg_id"], req.request_id))
+        remaining = amounts["remaining_cents"] - cents
+        audit(conn, actor, "Платёж выкупа",
+              f"{item['name']} ({code}): +{req.amount} ₽, осталось {remaining / 100:.2f} ₽")
+    return {"status": "ok", "already_saved": False, "remaining": remaining / 100}
+
 
 @app.post("/api/items/{code}/update")
 def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(None)):
@@ -964,6 +1032,20 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
         existing = active_item(conn, code)
         if existing["kind"] != req.kind:
             raise HTTPException(409, "Тип существующего товара менять нельзя")
+        has_payments = conn.execute(
+            "SELECT 1 FROM equipment_buyout_payments WHERE item_code=? LIMIT 1", (code,)
+        ).fetchone() is not None
+        if has_payments:
+            if not req.buyout_status.strip():
+                raise HTTPException(409, "Нельзя снять выкуп с записанными платежами")
+            if buyout_total is not None:
+                previous = conn.execute("""
+                    SELECT total_cents,remaining_cents FROM equipment_buyout_amounts
+                    WHERE item_code=?
+                """, (code,)).fetchone()
+                if not previous or (int(buyout_total * 100), int(buyout_remaining * 100)) != (
+                        previous["total_cents"], previous["remaining_cents"]):
+                    raise HTTPException(409, "После первого платежа остаток меняется только через «Внести выкуп»")
         if req.kind == "consumable":
             req.kit_body=req.kit_lens=req.kit_flash=req.kit_acc=req.kit_add=req.serial_number=req.buyout_status=""
             req.price_body=req.price_lens=req.price_flash=req.price_acc=req.price_add=0
@@ -1456,6 +1538,8 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
 
 def apply_warehouse_snapshot(path, actor):
     with transaction() as conn:
+        if conn.execute("SELECT 1 FROM equipment_buyout_payments LIMIT 1").fetchone():
+            raise HTTPException(409, "В Бете есть платежи выкупа: импорт снимка заблокирован во избежание потери истории")
         confirmed_handoffs = conn.execute("""
             SELECT h.handed_at,c.id,c.item_code,c.user_id,c.giver_id,c.taken_at,c.taken_for
             FROM checkout_handoffs h JOIN checkouts c ON c.id=h.checkout_id

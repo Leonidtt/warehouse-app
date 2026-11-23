@@ -512,6 +512,17 @@
                 </table>
             </div>
             
+            <div id="item-buyout-box" class="card hidden" style="margin-top:18px; padding:16px;">
+                <h3 style="margin:0 0 12px; font-size:18px;">Выкуп техники</h3>
+                <div id="item-buyout-summary"></div>
+                <div id="item-buyout-form" class="hidden" style="margin-top:14px;">
+                    <div class="input-group"><label for="item-buyout-payment">Сумма взноса, ₽</label><input id="item-buyout-payment" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0"></div>
+                    <button id="item-buyout-pay-btn" class="ok" onclick="submitBuyoutPayment17()">Внести выкуп</button>
+                </div>
+                <div style="margin-top:18px; font-weight:700;">История выкупа</div>
+                <div id="item-buyout-history" style="margin-top:8px;"></div>
+            </div>
+
             <div id="passport-v17"></div><div id="actions"></div><div id="repairs-v17"></div>
             
             <div id="booking-section">
@@ -576,6 +587,11 @@
                 <select id="edit-budget-tag"><option value="">Не указан</option><option value="КЦ">КЦ (Красный)</option><option value="ТХ">ТХ (Зеленый)</option></select>
             </div>
             <div class="input-group"><label>На выкупе у</label><input id="edit-buyout-status" placeholder="Например: Мартемьянов"></div>
+            <div id="edit-buyout-amounts">
+                <div class="input-group"><label for="edit-buyout-total">Сумма выкупа, ₽</label><input type="number" id="edit-buyout-total" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="input-group"><label for="edit-buyout-remaining">Осталось выплатить, ₽</label><input type="number" id="edit-buyout-remaining" min="0" step="0.01" inputmode="decimal"></div>
+                <p class="meta hidden" id="edit-buyout-locked">После первого взноса сумма и остаток изменяются только через платежи в карточке.</p>
+            </div>
             
             <h2 style="font-size: 16px; margin: 20px 0 10px; font-weight: 700;">Комплектация и Цены</h2>
             <div class="input-group"><label>Тушка</label><input id="edit-kit-body"></div>
@@ -1619,7 +1635,7 @@
                     priceBox.classList.add("hidden");
                 }
 
-                renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
+                renderBuyout17(currentItem); renderActions(); loadPassport17(currentItem.code); loadRepairs17(currentItem.code); 
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
             } catch (e) { notify(e.message); } 
@@ -1631,7 +1647,13 @@
             document.getElementById("edit-price").value = currentItem.price || 0; 
             document.getElementById("edit-budget-tag").value = currentItem.budget_tag || ""; 
             document.getElementById("edit-serial-number").value = currentItem.serial_number || ""; 
-            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || ""; 
+            document.getElementById("edit-buyout-status").value = currentItem.buyout_status || "";
+            $("edit-buyout-total").value = currentItem.buyout?.total ?? "";
+            $("edit-buyout-remaining").value = currentItem.buyout?.remaining ?? "";
+            const recordedBuyout = (currentItem.buyout_payments || []).length > 0;
+            $("edit-buyout-total").disabled = recordedBuyout;
+            $("edit-buyout-remaining").disabled = recordedBuyout;
+            $("edit-buyout-locked").classList.toggle("hidden", !recordedBuyout); 
             
             document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
             document.getElementById("edit-price-body").value = currentItem.price_body || 0; 
@@ -1653,7 +1675,7 @@
             toggleEditFields(); showScreen("screen-edit-item"); 
         }
         
-        function toggleEditFields() { const c=$("edit-kind").value==="consumable"; $("edit-consumable-fields").classList.toggle("hidden",!c); for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c); $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c); $("edit-price-label").textContent=c?"Цена за единицу":"Стоимость оборудования"; }
+        function toggleEditFields() { const c=$("edit-kind").value==="consumable"; $("edit-consumable-fields").classList.toggle("hidden",!c); $("edit-buyout-amounts").classList.toggle("hidden",c); for(const id of ["serial-number","budget-tag","buyout-status","kit-body","price-body","kit-lens","price-lens","kit-flash","price-flash","kit-acc","price-acc","kit-add","price-add"]) $("edit-"+id).closest(".input-group").classList.toggle("hidden",c); $("screen-edit-item").querySelector("h2").classList.toggle("hidden",c); $("edit-price-label").textContent=c?"Цена за единицу":"Стоимость оборудования"; }
         
         async function saveEditItem() { 
             const btn = document.querySelector("#screen-edit-item .ok"); 
@@ -1687,7 +1709,11 @@
                     name, kind, min_stock: minStock, price, 
                     kit_body, kit_lens, kit_flash, kit_acc, kit_add, 
                     price_body, price_lens, price_flash, price_acc, price_add, 
-                    budget_tag, serial_number, buyout_status, category:$("edit-category").value 
+                    budget_tag, serial_number, buyout_status, category:$("edit-category").value,
+                    buyout: kind === "equipment" ? {
+                        total: $("edit-buyout-total").value || null,
+                        remaining: $("edit-buyout-remaining").value || null
+                    } : undefined 
                 }) }); 
                 showToast("Сохранено"); setLoading(btn,false); openItem(currentItem.code); 
             } catch (e) { notify(e.message); setLoading(btn, false); } 
@@ -2057,7 +2083,78 @@
         const jsArg17 = v=>safe(JSON.stringify(String(v??'')));
         const authHeaders17=()=>tg.initData?{'X-Init-Data':tg.initData}:{};
         const itemPath17=(code,suffix='')=>'/api/items/'+encodeURIComponent(code)+suffix;
-        const money17=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽';
+        const money17=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₽';
+        function renderBuyout17(item) {
+            const box=$("item-buyout-box");
+            const visible=currentUser?.role==="admin" && item.kind==="equipment" && !!item.buyout_status;
+            box.classList.toggle("hidden", !visible);
+            if (!visible) return;
+            const summary=$("item-buyout-summary"), history=$("item-buyout-history");
+            summary.replaceChildren(); history.replaceChildren();
+            const row=(parent,label,value,emphasis=false)=>{
+                const line=document.createElement("div");
+                line.style.cssText="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);";
+                const key=document.createElement("span");key.textContent=label;
+                const val=document.createElement("strong");val.textContent=value;
+                if(emphasis)val.style.color="var(--primary)";
+                line.append(key,val);parent.append(line);
+            };
+            row(summary,"Выкупает",item.buyout_status);
+            $("item-buyout-form").classList.toggle("hidden", !item.buyout || Number(item.buyout.remaining)<=0);
+            if (!item.buyout) {
+                row(summary,"Сумма выкупа","Не указана");
+                const hint=document.createElement("p");hint.className="meta";hint.textContent="Задайте сумму выкупа и начальный остаток через «Ред.».";summary.append(hint);
+            } else {
+                row(summary,"Сумма выкупа",money17(item.buyout.total));
+                row(summary,"Уже внесено",money17(item.buyout.paid));
+                row(summary,"Осталось выплатить",money17(item.buyout.remaining),true);
+                if(Number(item.buyout.remaining)===0) {
+                    const done=document.createElement("p");done.className="meta";done.textContent="Выкуп полностью оплачен. Архивирование выполняется отдельно.";summary.append(done);
+                }
+            }
+            const payments=item.buyout_payments||[];
+            if(item.buyout) {
+                const accounted=Math.round(Number(item.buyout.paid)*100);
+                const recorded=payments.reduce((s,p)=>s+Math.round(Number(p.amount)*100),0);
+                const initial=Math.max(0,accounted-recorded);
+                if(initial>0)row(history,"Учтено до начала журнала",money17(initial/100));
+            }
+            if(!payments.length) {
+                if(!history.childElementCount){const empty=document.createElement("p");empty.className="meta";empty.textContent="Взносов пока нет";history.append(empty);}
+            }
+            for(const p of payments) {
+                const when=new Date(String(p.created_at).replace(" ","T")+"Z");
+                const label=(Number.isNaN(when.getTime())?p.created_at:when.toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}))+" · "+p.admin_name;
+                row(history,label,money17(p.amount));
+            }
+        }
+        let pendingBuyout17=null;
+        async function submitBuyoutPayment17() {
+            if(currentUser?.role!=="admin" || !currentItem?.buyout)return;
+            const code=currentItem.code, input=$("item-buyout-payment"),btn=$("item-buyout-pay-btn");
+            if(btn.disabled)return;
+            const amount=input.value.trim().replace(",",".");
+            if(!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount)<=0 || Number(amount)>Number(currentItem.buyout.remaining)){
+                notify("Укажите сумму больше нуля и не выше остатка выкупа");return;
+            }
+            if(!confirm("Записать взнос "+money17(amount)+" по товару «"+currentItem.name+"»?"))return;
+            if(!pendingBuyout17 || pendingBuyout17.code!==code || pendingBuyout17.amount!==amount){
+                const key=(typeof crypto!=="undefined" && crypto.randomUUID)?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2);
+                pendingBuyout17={code,amount,request_id:key};
+            }
+            btn.disabled=true;
+            try {
+                const saved=await api("/api/items/"+encodeURIComponent(code)+"/buyout/payments",{
+                    method:"POST",body:JSON.stringify({amount,request_id:pendingBuyout17.request_id})
+                });
+                pendingBuyout17=null;
+                input.value="";
+                await openItem(code);
+                showToast(saved.already_saved?"Взнос уже учтён":"Выкуп внесён");
+            } catch(e) {
+                notify(e.message+" · Проверьте историю перед повторной попыткой");
+            } finally {btn.disabled=false;}
+        }
         let categories17=[], booked17=new Set(), history17=[];
         if(!tg.initData)document.body.classList.add('web-mode');
         function net17(){ $('net-state').classList.toggle('hidden',navigator.onLine); }
