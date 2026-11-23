@@ -491,6 +491,18 @@
                 <button class="secondary" onclick="showQr()" style="margin:0;">🔲 QR</button>
             </div>
             
+            <div id="item-buyout-box" class="card hidden" style="margin-top:18px; padding:16px;">
+                <h3 style="margin:0 0 12px; font-size:18px;">Выкуп техники</h3>
+                <div id="item-buyout-summary"></div>
+                <button id="item-buyout-start" class="secondary hidden" onclick="startBuyout17()" style="margin-top:10px;">Оформить выкуп</button>
+                <div id="item-buyout-form" class="hidden" style="margin-top:14px;">
+                    <div class="input-group"><label for="item-buyout-payment">Сумма взноса, ₽</label><input id="item-buyout-payment" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0"></div>
+                    <button id="item-buyout-pay-btn" class="ok" onclick="submitBuyoutPayment17()">Внести выкуп</button>
+                </div>
+                <div style="margin-top:18px; font-weight:700;">История выкупа</div>
+                <div id="item-buyout-history" style="margin-top:8px;"></div>
+            </div>
+
             <div id="kit-box" class="kit-box hidden">
                 <b>Комплектация:</b>
                 <div id="kit-body-text"></div>
@@ -512,17 +524,6 @@
                 </table>
             </div>
             
-            <div id="item-buyout-box" class="card hidden" style="margin-top:18px; padding:16px;">
-                <h3 style="margin:0 0 12px; font-size:18px;">Выкуп техники</h3>
-                <div id="item-buyout-summary"></div>
-                <div id="item-buyout-form" class="hidden" style="margin-top:14px;">
-                    <div class="input-group"><label for="item-buyout-payment">Сумма взноса, ₽</label><input id="item-buyout-payment" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0"></div>
-                    <button id="item-buyout-pay-btn" class="ok" onclick="submitBuyoutPayment17()">Внести выкуп</button>
-                </div>
-                <div style="margin-top:18px; font-weight:700;">История выкупа</div>
-                <div id="item-buyout-history" style="margin-top:8px;"></div>
-            </div>
-
             <div id="passport-v17"></div><div id="actions"></div><div id="repairs-v17"></div>
             
             <div id="booking-section">
@@ -2087,7 +2088,7 @@
         const money17=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₽';
         function renderBuyout17(item) {
             const box=$("item-buyout-box");
-            const visible=currentUser?.role==="admin" && item.kind==="equipment" && !!item.buyout_status;
+            const visible=currentUser?.role==="admin" && item.kind==="equipment";
             box.classList.toggle("hidden", !visible);
             if (!visible) return;
             const summary=$("item-buyout-summary"), history=$("item-buyout-history");
@@ -2100,12 +2101,15 @@
                 if(emphasis)val.style.color="var(--primary)";
                 line.append(key,val);parent.append(line);
             };
-            row(summary,"Выкупает",item.buyout_status);
-            $("item-buyout-form").classList.toggle("hidden", !item.buyout || Number(item.buyout.remaining)<=0);
-            if (!item.buyout) {
-                row(summary,"Сумма выкупа","Не указана");
-                const hint=document.createElement("p");hint.className="meta";hint.textContent="Задайте сумму выкупа и начальный остаток через «Ред.».";summary.append(hint);
+            const configured=!!item.buyout;
+            $("item-buyout-start").classList.toggle("hidden",configured);
+            $("item-buyout-start").textContent=item.buyout_status?"Указать сумму выкупа":"Оформить выкуп";
+            $("item-buyout-form").classList.toggle("hidden", !configured || Number(item.buyout.remaining)<=0);
+            if (!configured) {
+                row(summary,"Статус",item.buyout_status?"На выкупе у: "+item.buyout_status:"Выкуп не оформлен");
+                const hint=document.createElement("p");hint.className="meta";hint.textContent="Укажите фотографа и сумму выкупа, чтобы записывать взносы.";summary.append(hint);
             } else {
+                row(summary,"Выкупает",item.buyout_status);
                 row(summary,"Сумма выкупа",money17(item.buyout.total));
                 row(summary,"Уже внесено",money17(item.buyout.paid));
                 row(summary,"Осталось выплатить",money17(item.buyout.remaining),true);
@@ -2128,6 +2132,29 @@
                 const label=(Number.isNaN(when.getTime())?p.created_at:when.toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}))+" · "+p.admin_name;
                 row(history,label,money17(p.amount));
             }
+        }
+        function startBuyout17() {
+            if(currentUser?.role!=="admin" || !currentItem || currentItem.kind!=="equipment")return;
+            const item=currentItem,code=item.code;
+            const {o,b}=overlay17("Оформить выкуп · "+item.name);
+            const buyer=field17(b,"Фотограф (фамилия)",item.buyout_status||"");
+            const total=field17(b,"Полная сумма выкупа, ₽","","number");
+            const remaining=field17(b,"Осталось выплатить, ₽ (если платежи были ранее)","","number");
+            total.min=0.01;total.step=0.01;
+            remaining.min=0;remaining.step=0.01;
+            const note=document.createElement("p");note.className="meta";
+            note.textContent="Если взносов ещё не было, оставьте остаток пустым — он будет равен полной сумме.";
+            b.append(note);
+            btn17(b,"Сохранить выкуп",async()=>{
+                const name=buyer.value.trim(),a=total.value.trim().replace(",","."),left=remaining.value.trim().replace(",",".");
+                const valid=x=>/^[0-9]+([.][0-9]{1,2})?$/.test(x);
+                if(!name||!valid(a)||Number(a)<=0||left!==""&&(!valid(left)||Number(left)>Number(a)))
+                    throw Error("Проверьте фамилию, полную сумму и остаток");
+                await api(itemPath17(code,"/buyout"),{
+                    method:"POST",body:JSON.stringify({buyer:name,total:a,remaining:left===""?null:left})
+                });
+                o.remove();showToast("Выкуп оформлен");await openItem(code);await loadItems();
+            },"ok");
         }
         let pendingBuyout17=null;
         async function submitBuyoutPayment17() {
