@@ -1653,6 +1653,7 @@
             const recordedBuyout = (currentItem.buyout_payments || []).length > 0;
             $("edit-buyout-total").disabled = recordedBuyout;
             $("edit-buyout-remaining").disabled = recordedBuyout;
+            $("edit-buyout-status").disabled = recordedBuyout;
             $("edit-buyout-locked").classList.toggle("hidden", !recordedBuyout); 
             
             document.getElementById("edit-kit-body").value = currentItem.kit_body || ""; 
