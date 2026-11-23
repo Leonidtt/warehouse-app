@@ -1036,8 +1036,10 @@ def update_item(code: str, req: ItemUpdate, x_init_data: Optional[str] = Header(
             "SELECT 1 FROM equipment_buyout_payments WHERE item_code=? LIMIT 1", (code,)
         ).fetchone() is not None
         if has_payments:
-            if not req.buyout_status.strip():
-                raise HTTPException(409, "Нельзя снять выкуп с записанными платежами")
+            if req.buyout_status.strip() != str(existing["buyout_status"] or "").strip():
+                raise HTTPException(409, "После первого платежа нельзя менять получателя выкупа")
+            if req.buyout is not None and buyout_total is None:
+                raise HTTPException(409, "Нельзя удалить сумму выкупа с записанными платежами")
             if buyout_total is not None:
                 previous = conn.execute("""
                     SELECT total_cents,remaining_cents FROM equipment_buyout_amounts
