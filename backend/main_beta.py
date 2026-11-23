@@ -493,6 +493,12 @@ class BuyoutAmounts(BaseModel):
     remaining: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
 
 
+class BuyoutSetupRequest(BaseModel):
+    buyer: str = Field(min_length=1, max_length=200)
+    total: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    remaining: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
 class BuyoutPaymentRequest(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     request_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
@@ -970,6 +976,34 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
             for p in payments
         ]
     return result
+
+@app.post("/api/items/{code}/buyout")
+def setup_buyout(code: str, req: BuyoutSetupRequest,
+                 x_init_data: Optional[str] = Header(None)):
+    actor = check_admin(x_init_data)
+    buyer = " ".join(req.buyer.split())
+    if not buyer:
+        raise HTTPException(400, "Укажите получателя выкупа")
+    remaining = req.total if req.remaining is None else req.remaining
+    if remaining > req.total:
+        raise HTTPException(400, "Остаток не может быть больше суммы выкупа")
+    with transaction() as conn:
+        item = active_item(conn, code)
+        if item["kind"] != "equipment":
+            raise HTTPException(409, "Выкуп доступен только для оборудования")
+        if conn.execute("SELECT 1 FROM equipment_buyout_amounts WHERE item_code=?", (code,)).fetchone():
+            raise HTTPException(409, "Выкуп уже оформлен. Откройте карточку заново")
+        if conn.execute("SELECT 1 FROM equipment_buyout_payments WHERE item_code=? LIMIT 1", (code,)).fetchone():
+            raise HTTPException(409, "История платежей уже существует")
+        conn.execute("UPDATE items SET buyout_status=? WHERE code=?", (buyer, code))
+        conn.execute(
+            "INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents) VALUES(?,?,?)",
+            (code, int(req.total * 100), int(remaining * 100))
+        )
+        audit(conn, actor, "Выкуп оформлен",
+              f"{item['name']} ({code}): {buyer}; сумма {req.total} ₽; остаток {remaining} ₽")
+    return {"status": "ok"}
+
 
 @app.post("/api/items/{code}/buyout/payments")
 def add_buyout_payment(code: str, req: BuyoutPaymentRequest,
@@ -1559,7 +1593,21 @@ def apply_warehouse_snapshot(path, actor):
             WHERE id=? AND item_code=? AND user_id=? AND giver_id IS ?
                 AND taken_at IS ? AND taken_for IS ? AND returned_at IS NULL
         """,confirmed_handoffs)
+        if not conn.execute("""
+            SELECT 1 FROM incoming.sqlite_master
+            WHERE type='table' AND name='equipment_buyout_amounts'
+        """).fetchone():
+            raise HTTPException(409, "В снимке нет учёта выкупа: импорт отменён")
+        columns = {row[1] for row in conn.execute("PRAGMA incoming.table_info(equipment_buyout_amounts)")}
+        if not {"item_code", "total_cents", "remaining_cents"}.issubset(columns):
+            raise HTTPException(409, "В снимке несовместимая таблица выкупа")
         conn.execute("DELETE FROM equipment_buyout_amounts")
+        conn.execute("""
+            INSERT INTO equipment_buyout_amounts(item_code,total_cents,remaining_cents)
+            SELECT a.item_code,a.total_cents,a.remaining_cents
+            FROM incoming.equipment_buyout_amounts a
+            JOIN items i ON i.code=a.item_code
+        """)
         conn.execute("INSERT OR IGNORE INTO beta_snapshot_state (id) VALUES (1)")
         audit(conn, actor, "Импорт снимка", "Складские данные из Основы")
     return {"status": "ok", "tables": tables}
