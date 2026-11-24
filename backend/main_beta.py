@@ -21,7 +21,6 @@ import os
 import traceback
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.styles import Alignment, Font
 import asyncio
 import time
@@ -1941,22 +1940,22 @@ def labels_xlsx(rows, copies):
     sheet.freeze_panes = "A2"
     for cell in sheet[1]:
         cell.font = Font(bold=True)
-    for column, width in (("A", 28), ("B", 42), ("C", 17)):
+    for column, width in (("A", 28), ("B", 42), ("C", 28)):
         sheet.column_dimensions[column].width = width
 
     for row in rows:
-        png = io.BytesIO()
-        qrcode.make(row["code"], border=4).save(png, format="PNG")
+        code = str(row["code"])
+        name = str(row["name"])
         for _ in range(copies):
-            sheet.append([row["code"], row["name"]])
+            # NIIMBOT imports the literal cell value, not an embedded QR image.
+            # Bind the NIIMBOT QR element to the "QR" column on the label template.
+            sheet.append([code, name, code])
             index = sheet.max_row
-            for cell in sheet[index][:2]:
+            for cell in sheet[index]:
                 cell.data_type = "s"
+                cell.number_format = "@"
                 cell.alignment = Alignment(vertical="center", wrap_text=True)
-            sheet.row_dimensions[index].height = 86
-            qr = ExcelImage(io.BytesIO(png.getvalue()))
-            qr.width = qr.height = 112
-            sheet.add_image(qr, f"C{index}")
+            sheet.row_dimensions[index].height = 32
 
     output = io.BytesIO()
     workbook.save(output)
