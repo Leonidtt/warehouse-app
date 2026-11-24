@@ -80,7 +80,7 @@ function compactData1857(i,booked){
   const meaningful=v=>!['','-','—','нет','none','0','n/a','без','не указан','не указана'].includes(clean(v).toLowerCase());
   const parts=i.kind==='equipment'?(isStandaloneFlash1853(i)
     ? [flashModelLabel1853(i.kit_flash)] : [i.kit_body,i.kit_lens,flashModelLabel1853(i.kit_flash)]).map(clean).filter(meaningful):[];
-  const summary=i.kind==='consumable'?String(i.total??0)+' '+(i.unit||'шт.'):parts.join(' · ');
+  const summary=i.kind==='consumable'?(i.quantity_many?'Много':String(i.total??0)+' '+(i.unit||'шт.')):parts.join(' · ');
   const states=[];
   if(i.needs_repair)states.push(['Ремонт','repair']);
   if(i.kind==='equipment'){

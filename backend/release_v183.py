@@ -57,6 +57,8 @@ def register_183(app, get_user, check_admin, transaction, active_item, valid_loc
             item = active_item(conn,code)
             if item['kind'] != 'consumable':
                 raise HTTPException(400,'Операция только для расходников')
+            if 'quantity_many' in item.keys() and item['quantity_many']:
+                raise HTTPException(409,'Сначала укажите точный остаток')
             valid_location(conn,req.location_id)
             conn.execute('INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity',(code,req.location_id,req.quantity))
             conn.execute('INSERT INTO consumable_returns(item_code,location_id,quantity,user_id) VALUES(?,?,?,?)',(code,req.location_id,req.quantity,actor['tg_id']))

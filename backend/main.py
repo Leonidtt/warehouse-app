@@ -66,7 +66,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.15"
+APP_VERSION = "18.5.16"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -231,6 +231,7 @@ def init_db(db_path):
         "ALTER TABLE items ADD COLUMN price_flash REAL DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price_acc REAL DEFAULT 0",
         "ALTER TABLE items ADD COLUMN price_add REAL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN quantity_many INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee'",
         "ALTER TABLE users ADD COLUMN is_registered INTEGER DEFAULT 0",
@@ -581,7 +582,7 @@ def get_daily_report(x_init_data: Optional[str] = Header(None)):
     if not row:
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         stats = conn.execute("SELECT (SELECT COUNT(*) FROM checkouts WHERE date(taken_at) = ?) as taken, (SELECT COUNT(*) FROM checkouts WHERE date(returned_at) = ?) as returned, (SELECT COUNT(*) FROM writeoffs WHERE date(created_at) = ?) as written_off", (yesterday, yesterday, yesterday)).fetchone()
-        low_stock = conn.execute("SELECT name FROM items WHERE kind='consumable' AND min_stock > 0 AND (SELECT SUM(quantity) FROM stock WHERE item_code = items.code) <= min_stock").fetchall()
+        low_stock = conn.execute("SELECT name FROM items WHERE kind='consumable' AND quantity_many=0 AND min_stock > 0 AND (SELECT SUM(quantity) FROM stock WHERE item_code = items.code) <= min_stock").fetchall()
         low_list = ", ".join([i["name"] for i in low_stock]) if low_stock else "Нет"
         report = f"📊 Сводка за {yesterday}:\n\n📤 Выдано: {stats['taken']} шт.\n📥 Возвращено: {stats['returned']} шт.\n📉 Списано: {stats['written_off']} шт.\n\n⚠️ Заканчивается: {low_list}"
         conn.execute("INSERT INTO daily_reports (date, report_text) VALUES (?, ?)", (today, report)); conn.commit()
@@ -639,7 +640,7 @@ def export_history(x_init_data: Optional[str] = Header(None)):
 def export_stock(x_init_data: Optional[str] = Header(None)):
     auth = x_init_data
     check_admin(auth); conn = get_conn(auth)
-    rows = conn.execute("SELECT i.code, i.name, l.name as location, s.quantity FROM stock s JOIN items i ON i.code = s.item_code JOIN locations l ON l.id = s.location_id WHERE s.quantity > 0 AND i.is_archived = 0 ORDER BY l.name, i.name").fetchall()
+    rows = conn.execute("SELECT i.code, i.name, l.name as location, CASE WHEN i.quantity_many THEN 'Много' ELSE s.quantity END AS quantity FROM stock s JOIN items i ON i.code = s.item_code JOIN locations l ON l.id = s.location_id WHERE (s.quantity > 0 OR i.quantity_many=1) AND i.is_archived = 0 ORDER BY l.name, i.name").fetchall()
     conn.close(); buf = io.StringIO(); writer = csv.writer(buf, delimiter=';')
     writer.writerow(["Код", "Название", "Локация", "Количество"])
     for r in rows: writer.writerow([csv_safe(v) for v in [r["code"], r["name"], r["location"], r["quantity"]]])
@@ -670,6 +671,21 @@ def export_qr_sheet(x_init_data: Optional[str] = Header(None)):
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
     return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "attachment; filename=qrs.png"})
 
+@app.put("/api/items/{code}/count-stock")
+def count_stock(code: str, quantity: int = Form(..., ge=0, le=2**31-1),
+                x_init_data: Optional[str] = Header(None)):
+    actor = check_admin(x_init_data)
+    with transaction() as conn:
+        item = active_item(conn, code)
+        if not item["quantity_many"]:
+            raise HTTPException(409, "Точный остаток уже задан")
+        if not conn.execute("UPDATE stock SET quantity=? WHERE item_code=?", (quantity, code)).rowcount:
+            raise HTTPException(409, "Помещение расходника не найдено")
+        conn.execute("UPDATE items SET quantity_many=0 WHERE code=?", (code,))
+        audit(conn, actor, f"Пересчёт остатка: {quantity}", code)
+    return {"status": "ok"}
+
+
 @app.post("/api/items/{code}/replenish")
 def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
@@ -677,6 +693,7 @@ def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] 
     if req.unit_price is not None and (req.unit_price<0 or not math.isfinite(req.unit_price)): raise HTTPException(400,"Некорректная цена")
     with transaction() as conn:
         item=active_item(conn,code); valid_location(conn,req.location_id)
+        if item["quantity_many"]: raise HTTPException(409,"Сначала укажите точный остаток")
         if item["kind"]=="equipment" and (req.quantity!=1 or conn.execute("SELECT 1 FROM stock WHERE item_code=? AND quantity>0",(code,)).fetchone() or conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone()): raise HTTPException(409,"Каждая единица оборудования должна иметь собственный QR-код")
         conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity", (code,req.location_id,req.quantity))
         if req.unit_price is not None: conn.execute("INSERT INTO receipts(item_code,location_id,quantity,unit_price,user_id) VALUES(?,?,?,?,?)",(code,req.location_id,req.quantity,req.unit_price,actor["tg_id"]))
@@ -759,7 +776,7 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data); is_admin = True
     conn = get_conn(x_init_data); location = conn.execute("SELECT name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not location: conn.close(); raise HTTPException(404, "Комната не найдена")
-    items = conn.execute("SELECT s.item_code, s.quantity FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND s.quantity > 0 AND i.is_archived = 0", (location_id,)).fetchall()
+    items = conn.execute("SELECT s.item_code, s.quantity, i.quantity_many FROM stock s JOIN items i ON i.code = s.item_code WHERE s.location_id = ? AND (s.quantity > 0 OR i.quantity_many=1) AND i.is_archived = 0", (location_id,)).fetchall()
     checkouts = conn.execute("SELECT c.item_code, u.full_name, c.taken_for FROM checkouts c LEFT JOIN users u ON u.tg_id = c.user_id WHERE c.location_id = ? AND c.returned_at IS NULL", (location_id,)).fetchall()
     item_details = {i["code"]: dict(i) for i in conn.execute("SELECT code, name, category, serial_number, needs_repair, price, budget_tag, buyout_status FROM items").fetchall()}
     conn.close()
@@ -767,7 +784,7 @@ def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
     result_items = []
     for item in items:
         detail = item_details.get(item["item_code"], {})
-        data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
+        data = {"code": item["item_code"], "name": detail.get("name", "—"), "category": detail.get("category", ""), "quantity": item["quantity"], "quantity_many": bool(item["quantity_many"]), "serial_number": detail.get("serial_number", ""), "needs_repair": detail.get("needs_repair", 0), "budget_tag": detail.get("budget_tag", ""), "buyout_status": detail.get("buyout_status", ""), "is_on_hand": False}
         if is_admin: data["price"] = detail.get("price", 0)
         result_items.append(data)
         
@@ -851,9 +868,9 @@ def get_next_code(prefix: Optional[str] = None, x_init_data: Optional[str] = Hea
 @app.get("/api/items")
 def list_items(x_init_data: Optional[str] = Header(None)):
     is_admin = get_user(x_init_data)["role"] == "admin"
-    conn = get_conn(x_init_data); items = conn.execute("SELECT i.code,i.name,i.kind,i.min_stock,i.needs_repair,i.kit_body,i.kit_lens,i.kit_flash,i.kit_acc,i.kit_add,i.budget_tag,i.serial_number,i.buyout_status,i.category,i.created_at,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add,CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo,COALESCE(m.site,'') AS site,COALESCE(m.vessel,'') AS vessel,COALESCE(m.unit,'шт.') AS unit FROM items i LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 ORDER BY i.name").fetchall(); result = []
+    conn = get_conn(x_init_data); items = conn.execute("SELECT i.code,i.name,i.kind,i.min_stock,i.quantity_many,i.needs_repair,i.kit_body,i.kit_lens,i.kit_flash,i.kit_acc,i.kit_add,i.budget_tag,i.serial_number,i.buyout_status,i.category,i.created_at,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add,CASE WHEN LENGTH(COALESCE(i.photo,''))>0 THEN 1 ELSE 0 END AS has_photo,COALESCE(m.site,'') AS site,COALESCE(m.vessel,'') AS vessel,COALESCE(m.unit,'шт.') AS unit FROM items i LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 ORDER BY i.name").fetchall(); result = []
     stock_map={}; holder_map={}
-    for row in conn.execute("SELECT s.item_code,s.location_id,l.name AS location_name,s.quantity FROM stock s JOIN locations l ON l.id=s.location_id WHERE s.quantity>0"):
+    for row in conn.execute("SELECT s.item_code,s.location_id,l.name AS location_name,s.quantity FROM stock s JOIN locations l ON l.id=s.location_id JOIN items i ON i.code=s.item_code WHERE s.quantity>0 OR i.quantity_many=1"):
         v=dict(row); key=v.pop("item_code"); stock_map.setdefault(key,[]).append(v)
     for row in conn.execute("SELECT c.item_code,c.id,c.user_id,u.full_name,c.taken_at,c.taken_for,c.giver_id,g.full_name AS giver_name FROM checkouts c LEFT JOIN users u ON u.tg_id=c.user_id LEFT JOIN users g ON g.tg_id=c.giver_id WHERE c.returned_at IS NULL"):
         v=dict(row); key=v.pop("item_code"); holder_map.setdefault(key,[]).append(v)
@@ -863,7 +880,7 @@ def list_items(x_init_data: Optional[str] = Header(None)):
         
         c_at = it["created_at"] if "created_at" in it.keys() else ""
         
-        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "kit_acc": it["kit_acc"], "kit_add": it["kit_add"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "is_low": total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
+        item_data = {"code": it["code"], "name": it["name"], "kind": it["kind"], "min_stock": it["min_stock"], "needs_repair": it["needs_repair"], "kit_body": it["kit_body"], "kit_lens": it["kit_lens"], "kit_flash": it["kit_flash"], "kit_acc": it["kit_acc"], "kit_add": it["kit_add"], "budget_tag": it["budget_tag"], "serial_number": it["serial_number"], "buyout_status": it["buyout_status"], "category": it["category"], "total": total, "created_at": c_at, "quantity_many": bool(it["quantity_many"]), "is_low": not it["quantity_many"] and total <= it["min_stock"] and it["min_stock"] > 0 and it["kind"] == "consumable", "stocks": [dict(s) for s in stocks], "holders": [dict(h) for h in holders]}
         
         item_data.update({"has_photo":bool(it["has_photo"]),"site":it["site"],"vessel":it["vessel"],"unit":it["unit"]})
         if is_admin: 
@@ -887,7 +904,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
         WHERE i.code=? AND i.is_archived=0
     """, (code,)).fetchone()
     if not item: conn.close(); raise HTTPException(404, "Товар не найден")
-    stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND s.quantity > 0", (code,)).fetchall()
+    stocks = conn.execute("SELECT s.location_id, l.name AS location_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id WHERE s.item_code = ? AND (s.quantity > 0 OR ?)", (code,item["quantity_many"])).fetchall()
     holders = conn.execute("""
         SELECT c.id, c.user_id, u.full_name, c.taken_at, c.taken_for, c.giver_id, g.full_name as giver_name, reminder.plan AS return_plan, handoff.handed_at
         FROM checkouts c 
@@ -906,7 +923,7 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     
     c_at = item["created_at"] if "created_at" in item.keys() else ""
     
-    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_acc": item["kit_acc"], "kit_add": item["kit_add"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "unit": item["unit"], "stocks": [dict(s) for s in stocks], "holders": [dict(h, return_plan=PLANS.get(h["return_plan"])) for h in holders]}
+    result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_acc": item["kit_acc"], "kit_add": item["kit_add"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "unit": item["unit"], "quantity_many": bool(item["quantity_many"]), "stocks": [dict(s) for s in stocks], "holders": [dict(h, return_plan=PLANS.get(h["return_plan"])) for h in holders]}
     
     if is_admin: 
         result["price"] = item["price"]
@@ -1065,7 +1082,7 @@ def archive_item(code: str, x_init_data: Optional[str] = Header(None)):
     return {"status":"ok","archived_code":archived_code}
 
 @app.post("/api/items")
-async def create_item(code: str = Form(""), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), code_prefix: str = Form(""), unit: str = Form("шт."), supplier: str = Form(""), notes: str = Form(""), x_init_data: Optional[str] = Header(None)):
+async def create_item(code: str = Form(""), name: str = Form(...), kind: str = Form("equipment"), location_id: int = Form(0), quantity: int = Form(0), quantity_many: bool = Form(False), min_stock: int = Form(0), price: float = Form(0), kit_body: str = Form(""), kit_lens: str = Form(""), kit_flash: str = Form(""), kit_acc: str = Form(""), kit_add: str = Form(""), price_body: float = Form(0), price_lens: float = Form(0), price_flash: float = Form(0), price_acc: float = Form(0), price_add: float = Form(0), budget_tag: str = Form(""), serial_number: str = Form(""), buyout_status: str = Form(""), category: str = Form(""), photo: Optional[UploadFile] = File(None), code_prefix: str = Form(""), unit: str = Form("шт."), supplier: str = Form(""), notes: str = Form(""), x_init_data: Optional[str] = Header(None)):
     actor=check_admin(x_init_data)
     validate_item_fields(name,kind,min_stock,[price,price_body,price_lens,price_flash,price_acc,price_add])
     code=code.strip(); name=name.strip(); category=category.strip()
@@ -1076,6 +1093,8 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
         budget_tag=budget_for_equipment_name(name)
     if code and not re.fullmatch(r"[\w.-]{1,64}",code): raise HTTPException(400,"Недопустимый код")
     if quantity<0: raise HTTPException(400,"Количество не может быть отрицательным")
+    if quantity_many and (kind != "consumable" or quantity != 0):
+        raise HTTPException(400,"Для режима «Много» укажите расходник без точного количества")
     if kind=="consumable":
         metadata = passport_values(ItemMetadata(unit=unit, supplier=supplier, notes=notes))
         kit_body=kit_lens=kit_flash=kit_acc=kit_add=serial_number=buyout_status=""
@@ -1115,12 +1134,12 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
             code, name, kind, min_stock, photo, price,
             kit_body, kit_lens, kit_flash, kit_acc, kit_add,
             price_body, price_lens, price_flash, price_acc, price_add,
-            budget_tag, serial_number, buyout_status, category
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            budget_tag, serial_number, buyout_status, category, quantity_many
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (code, name, kind, min_stock, photo_base64, price,
          kit_body, kit_lens, kit_flash, kit_acc, kit_add,
          price_body, price_lens, price_flash, price_acc, price_add,
-         budget_tag, serial_number, buyout_status, category))
+         budget_tag, serial_number, buyout_status, category, quantity_many))
         conn.execute("INSERT INTO stock (item_code, location_id, quantity) VALUES (?,?,?)", (code, location_id, quantity))
         if kind == "consumable":
             conn.execute("INSERT INTO item_metadata(code,unit,supplier,site,vessel,notes) VALUES(?,?,?,?,?,?)", (code, *metadata))
@@ -1438,7 +1457,7 @@ def remove_category(name: str, x_init_data: Optional[str] = Header(None)):
 def dashboard(x_init_data: Optional[str] = Header(None)):
     user=get_user(x_init_data)
     with contextmanager_session() as conn:
-        rows=conn.execute('''SELECT i.code,i.kind,i.needs_repair,i.min_stock,i.category,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add, COALESCE(s.qty,0) AS qty, COALESCE(h.qty,0) AS held,
+        rows=conn.execute('''SELECT i.code,i.kind,i.needs_repair,i.quantity_many,i.min_stock,i.category,i.price,i.price_body,i.price_lens,i.price_flash,i.price_acc,i.price_add, COALESCE(s.qty,0) AS qty, COALESCE(h.qty,0) AS held,
           EXISTS(SELECT 1 FROM bookings b WHERE b.item_code=i.code AND date('now') BETWEEN b.date_from AND b.date_to) AS booked
           FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code
           LEFT JOIN (SELECT item_code,COUNT(*) qty FROM checkouts WHERE returned_at IS NULL GROUP BY item_code) h ON h.item_code=i.code WHERE i.is_archived=0''').fetchall()
@@ -1457,7 +1476,7 @@ def dashboard(x_init_data: Optional[str] = Header(None)):
             money['on_hand']+=price*held
             if r['needs_repair']: money['repair']+=price*(qty+held)
         else:
-            counts['low_stock']+=int(r['min_stock']>0 and qty<=r['min_stock'])
+            counts['low_stock']+=int(not r['quantity_many'] and r['min_stock']>0 and qty<=r['min_stock'])
             money['consumables']+=price*qty
         value=price*(qty+held); money['total']+=value
         cat=r['category'] or 'Без категории'; by_cat[cat]=by_cat.get(cat,0)+value
@@ -1690,7 +1709,7 @@ def purchase_suggestions(x_init_data: Optional[str]=Header(None)):
     actor = get_user(x_init_data)
     if actor['role'] not in ('admin','boss'): raise HTTPException(403,'Нет доступа')
     with transaction() as conn:
-        rows = [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.min_stock,i.price,COALESCE(s.qty,0) AS remaining,COALESCE(w.qty,0) AS used_30_days,COALESCE(m.unit,'шт.') AS unit,COALESCE(m.supplier,'') AS supplier, MAX(0,i.min_stock+1-COALESCE(s.qty,0)) AS suggested_quantity FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM writeoffs WHERE created_at>=datetime('now','-30 days') GROUP BY item_code) w ON w.item_code=i.code LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 AND i.kind='consumable' AND i.min_stock>0 AND COALESCE(s.qty,0)<=i.min_stock ORDER BY i.name""")]
+        rows = [dict(r) for r in conn.execute("""SELECT i.code,i.name,i.min_stock,i.price,COALESCE(s.qty,0) AS remaining,COALESCE(w.qty,0) AS used_30_days,COALESCE(m.unit,'шт.') AS unit,COALESCE(m.supplier,'') AS supplier, MAX(0,i.min_stock+1-COALESCE(s.qty,0)) AS suggested_quantity FROM items i LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM stock GROUP BY item_code) s ON s.item_code=i.code LEFT JOIN (SELECT item_code,SUM(quantity) qty FROM writeoffs WHERE created_at>=datetime('now','-30 days') GROUP BY item_code) w ON w.item_code=i.code LEFT JOIN item_metadata m ON m.code=i.code WHERE i.is_archived=0 AND i.kind='consumable' AND i.quantity_many=0 AND i.min_stock>0 AND COALESCE(s.qty,0)<=i.min_stock ORDER BY i.name""")]
     if actor['role'] != 'admin':
         for row in rows:
             row.pop('price')

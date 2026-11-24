@@ -311,13 +311,13 @@ function installRelease182(){
       ? allItems.filter(item=>item.kind==='consumable' && normalize(item.name)===query)
       : [];
     duplicate.replaceChildren();
-    duplicate.classList.toggle('hidden',!matches.length);
-    if(!matches.length)return;
+    duplicate.classList.toggle('hidden',!matches.length || $('add-many').checked);
+    if(duplicate.classList.contains('hidden'))return;
     duplicate.append(el('strong','','Такой расходник уже есть'));
     for(const item of matches){
       const row=el('div','warehouse-duplicate-row');
-      row.append(el('span','meta',item.name+' · '+item.code+' · '+item.total+' '+item.unit));
-      row.append(button('Пополнить остаток',()=>{
+      row.append(el('span','meta',item.name+' · '+item.code+' · '+(item.quantity_many?'Много':item.total+' '+item.unit)));
+      if(!item.quantity_many)row.append(button('Пополнить остаток',()=>{
         const sameUnit=$('add-unit').value.trim()===item.unit;
         const qty=Number($('add-qty').value);
         replenish17(item.code,sameUnit&&Number.isInteger(qty)&&qty>0?qty:1,
@@ -345,6 +345,9 @@ function installRelease182(){
       showDuplicate();
     }
     const value=$('add-unit').value;
+    const many=$('add-many').checked;
+    $('add-qty').classList.toggle('hidden',many);
+    cTotal.classList.toggle('hidden',many);
     unitButtons.forEach((b,i)=>b.setAttribute('aria-pressed',String(value===standardUnits[i])));
     custom.setAttribute('aria-pressed',String(!standardUnits.includes(value)));
     $('add-unit').classList.toggle('hidden',standardUnits.includes(value));
@@ -365,6 +368,7 @@ function installRelease182(){
   const oldToggle=toggleFields;
   toggleFields=()=>{oldToggle();formTotals();showDuplicate()};
   $('add-name').addEventListener('input',showDuplicate);
+  $('add-many').addEventListener('change',showDuplicate);
   body.addEventListener('input',formTotals);
   $('add-category').addEventListener('change',formTotals);
   formTotals();

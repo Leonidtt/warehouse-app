@@ -166,9 +166,9 @@ def register_v18(app, get_user, check_admin, transaction, active_item, audit, we
     def stock_xlsx(x_init_data: Optional[str] = Header(None)):
         check_admin(x_init_data)
         with transaction() as conn:
-            rows=conn.execute('''SELECT i.code,i.name,i.kind,i.category,l.name,s.quantity,i.price FROM stock s
+            rows=conn.execute('''SELECT i.code,i.name,i.kind,i.category,l.name,CASE WHEN i.quantity_many THEN 'Много' ELSE s.quantity END,i.price FROM stock s
                 JOIN items i ON i.code=s.item_code JOIN locations l ON l.id=s.location_id
-                WHERE s.quantity>0 AND i.is_archived=0 ORDER BY l.name,i.name''').fetchall()
+                WHERE (s.quantity>0 OR i.quantity_many=1) AND i.is_archived=0 ORDER BY l.name,i.name''').fetchall()
         return spreadsheet(rows,['Код','Название','Тип','Категория','Помещение','Количество','Цена за единицу'],'stock.xlsx')
 
     @app.get('/api/v18/history.xlsx')

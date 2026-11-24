@@ -14,7 +14,7 @@ function installRelease183(){
   };
   const oldActions=renderActions;
   renderActions=()=>{
-    oldActions();if(currentItem?.kind!=='consumable')return;
+    oldActions();if(currentItem?.kind!=='consumable'||currentItem.quantity_many)return;
     const code=currentItem.code,box=$('actions'),write=box.querySelector('button[onclick="doWriteoff()"]');
     if(write)write.disabled=!currentItem.stocks.some(stock=>stock.quantity>0);
     const area=document.createElement('details');
