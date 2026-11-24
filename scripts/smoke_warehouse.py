@@ -9,10 +9,12 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend"
@@ -76,6 +78,28 @@ class WarehouseSmokeTest(unittest.TestCase):
         assets = ("/pwa/manifest.webmanifest", "/pwa/sw.js", "/warehouse-v18.js", "/warehouse-v18.css")
         for path in assets:
             self.assertEqual(self.client.get(path).status_code, 200, path)
+
+    def test_niimbot_export_has_text_qr_values(self):
+        session = "label-export-session"
+        items = [("KOR-1", "Коробочка для рамок"), ("0007", "Тестовая этикетка"), ("=1+1", "Код как текст")]
+        with closing(sqlite3.connect(self.database)) as conn, conn:
+            conn.execute("INSERT OR REPLACE INTO users(tg_id, full_name, role, is_registered) VALUES (1, 'Admin', 'admin', 1)")
+            conn.execute("INSERT INTO web_sessions VALUES (?, ?, ?)",
+                         (self.main["web_digest"](session), 1, int(time.time()) + 300))
+            conn.executemany("INSERT INTO items(code, name) VALUES (?, ?)", items)
+
+        response = self.client.post(
+            "/api/export_labels?format=xlsx",
+            json={"codes": [code for code, _ in items], "copies": 2},
+            headers={"Cookie": f"{self.main['WEB_COOKIE']}={session}", "Origin": "http://testserver"},
+        )
+        self.assertEqual(response.status_code, 200, response.text if not response.is_success else "")
+        with closing(load_workbook(BytesIO(response.content), read_only=True)) as workbook:
+            sheet = workbook.active
+            self.assertEqual(list(sheet.values), [("Код", "Название", "QR")] + [
+                (code, name, code) for code, name in items for _ in range(2)
+            ])
+            self.assertTrue(all(cell.data_type == "s" for row in sheet.iter_rows(min_row=2) for cell in row))
 
     def test_concurrent_checkout_and_retry_of_return(self):
         session = "smoke-session"

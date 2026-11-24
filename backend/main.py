@@ -15,8 +15,7 @@ import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
-from openpyxl.drawing.image import Image as ExcelImage
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Font
 import base64
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -1886,18 +1885,12 @@ def labels_xlsx(rows, copies):
         sheet.column_dimensions[column].width = width
 
     for row in rows:
-        png = io.BytesIO()
-        qrcode.make(row["code"], border=4).save(png, format="PNG")
+        # NIIMBOT reads cell values and generates QR codes from a bound column.
+        values = (row["code"], row["name"], row["code"])
         for _ in range(copies):
-            sheet.append([row["code"], row["name"]])
-            index = sheet.max_row
-            for cell in sheet[index][:2]:
+            sheet.append(values)
+            for cell in sheet[sheet.max_row]:
                 cell.data_type = "s"
-                cell.alignment = Alignment(vertical="center", wrap_text=True)
-            sheet.row_dimensions[index].height = 86
-            qr = ExcelImage(io.BytesIO(png.getvalue()))
-            qr.width = qr.height = 112
-            sheet.add_image(qr, f"C{index}")
 
     output = io.BytesIO()
     workbook.save(output)

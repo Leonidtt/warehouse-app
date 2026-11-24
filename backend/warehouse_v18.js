@@ -137,7 +137,28 @@ function installV18(openRoleMenu){
   const labelQuery=()=>{const d=labelSettings();return 'width_mm='+d.width+'&height_mm='+d.height};
   function configureLabels(){const {o,b}=overlay17('Размер QR-этикетки');const d=labelSettings(),w=field17(b,'Ширина, мм (30–100)',d.width,'number'),h=field17(b,'Высота, мм (40–150)',d.height,'number');btn17(b,'Сохранить',()=>{const width=Number(w.value),height=Number(h.value);if(!Number.isInteger(width)||!Number.isInteger(height)||width<30||width>100||height<40||height>150)throw Error('Проверьте размеры');cacheSet17('label_dimensions',JSON.stringify({width,height}));o.remove();showToast('Размер сохранён')},'ok');btn17(b,'По умолчанию 50 × 80 мм',()=>{w.value=50;h.value=80})}
   showLabelPreview17=async(code,name,img)=>image17(img,'/api/label/'+encodeURIComponent(code)+'?name='+encodeURIComponent(name)+'&'+labelQuery());
-  showQr=async()=>{const {code,name,kind}=currentItem;if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'));btn17(b,'Excel для B21S',()=>downloadLabelExport17([{code}],'xlsx'))}};
+  showQr=async()=>{
+    const {code,name,kind}=currentItem;
+    if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);
+    const {b}=overlay17('Этикетка');
+    const d=labelSettings();
+    card17(b,name,code+' · '+d.width+' × '+d.height+' мм');
+    const img=document.createElement('img');
+    img.className='label-img';
+    img.alt='QR-этикетка';
+    b.append(img);
+    const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();
+    try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}
+    btn17(b,'Копировать код',()=>copyText(code));
+    btn17(b,'Копировать название',()=>copyText(name));
+    if(currentUser.role==='admin'){
+      btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));
+      btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));
+      btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'));
+      btn17(b,'Excel для B21S',()=>downloadLabelExport17([{code}],'xlsx'));
+      addNiimbotHelp17(b,true);
+    }
+  };
   $('export-qr-btn').onclick=()=>downloadFile('/api/export_labels?'+labelQuery(),'labels.pdf');exportStock=()=>downloadFile('/api/v18/stock.xlsx','warehouse_stock.xlsx');
   downloadFile=async(url,filename)=>{try{const response=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!response.ok){const e=await response.json().catch(()=>({}));throw Error(e.detail||'HTTP '+response.status)}const blob=await response.blob(),a=document.createElement('a'),obj=URL.createObjectURL(blob);a.href=obj;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(obj),10000)}catch(e){notify('Ошибка скачивания: '+e.message)}};
   deleteItemFromEdit=async()=>{const {code,name}=currentItem;if(!await ask('Отправить в архив?',name,'В архив'))return;try{await api('/api/items/'+encodeURIComponent(code),{method:'DELETE'});backToMain();const {o,b}=overlay17('Товар в архиве');card17(b,name,'Можно восстановить без потери остатка.');btn17(b,'Отменить архивирование',async()=>{await api('/api/archive/'+encodeURIComponent(code)+'/restore',{method:'POST'});o.remove();showToast('Товар восстановлен');refresh(true)},'ok')}catch(e){notify(e.message)}};
@@ -237,6 +258,24 @@ async function downloadLabelExport17(items,format,settings={}){
   link.click();
   link.remove();
   setTimeout(()=>URL.revokeObjectURL(href),10000);
+}
+
+function addNiimbotHelp17(parent,single){
+  const details=document.createElement('details');
+  const summary=document.createElement('summary');
+  summary.textContent='Как печатать в NIIMBOT';
+  details.append(summary);
+  if(single){
+    const png=document.createElement('p');
+    png.className='meta';
+    png.textContent='Чтобы сохранить вид этикетки, скачайте PNG и добавьте его в NIIMBOT как изображение на всю этикетку.';
+    details.append(png);
+  }
+  const excel=document.createElement('p');
+  excel.className='meta';
+  excel.textContent='Для печати из Excel подключите файл как источник данных. В шаблоне NIIMBOT добавьте элемент QR-кода и свяжите его с колонкой «QR». Для названия и кода используйте отдельные текстовые поля.';
+  details.append(excel);
+  parent.append(details);
 }
 
 function showLabelPrint17(items){
@@ -362,6 +401,7 @@ function showLabelPrint17(items){
     const path=previewPath(items[0].code,parameters());
     return downloadFile(path,items[0].code+'.png');
   });
+  addNiimbotHelp17(b,items.length===1);
   preview();
 }
 
