@@ -185,8 +185,8 @@
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
-    <link rel="stylesheet" href="/warehouse-v18.css?v=18514">
-    <script src="/warehouse-v18.js?v=18516"></script>
+    <link rel="stylesheet" href="/warehouse-v18.css?v=18518">
+    <script src="/warehouse-v18.js?v=18518"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1877">
     <script src="/release-v182.js?v=18516"></script>
     <link rel="stylesheet" href="/release-v183.css?v=1877">
@@ -622,6 +622,7 @@
                 <span class="status-badge" id="item-status-box"></span>
             </div>
             <div id="item-stock-rows" class="beta-item-tiles"></div>
+            <button type="button" class="secondary hidden" id="item-location-photo" onclick="showConsumableLocationPhoto()">Фото места хранения</button>
             <div id="actions"></div>
 
             <details class="beta-item-disclosure hidden" id="item-kit-section" open>
@@ -1838,6 +1839,9 @@
                 const data=await api(`/api/items/${encodeURIComponent(code)}`);
                 if(requestId!==itemRequest184||epoch!==screenEpoch184)return;
                 currentItem=data;
+                const locationPhoto = $('item-location-photo');
+                locationPhoto.classList.toggle('hidden', data.kind !== 'consumable' || (!data.has_location_photo && currentUser.role !== 'admin'));
+                locationPhoto.textContent = data.has_location_photo ? 'Фото места хранения' : 'Добавить фото места хранения';
                 $('item-qr-quick').classList.toggle('hidden', data.kind !== 'consumable');
                 $('item-qr-details').classList.toggle('hidden', data.kind === 'consumable');
                 document.getElementById("item-title").textContent = currentItem.name; 

@@ -13,7 +13,7 @@ import qrcode
 import io
 import csv
 import httpx
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.styles import Alignment, Font
@@ -66,7 +66,7 @@ except ValueError:
 
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "").strip()
 
-APP_VERSION = "18.5.16"
+APP_VERSION = "18.5.17"
 app = FastAPI(title="Склад", version=APP_VERSION)
 
 async def notify_admin_about_error(error_text: str, user_info: str = "Неизвестно"):
@@ -275,6 +275,10 @@ def init_db(db_path):
     c.execute("CREATE TABLE IF NOT EXISTS consumable_returns (id INTEGER PRIMARY KEY, item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0), user_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, item_code TEXT NOT NULL, location_id INTEGER NOT NULL, quantity INTEGER NOT NULL, unit_price REAL NOT NULL, user_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS repair_photos (repair_id INTEGER PRIMARY KEY, photo TEXT NOT NULL)")
+    c.execute("""CREATE TABLE IF NOT EXISTS consumable_location_photos (
+        item_id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+        photo BLOB NOT NULL
+    )""")
     c.execute("CREATE TABLE IF NOT EXISTS inventory_runs (id INTEGER PRIMARY KEY, location_id INTEGER NOT NULL, user_id INTEGER NOT NULL, report TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
     c.execute("CREATE TABLE IF NOT EXISTS web_codes (digest TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)")
     c.execute("""CREATE TABLE IF NOT EXISTS telegram_bot_updates (
@@ -899,7 +903,8 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     is_admin = get_user(x_init_data)["role"] == "admin"
     conn = get_conn(x_init_data)
     item = conn.execute("""
-        SELECT i.*, COALESCE(NULLIF(m.unit,''),'шт.') AS unit
+        SELECT i.*, COALESCE(NULLIF(m.unit,''),'шт.') AS unit,
+            EXISTS(SELECT 1 FROM consumable_location_photos p WHERE p.item_id=i.id) AS has_location_photo
         FROM items i LEFT JOIN item_metadata m ON m.code=i.code
         WHERE i.code=? AND i.is_archived=0
     """, (code,)).fetchone()
@@ -925,6 +930,8 @@ def get_item(code: str, x_init_data: Optional[str] = Header(None)):
     
     result = {"code": item["code"], "name": item["name"], "kind": item["kind"], "min_stock": item["min_stock"], "needs_repair": item["needs_repair"], "kit_body": item["kit_body"], "kit_lens": item["kit_lens"], "kit_flash": item["kit_flash"], "kit_acc": item["kit_acc"], "kit_add": item["kit_add"], "budget_tag": item["budget_tag"], "serial_number": item["serial_number"], "buyout_status": item["buyout_status"], "category": item["category"], "created_at": c_at, "unit": item["unit"], "quantity_many": bool(item["quantity_many"]), "stocks": [dict(s) for s in stocks], "holders": [dict(h, return_plan=PLANS.get(h["return_plan"])) for h in holders]}
     
+    if item["kind"] == "consumable":
+        result["has_location_photo"] = bool(item["has_location_photo"])
     if is_admin: 
         result["price"] = item["price"]
         result["price_body"] = item["price_body"]
@@ -1942,6 +1949,51 @@ async def update_photo(code:str,photo:UploadFile=File(...),x_init_data:Optional[
     with transaction() as conn:
         active_item(conn,code); conn.execute('UPDATE items SET photo=? WHERE code=?',(base64.b64encode(buf.getvalue()).decode(),code)); audit(conn,actor,'Фото товара',code)
     return {'status':'ok'}
+
+
+@app.get('/api/items/{code}/location-photo')
+def consumable_location_photo(code: str, x_init_data: Optional[str] = Header(None)):
+    get_user(x_init_data)
+    with contextmanager_session() as conn:
+        row = conn.execute(
+            """SELECT p.photo FROM consumable_location_photos p JOIN items i ON i.id=p.item_id
+            WHERE i.code=? AND i.is_archived=0 AND i.kind='consumable'""",
+            (code,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Фото места хранения отсутствует")
+    return Response(row["photo"], media_type="image/jpeg")
+
+
+@app.put('/api/items/{code}/location-photo')
+async def save_consumable_location_photo(code: str, photo: UploadFile = File(...), x_init_data: Optional[str] = Header(None)):
+    actor = check_admin(x_init_data)
+    limit = 5 * 1024 * 1024
+    raw = await photo.read(limit + 1)
+    if len(raw) > limit:
+        raise HTTPException(413, "Фото больше 5 МБ")
+    try:
+        with Image.open(io.BytesIO(raw)) as source:
+            if source.width * source.height > 24_000_000:
+                raise ValueError("Image exceeds the pixel limit")
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((1600, 1600))
+            output = io.BytesIO()
+            image.convert("RGB").save(output, format="JPEG", quality=90)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise HTTPException(400, "Некорректное изображение") from None
+
+    with transaction() as conn:
+        item = active_item(conn, code)
+        if item["kind"] != "consumable":
+            raise HTTPException(400, "Фото места хранения доступно для расходников")
+        conn.execute(
+            """INSERT INTO consumable_location_photos(item_id,photo) VALUES (?,?)
+            ON CONFLICT(item_id) DO UPDATE SET photo=excluded.photo""",
+            (item["id"], output.getvalue()),
+        )
+        audit(conn, actor, "Фото места хранения", code)
+    return {"status": "ok"}
 
 
 @app.put('/api/repairs/{repair_id}/photo')
