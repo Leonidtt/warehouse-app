@@ -9,10 +9,12 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend"
@@ -76,6 +78,44 @@ class WarehouseSmokeTest(unittest.TestCase):
         assets = ("/pwa/manifest.webmanifest", "/pwa/sw.js", "/warehouse-v18.js", "/warehouse-v18.css")
         for path in assets:
             self.assertEqual(self.client.get(path).status_code, 200, path)
+
+    def test_only_admin_can_edit_consumable_location_photo(self):
+        def headers(session):
+            return {"Cookie": f"{self.main['WEB_COOKIE']}={session}", "Origin": "http://testserver"}
+
+        with closing(sqlite3.connect(self.database)) as conn, conn:
+            conn.executemany("INSERT OR REPLACE INTO users(tg_id, full_name, role, is_registered) VALUES (?, ?, ?, 1)",
+                             [(1, "Admin", "admin"), (2, "Employee", "employee")])
+            conn.executemany("INSERT INTO web_sessions VALUES (?, ?, ?)", [
+                (self.main["web_digest"](session), user_id, int(time.time()) + 300)
+                for user_id, session in [(1, "photo-admin"), (2, "photo-employee")]
+            ])
+            conn.execute("INSERT INTO items(code, name, kind, photo) VALUES ('C-1', 'Tape', 'consumable', 'original-photo')")
+            conn.execute("INSERT INTO items(code, name) VALUES ('E-1', 'Camera')")
+
+        item_path = "/api/items/C-1"
+        photo_path = item_path + "/location-photo"
+        employee = headers("photo-employee")
+        admin = headers("photo-admin")
+        with BytesIO() as picture:
+            Image.new("RGB", (80, 60), "red").save(picture, "PNG")
+            files = {"photo": ("shelf.png", picture.getvalue(), "image/png")}
+        self.assertEqual(self.client.get(photo_path, headers=employee).status_code, 404)
+        self.assertFalse(self.client.get(item_path, headers=employee).json()["has_location_photo"])
+        self.assertEqual(self.client.put(photo_path, headers=employee, files=files).status_code, 403)
+        self.assertEqual(self.client.put("/api/items/E-1/location-photo", headers=admin, files=files).status_code, 400)
+        self.assertEqual(self.client.put(photo_path, headers=admin, files=files).status_code, 200)
+        self.assertEqual(self.client.get(photo_path).status_code, 401)
+        self.assertTrue(self.client.get(item_path, headers=employee).json()["has_location_photo"])
+        result = self.client.get(photo_path, headers=employee)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers["content-type"], "image/jpeg")
+        with Image.open(BytesIO(result.content)) as saved:
+            self.assertEqual(saved.size, (80, 60))
+        with closing(sqlite3.connect(self.database)) as conn, conn:
+            self.assertEqual(conn.execute("SELECT photo FROM items WHERE code='C-1'").fetchone()[0], "original-photo")
+            conn.execute("UPDATE items SET is_archived=1 WHERE code='C-1'")
+        self.assertEqual(self.client.get(photo_path, headers=employee).status_code, 404)
 
     def test_concurrent_checkout_and_retry_of_return(self):
         session = "smoke-session"

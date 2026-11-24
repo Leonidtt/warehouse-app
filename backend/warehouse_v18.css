@@ -455,6 +455,18 @@ button{background:var(--primary);min-height:44px;padding:12px 15px;border-radius
 .warehouse-label-controls input, .warehouse-label-controls select { width:100%; min-width:0; }
 .warehouse-label-controls label { font-size:12px; }
 .warehouse-print-actions button { margin:0; }
+.warehouse-location-photo {
+  display:block;
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:55vh;
+  margin:0 auto 12px;
+  border-radius:12px;
+}
+.warehouse-location-photo-drawing { touch-action:none; cursor:crosshair; }
+.warehouse-location-photo-tools { display:flex; flex-wrap:wrap; gap:8px; }
+.warehouse-location-photo-tools button { flex:1 1 140px; margin:0; }
 .warehouse-label-picker { display:grid; gap:4px; max-height:45vh; overflow:auto; }
 .warehouse-label-picker .warehouse-label-row {
   display:grid;

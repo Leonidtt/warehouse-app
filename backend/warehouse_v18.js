@@ -217,6 +217,201 @@ async function chooseConsumableLabels17(){
   }catch(error){list.textContent=error.message}
 }
 
+async function showConsumableLocationPhoto() {
+  const item = currentItem;
+  if (item?.kind !== 'consumable') return;
+  const path = itemPath17(item.code, '/location-photo');
+  const {o, b} = overlay17('Фото места хранения');
+  const status = document.createElement('p');
+  status.className = 'meta';
+  status.setAttribute('aria-live', 'polite');
+  b.append(status);
+
+  async function decodePhoto(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      return image;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  let image;
+  if (item.has_location_photo) {
+    status.textContent = 'Загружаем фото…';
+    try {
+      image = await decodePhoto(await blob17(path));
+      status.textContent = '';
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  }
+  if (!o.isConnected) return;
+  if (currentUser.role !== 'admin') {
+    if (image) {
+      image.className = 'warehouse-location-photo';
+      image.alt = 'Место хранения: ' + item.name;
+      b.append(image);
+    }
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.className = 'warehouse-location-photo warehouse-location-photo-drawing hidden';
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', 'Фото места хранения с разметкой');
+  b.append(canvas);
+  const context = canvas.getContext('2d');
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = 'image/*';
+  picker.hidden = true;
+  b.append(picker);
+  const tools = document.createElement('div');
+  tools.className = 'warehouse-location-photo-tools';
+  b.append(tools);
+  const strokes = [];
+  let activePointer = null;
+  let newPhoto = false;
+  let saving = false;
+
+  function photoButton(parent, label, action, className = 'secondary') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.textContent = label;
+    button.onclick = action;
+    parent.append(button);
+    return button;
+  }
+
+  const choose = photoButton(tools, 'Выбрать фото', () => picker.click());
+  const undo = photoButton(tools, 'Отменить штрих', () => {
+    strokes.pop();
+    redraw();
+    updateControls();
+  });
+  const save = photoButton(b, 'Сохранить фото', async () => {
+    saving = true;
+    updateControls();
+    try {
+      const file = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!file) throw Error('Не удалось подготовить фото');
+      const data = new FormData();
+      data.append('photo', file, 'location.jpg');
+      await api(path, {method: 'PUT', body: data});
+      if (currentItem?.code === item.code) {
+        currentItem.has_location_photo = true;
+        $('item-location-photo').textContent = 'Фото места хранения';
+      }
+      o.remove();
+      showToast('Фото места хранения сохранено');
+    } catch (error) {
+      if (o.isConnected) notify(error.message);
+    } finally {
+      saving = false;
+      updateControls();
+    }
+  }, 'ok');
+
+  function updateControls() {
+    choose.textContent = image ? 'Заменить фото' : 'Выбрать фото';
+    choose.disabled = saving || activePointer !== null;
+    undo.disabled = saving || activePointer !== null || !strokes.length;
+    save.disabled = saving || activePointer !== null || (!newPhoto && !strokes.length);
+  }
+
+  function setImage(nextImage) {
+    image = nextImage;
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.classList.remove('hidden');
+    status.textContent = 'Обведите пальцем нужную полку или коробку.';
+    redraw();
+  }
+
+  function drawSegment(from, to) {
+    const width = Math.max(4, Math.max(canvas.width, canvas.height) / 120);
+    context.lineCap = 'round';
+    context.strokeStyle = '#fff';
+    context.lineWidth = width * 1.5;
+    context.beginPath();
+    context.moveTo(from.x, from.y);
+    context.lineTo(to.x + 0.01, to.y);
+    context.stroke();
+    context.strokeStyle = '#ed3426';
+    context.lineWidth = width;
+    context.stroke();
+  }
+
+  function redraw() {
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const stroke of strokes) {
+      stroke.forEach((point, index) => drawSegment(stroke[Math.max(0, index - 1)], point));
+    }
+  }
+
+  function pointAt(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * canvas.width / rect.width,
+      y: (event.clientY - rect.top) * canvas.height / rect.height,
+    };
+  }
+
+  canvas.addEventListener('pointerdown', event => {
+    if (saving || activePointer !== null || event.button !== 0) return;
+    activePointer = event.pointerId;
+    canvas.setPointerCapture(activePointer);
+    const point = pointAt(event);
+    strokes.push([point]);
+    drawSegment(point, point);
+    updateControls();
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (event.pointerId !== activePointer) return;
+    const stroke = strokes.at(-1);
+    const point = pointAt(event);
+    drawSegment(stroke.at(-1), point);
+    stroke.push(point);
+  });
+  function endStroke(event) {
+    if (event.pointerId !== activePointer) return;
+    activePointer = null;
+    updateControls();
+  }
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+  canvas.addEventListener('lostpointercapture', endStroke);
+
+  let selection = 0;
+  picker.addEventListener('change', async () => {
+    const file = picker.files[0];
+    picker.value = '';
+    if (!file) return;
+    const selected = ++selection;
+    try {
+      const nextImage = await decodePhoto(file);
+      if (!o.isConnected || selected !== selection || saving) return;
+      activePointer = null;
+      strokes.length = 0;
+      newPhoto = true;
+      setImage(nextImage);
+      updateControls();
+    } catch {
+      if (selected === selection && o.isConnected) notify('Не удалось открыть фото. Выберите другое изображение.');
+    }
+  });
+  if (image) setImage(image);
+  updateControls();
+}
+
 async function downloadLabelExport17(items,format,settings={}){
   const excel=format==='xlsx';
   const response=await fetch('/api/export_labels'+(excel?'?format=xlsx':''),{
