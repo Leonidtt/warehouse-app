@@ -1,6 +1,6 @@
 # Склад App
 
-Правила работы Codex и ChatGPT, точки входа и выпуск описаны в [AGENTS.md](AGENTS.md).
+Правила работы Codex и ChatGPT, команда «Го», точки входа и выпуск описаны в [AGENTS.md](AGENTS.md). Актуальную передачу незавершённых задач и проверенные состояния проекта смотри в [WORK_HANDOFF.md](WORK_HANDOFF.md).
 
 Для быстрой проверки Основы на временной базе установите `backend/requirements.txt` в Python 3.12 и выполните `python scripts/smoke_warehouse.py`. Проверка обращается к маршрутам приложения без запуска фоновых задач Telegram.
 
