@@ -475,8 +475,8 @@ def freeze_review_snapshot(conn):
 
 
 def can_view_delivery_schedule(user):
-    role='boss' if FROZEN_REVIEW_DATE else 'admin'
-    return bool(user.get('is_registered') and user.get('role')==role and not user.get('preview_role'))
+    roles = ('admin', 'boss') if FROZEN_REVIEW_DATE else ('admin',)
+    return bool(user.get('is_registered') and user.get('role') in roles and not user.get('preview_role'))
 
 
 def register_delivery_schedule(app,get_user,transaction,audit):
