@@ -76,6 +76,9 @@ def equipment_label_image(code, name, dpi, width_mm, height_mm):
         if size not in fonts:
             fonts[size] = label_font(size)
         font = fonts[size]
+        # Keep a short inventory name/number on one line, as on the approved label.
+        if len(name) <= 16 and draw.textlength(name, font=font) > text_width:
+            return None
         lines, line = [], ''
         for word in name.split():
             joined = (line + ' ' + word).strip()
