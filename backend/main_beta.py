@@ -32,6 +32,7 @@ import re
 from urllib.parse import urlsplit
 from contextlib import contextmanager
 from datetime import date
+from frame_stock import register_frames
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import active_checkout_rows, effective_user, held_camera_count, register_184
@@ -2026,6 +2027,7 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
     return StreamingResponse(io.BytesIO(base64.b64decode(row[0])),media_type='image/jpeg')
 
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
+register_frames(app, check_admin, transaction, audit)
 register_owner_backup(app, DB_PATH, BOT_TOKEN, get_user)
 beta_bot_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
 if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+", beta_bot_domain, re.I):
