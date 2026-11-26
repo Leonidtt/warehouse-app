@@ -15,7 +15,6 @@ import csv
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
-from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.styles import Alignment, Font
 import base64
 from datetime import datetime, timedelta
@@ -34,7 +33,7 @@ from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
 from warehouse_v18 import label_font, label_dimensions, register_v18
-from release_v182 import label_image, prepare_migration, register_release
+from release_v182 import label_image, label_size, prepare_migration, register_release
 from release_v184 import effective_user, is_standalone_flash, register_184
 from release_v185 import register_185, deny_blocked
 from flash_lifecycle import (
@@ -1581,14 +1580,22 @@ def download_backup(x_init_data: Optional[str] = Header(None)):
     return StreamingResponse(io.BytesIO(content),media_type='application/octet-stream',headers={'Content-Disposition':'attachment; filename=warehouse_backup.db','Cache-Control':'no-store'})
 
 @app.get('/api/label/{code}')
-def print_label(code: str,name: Optional[str]=None,dpi: int=203,format: str='png',width_mm: int=50,height_mm: int=80,x_init_data: Optional[str]=Header(None)):
+def print_label(code: str,name: Optional[str]=None,dpi: int=203,format: str='png',
+                width_mm: Optional[int]=None,height_mm: Optional[int]=None,
+                kind: Optional[Literal['equipment','consumable']]=None,x_init_data: Optional[str]=Header(None)):
     if name is None: get_user(x_init_data)
     else: check_admin(x_init_data)
     if dpi not in (203,300) or format not in ('png','pdf') or not 1<=len(code)<=64: raise HTTPException(400,'Некорректные параметры этикетки')
     if name is None:
-        with transaction() as conn: name=active_item(conn,code)['name']
+        with transaction() as conn:
+            item=active_item(conn,code)
+            name,kind=item['name'],item['kind']
+    elif kind is None:
+        with contextmanager_session() as conn:
+            item=conn.execute('SELECT kind FROM items WHERE code=? AND is_archived=0',(code,)).fetchone()
+            kind=item['kind'] if item else 'consumable'
     if not name.strip() or len(name)>250: raise HTTPException(400,'Укажите название')
-    im=label_image(code,name,dpi,width_mm,height_mm); buf=io.BytesIO()
+    im=label_image(code,name,dpi,width_mm,height_mm,kind); buf=io.BytesIO()
     if format=='pdf': im.save(buf,format='PDF',resolution=dpi)
     else: im.save(buf,format='PNG',dpi=(dpi,dpi))
     buf.seek(0)
@@ -1840,14 +1847,15 @@ def booking_calendar(x_init_data:Optional[str]=Header(None)):
 def labels_pdf(rows, dpi, width_mm, height_mm, copies=1):
     if dpi not in (203, 300):
         raise HTTPException(400, "Выберите 203 или 300 dpi")
-    label_dimensions(width_mm, height_mm)
     pages = len(rows) * copies
     if pages > 500:
         raise HTTPException(400, "Выберите до 500 этикеток с учётом копий")
-    pixels = round(width_mm / 25.4 * dpi) * round(height_mm / 25.4 * dpi)
-    if pages * pixels > 100_000_000:
+    sizes = [label_size(row["kind"], width_mm, height_mm) for row in rows]
+    pixels = sum(round(w / 25.4 * dpi) * round(h / 25.4 * dpi) for w, h in sizes)
+    if copies * pixels > 100_000_000:
         raise HTTPException(400, "Слишком большой PDF, уменьшите число этикеток, размер или dpi")
-    images = [label_image(row["code"], row["name"], dpi, width_mm, height_mm) for row in rows]
+    images = [label_image(row["code"], row["name"], dpi, w, h, row["kind"])
+              for row, (w, h) in zip(rows, sizes)]
     ordered = [image for image in images for _ in range(copies)]
     buf = io.BytesIO()
     ordered[0].save(buf, format="PDF", resolution=dpi, save_all=True, append_images=ordered[1:])
@@ -1856,10 +1864,10 @@ def labels_pdf(rows, dpi, width_mm, height_mm, copies=1):
 
 
 @app.get('/api/export_labels')
-def export_labels(dpi: int = 203, width_mm: int = 50, height_mm: int = 80, x_init_data: Optional[str] = Header(None)):
+def export_labels(dpi: int = 203, width_mm: Optional[int] = None, height_mm: Optional[int] = None, x_init_data: Optional[str] = Header(None)):
     check_admin(x_init_data)
     with contextmanager_session() as conn:
-        rows = conn.execute("SELECT code,name FROM items WHERE is_archived=0 ORDER BY name LIMIT 501").fetchall()
+        rows = conn.execute("SELECT code,name,kind FROM items WHERE is_archived=0 ORDER BY name LIMIT 501").fetchall()
     if not rows:
         raise HTTPException(400, "Склад пуст")
     return labels_pdf(rows, dpi, width_mm, height_mm)
@@ -1869,8 +1877,8 @@ class LabelSelection(BaseModel):
     codes: List[str] = Field(min_length=1, max_length=500)
     copies: int = Field(default=1, ge=1, le=20)
     dpi: int = 203
-    width_mm: int = 50
-    height_mm: int = 80
+    width_mm: Optional[int] = None
+    height_mm: Optional[int] = None
 
 def labels_xlsx(rows, copies):
     if len(rows) * copies > 500:
@@ -1882,22 +1890,20 @@ def labels_xlsx(rows, copies):
     sheet.freeze_panes = "A2"
     for cell in sheet[1]:
         cell.font = Font(bold=True)
-    for column, width in (("A", 28), ("B", 42), ("C", 17)):
+    for column, width in (("A", 28), ("B", 42), ("C", 28)):
         sheet.column_dimensions[column].width = width
 
     for row in rows:
-        png = io.BytesIO()
-        qrcode.make(row["code"], border=4).save(png, format="PNG")
+        code, name = str(row["code"]), str(row["name"])
         for _ in range(copies):
-            sheet.append([row["code"], row["name"]])
+            # NIIMBOT reads cell values: QR must be the exact literal item code.
+            sheet.append([code, name, code])
             index = sheet.max_row
-            for cell in sheet[index][:2]:
+            for cell in sheet[index]:
                 cell.data_type = "s"
+                cell.number_format = "@"
                 cell.alignment = Alignment(vertical="center", wrap_text=True)
-            sheet.row_dimensions[index].height = 86
-            qr = ExcelImage(io.BytesIO(png.getvalue()))
-            qr.width = qr.height = 112
-            sheet.add_image(qr, f"C{index}")
+            sheet.row_dimensions[index].height = 32
 
     output = io.BytesIO()
     workbook.save(output)
@@ -1918,7 +1924,7 @@ def export_selected_labels(req: LabelSelection, format: Literal["pdf", "xlsx"] =
     with contextmanager_session() as conn:
         rows = {
             row["code"]: row for row in conn.execute(
-                f"SELECT code,name FROM items WHERE is_archived=0 AND code IN ({placeholders})", codes
+                f"SELECT code,name,kind FROM items WHERE is_archived=0 AND code IN ({placeholders})", codes
             )
         }
     if len(rows) != len(codes):

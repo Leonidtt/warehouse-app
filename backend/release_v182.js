@@ -376,15 +376,15 @@ function installRelease182(){
   const editFooter=el('div','r182-edit-footer');const editSave=edit.querySelector('button[onclick="saveEditItem()"]');editSave.before(editFooter);editFooter.append(editSave);
 }
 function showCreated182(code,name,kind){
-  const {o,b}=overlay17('Товар создан');const title=document.createElement('h3');title.textContent=name+' · '+code;b.append(title);const image=document.createElement('img');image.className='label-img r182-created-label';image.alt='QR-этикетка';b.append(image);showLabelPreview17(code,name,image).catch(()=>notify('Не удалось загрузить этикетку'));
-  if(kind==='consumable')btn17(b,'Печать QR',()=>{
+  const {o,b}=overlay17('Товар создан');const title=document.createElement('h3');title.textContent=name+' · '+code;b.append(title);const image=document.createElement('img');image.className='label-img r182-created-label';image.alt='QR-этикетка';b.append(image);showLabelPreview17(code,name,image,kind).catch(()=>notify('Не удалось загрузить этикетку'));
+  btn17(b,'Печать QR',()=>{
     if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);
     o.remove();
-    showLabelPrint17([{code,name}]);
+    showLabelPrint17([{code,name,kind}]);
   },'ok');
-  btn17(b,'Скачать PNG',()=>downloadCreatedLabel182(code,'png'));btn17(b,'Скачать PDF',()=>downloadCreatedLabel182(code,'pdf'));btn17(b,'Готово',()=>{if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);o.remove()});
+  btn17(b,'Скачать PNG',()=>downloadCreatedLabel182(code,'png',kind));btn17(b,'Скачать PDF',()=>downloadCreatedLabel182(code,'pdf',kind));btn17(b,'Готово',()=>{if(image.dataset.objecturl)URL.revokeObjectURL(image.dataset.objecturl);o.remove()});
 }
-async function downloadCreatedLabel182(code,format){
-  let d={width:50,height:80};try{d={...d,...JSON.parse(cacheGet17('label_dimensions')||'{}')}}catch(e){}
+async function downloadCreatedLabel182(code,format,kind){
+  const d=labelSettings(kind);
   await downloadFile('/api/label/'+encodeURIComponent(code)+'?format='+format+'&width_mm='+encodeURIComponent(d.width)+'&height_mm='+encodeURIComponent(d.height),code+'.'+format);
 }
