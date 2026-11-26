@@ -128,3 +128,79 @@ def register_frames(app, check_admin, transaction, audit):
             result=apply_change(conn,req,actor)
             audit(conn,actor,'frames_'+req.kind,str(req.position))
             return result
+
+
+class MaterialChange(BaseModel):
+    position: Literal['vinyl','paper46','paper68']
+    kind: Literal['inventory','receipt','transfer','issue','unpack','cut','minimum']
+    boxes: Count = 0
+    loose: Count = 0
+    minimum: Optional[Count] = None
+    revision: Count
+    destination: constr(max_length=200) = ''
+    comment: constr(max_length=500) = ''
+
+def register_materials(app, check_admin, transaction, audit):
+    with transaction() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS material_stock (
+            position TEXT PRIMARY KEY, boxes INTEGER NOT NULL DEFAULT 0 CHECK(boxes>=0),
+            loose INTEGER NOT NULL DEFAULT 0 CHECK(loose>=0), minimum INTEGER,
+            revision INTEGER NOT NULL DEFAULT 0, counted_at TEXT)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS material_events (
+            id INTEGER PRIMARY KEY, position TEXT NOT NULL, kind TEXT NOT NULL,
+            boxes INTEGER NOT NULL, loose INTEGER NOT NULL, before_boxes INTEGER NOT NULL,
+            before_loose INTEGER NOT NULL, after_boxes INTEGER NOT NULL, after_loose INTEGER NOT NULL,
+            actor_id INTEGER NOT NULL, destination TEXT NOT NULL, comment TEXT NOT NULL,
+            created_at TEXT NOT NULL)""")
+        conn.executemany("INSERT OR IGNORE INTO material_stock(position) VALUES(?)", [(x,) for x in ('vinyl','paper46','paper68')])
+
+    @app.get('/api/materials')
+    def materials_get(x_init_data: Optional[str]=Header(None)):
+        check_admin(x_init_data)
+        with transaction() as conn:
+            return {'rows':[dict(r) for r in conn.execute('SELECT * FROM material_stock ORDER BY position')],
+                    'events':[dict(r) for r in conn.execute('SELECT * FROM material_events ORDER BY id DESC LIMIT 500')]}
+
+    @app.post('/api/materials')
+    def materials_change(req: MaterialChange, x_init_data: Optional[str]=Header(None)):
+        actor=check_admin(x_init_data)
+        with transaction() as conn:
+            row=conn.execute('SELECT * FROM material_stock WHERE position=?',(req.position,)).fetchone()
+            if row['revision']!=req.revision:
+                raise HTTPException(409,'Остаток изменился. Обновите данные.')
+            a,b=row['boxes'],row['loose']
+            x,y=req.boxes,req.loose
+            stamp=datetime.now(timezone.utc).isoformat(timespec='seconds')
+            counted,minimum=row['counted_at'],row['minimum']
+            vinyl=req.position=='vinyl'
+            destination=req.destination.strip() if req.kind=='transfer' else ''
+            if req.kind=='transfer' and not destination:
+                raise HTTPException(400,'Укажите площадку')
+            if req.kind=='minimum':
+                minimum=req.minimum
+            elif req.kind=='inventory':
+                a,b=x,y
+                counted=stamp
+            else:
+                if not counted:
+                    raise HTTPException(409,'Сначала проведите инвентаризацию')
+                if not x and not y:
+                    raise HTTPException(400,'Укажите количество')
+                if req.kind=='cut':
+                    if not vinyl or not x or not y:
+                        raise HTTPException(400,'Укажите количество цельных и нарезанных коробок')
+                    a,b=a-x,b+y
+                elif req.kind=='unpack':
+                    if vinyl or not x or y:
+                        raise HTTPException(400,'Укажите количество коробок бумаги')
+                    a,b=a-x,b+2*x
+                elif req.kind=='receipt':
+                    a,b=a+x,b+y
+                else:
+                    a,b=a-x,b-y
+            if min(a,b)<0 or max(a,b)>1000000:
+                raise HTTPException(400,'Недостаточно остатка или превышен лимит')
+            conn.execute('UPDATE material_stock SET boxes=?,loose=?,minimum=?,counted_at=?,revision=revision+1 WHERE position=?',(a,b,minimum,counted,req.position))
+            conn.execute('INSERT INTO material_events(position,kind,boxes,loose,before_boxes,before_loose,after_boxes,after_loose,actor_id,destination,comment,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(req.position,req.kind,x,y,row['boxes'],row['loose'],a,b,actor['tg_id'],destination,req.comment.strip(),stamp))
+            audit(conn,actor,'materials_'+req.kind,req.position)
+            return {'status':'ok'}
