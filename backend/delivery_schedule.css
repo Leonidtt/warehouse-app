@@ -277,34 +277,186 @@
 .camera-schedule-status { margin: 8px 0; font-size: 13px; color: var(--text-muted); }
 .camera-schedule-status:empty { display: none; }
 .camera-schedule-result:not(:empty) { margin-top: 16px; }
-.camera-schedule-result h3, .camera-schedule-result h4, .camera-schedule-result h5 { margin: 0; }
-.camera-schedule-result > p { margin: 4px 0 12px; }
-.camera-schedule-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+
+.camera-schedule-card {
+  --schedule-ink: #172638;
+  --schedule-muted: #4f5d6b;
+  --schedule-edge: #e5dfd5;
+  --schedule-paper: #fffcf8;
+  --schedule-peach: #fbe5dc;
+  --schedule-red: #a43828;
+  --schedule-mint: #e1eee7;
+  --schedule-green: #256354;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f2efe8;
+  color: var(--schedule-ink);
+  font-family: system-ui, sans-serif;
+}
+.camera-schedule-hero {
+  position: relative;
+  padding: 19px 14px 41px;
+  background: var(--schedule-ink);
+  color: #fffdf9;
+}
+.camera-schedule-date {
+  display: block;
+  margin-right: 44px;
+  color: #f5c6b2;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.camera-schedule-hero h3 {
+  margin: 9px 0 3px;
+  color: inherit;
+  font-size: clamp(25px, 7vw, 42px);
+  font-weight: 800;
+  line-height: 1.08;
+}
+.camera-schedule-hero p {
+  margin: 7px 0 0;
+  color: #ccd8e4;
+  font-size: 12px;
+}
+.camera-schedule-icon {
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: #25384a;
+  color: #f5c6b2;
+}
+.camera-schedule-icon span {
+  position: relative;
+  display: grid;
+  width: 20px;
+  height: 14px;
+  place-items: center;
+  border: 1.5px solid;
+  border-radius: 4px;
+}
+.camera-schedule-icon span::before {
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid;
+  border-radius: 50%;
+  content: "";
+}
+.camera-schedule-icon span::after {
+  position: absolute;
+  top: -5px;
+  width: 8px;
+  height: 4px;
+  border-radius: 4px 4px 0 0;
+  background: currentColor;
+  content: "";
+}
+.camera-schedule-body { padding: 0 12px 12px; }
+.camera-schedule-summary {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: -24px;
+}
 .camera-schedule-stat {
   display: grid;
   align-content: start;
-  gap: 3px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--r185-control, var(--skeleton-bg));
+  gap: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--schedule-paper);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.22;
+}
+.camera-schedule-stat strong {
+  font-size: clamp(24px, 6vw, 34px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.camera-schedule-stat.camera-schedule-delivery,
+.camera-schedule-delivery .camera-schedule-badge { background: var(--schedule-peach); color: var(--schedule-red); }
+.camera-schedule-stat.camera-schedule-held,
+.camera-schedule-held .camera-schedule-badge { background: var(--schedule-mint); color: var(--schedule-green); }
+.camera-schedule-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 7px;
+  margin: 14px 0 8px;
+}
+.camera-schedule-section-title h4 { margin: 0; font-size: 13px; font-weight: 800; line-height: 1.25; }
+.camera-schedule-section-title span { color: var(--schedule-muted); font-size: 11px; white-space: nowrap; }
+.camera-schedule-table-frame {
+  overflow: hidden;
+  border: 1px solid var(--schedule-edge);
+  border-radius: 10px;
+  background: var(--schedule-paper);
+}
+.camera-schedule-table {
+  width: 100%;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--schedule-ink);
   font-size: 12px;
+  line-height: 1.35;
 }
-.camera-schedule-stat strong { font-size: 25px; font-variant-numeric: tabular-nums; line-height: 1; }
-.camera-schedule-delivery h5, .camera-schedule-stat.camera-schedule-delivery { color: var(--r185-red, #b84231); }
-.camera-schedule-held h5, .camera-schedule-stat.camera-schedule-held { color: var(--r185-green, #256354); }
-.camera-schedule-venues { display: grid; gap: 8px; margin-top: 10px; }
-.camera-schedule-venue, .camera-schedule-review { border: 1px solid var(--border); border-radius: 12px; padding: 11px; }
-.camera-schedule-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 7px; }
-.camera-schedule-columns ul, .camera-schedule-review ul {
-  margin: 5px 0 0;
-  padding: 0;
-  list-style: none;
+.camera-schedule-table th:first-child { width: 27%; }
+.camera-schedule-table th:nth-child(2) { width: 38%; }
+.camera-schedule-table th, .camera-schedule-table td {
+  padding: 9px 5px;
+  text-align: left;
+  vertical-align: top;
   overflow-wrap: anywhere;
-  font-size: 13px;
 }
-.camera-schedule-review { margin-top: 8px; font-size: 13px; }
+.camera-schedule-table th:first-child { padding-left: 7px; }
+.camera-schedule-table thead th {
+  color: var(--schedule-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .015em;
+  text-transform: uppercase;
+}
+.camera-schedule-table thead .camera-schedule-delivery { color: var(--schedule-red); }
+.camera-schedule-table thead .camera-schedule-held { color: var(--schedule-green); }
+.camera-schedule-table tbody tr { border-top: 1px solid var(--schedule-edge); }
+.camera-schedule-table tbody th { font-weight: 760; }
+.camera-schedule-people { display: flex; align-items: flex-start; gap: 4px; }
+.camera-schedule-people span:last-child { min-width: 0; }
+.camera-schedule-badge {
+  flex: none;
+  min-width: 17px;
+  padding: 1px 3px;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.camera-schedule-stock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  margin: 9px 0 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--schedule-peach);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.camera-schedule-stock strong { color: var(--schedule-red); }
+.camera-schedule-freshness, .camera-schedule-empty { margin: 7px 0 0; color: var(--schedule-muted); font-size: 11px; }
+.camera-schedule-review { margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; font-size: 13px; }
 .camera-schedule-review summary { cursor: pointer; }
+.camera-schedule-review ul { margin: 5px 0 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
 .camera-schedule-result > button { min-height: 44px; }
 
 #staff-schedule-panel .delivery-bar { flex-wrap: wrap; }

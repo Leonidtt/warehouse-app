@@ -1,7 +1,7 @@
 /* Beta: staff rota and camera delivery plan. */
 function installDeliverySchedule(){
   const main=document.getElementById('screen-main');
-  if(!main||document.getElementById('delivery-schedule-panel'))return;
+  if(!main||document.getElementById('camera-schedule-entry'))return;
   const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   const localDate=()=>{
     const pieces=Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
@@ -38,10 +38,22 @@ function installDeliverySchedule(){
 
   function renderCameraSchedule(result, report){
     const date=cameraScheduleDate(report.date);
+    const card=el('article','camera-schedule-card');
+    const hero=el('header','camera-schedule-hero');
+    const shiftDate=el('time','camera-schedule-date',
+      'Москва / '+new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'})
+        .format(new Date(report.date+'T12:00:00Z')));
+    shiftDate.dateTime=report.date;
+    const icon=el('span','camera-schedule-icon');
+    icon.setAttribute('aria-hidden','true');
+    icon.append(el('span'));
+    hero.append(shiftDate,el('h3','','Фотоаппараты'),el('p','','Выдача и доставка по площадкам'),icon);
+
+    const body=el('div','camera-schedule-body');
     const summary=el('div','camera-schedule-summary');
     const stats=[
-      [report.deliver,'Привезти','delivery'],
-      [report.held,'На руках','held'],
+      [report.deliver,'Камер привезти','delivery'],
+      [report.held,'Камер на руках','held'],
       [report.delivery_venues,'Площадок доставки','locations'],
     ];
     for(const [count,label,kind] of stats){
@@ -49,27 +61,61 @@ function installDeliverySchedule(){
       stat.append(el('strong','',count),el('span','',label));
       summary.append(stat);
     }
-    const title=el('h3','','Москва · '+date);
-    const freshness=el('p','meta','Открытые выдачи на момент сверки');
-    const venues=el('div','camera-schedule-venues');
-    for(const venue of report.venues){
-      const card=el('section','camera-schedule-venue');
-      const columns=el('div','camera-schedule-columns');
-      for(const [label,people,kind] of [['Привезти',venue.deliver,'delivery'],['На руках',venue.held,'held']]){
-        const section=el('div','camera-schedule-'+kind);
-        section.append(el('h5','',label+' · '+people.length));
-        if(people.length){
-          const list=el('ul');
-          for(const person of people) list.append(el('li','',cameraSchedulePerson(person)));
-          section.append(list);
-        }
-        columns.append(section);
+    const sectionHeader=el('div','camera-schedule-section-title');
+    const count=report.deliver+report.held;
+    const peopleLabel=new Intl.PluralRules('ru').select(count)==='few'?'человека':'человек';
+    sectionHeader.append(el('h4','','Распределение по площадкам'),el('span','',count+' '+peopleLabel));
+    body.append(summary,sectionHeader);
+
+    if(report.venues.length){
+      const table=el('table','camera-schedule-table');
+      table.setAttribute('aria-label','Распределение по площадкам');
+      const head=el('thead'),labels=el('tr');
+      for(const [label,kind] of [['Площадка','locations'],['Привезти','delivery'],['Уже на руках','held']]){
+        const cell=el('th','camera-schedule-'+kind,label);
+        cell.scope='col';
+        labels.append(cell);
       }
-      card.append(el('h4','',venue.name),columns);
-      venues.append(card);
+      head.append(labels);
+      const rows=el('tbody');
+      for(const venue of report.venues){
+        const row=el('tr');
+        const name=el('th','',venue.name);
+        name.scope='row';
+        row.append(name);
+        for(const [people,kind] of [[venue.deliver,'delivery'],[venue.held,'held']]){
+          const cell=el('td','camera-schedule-'+kind);
+          if(people.length){
+            const cellContent=el('div','camera-schedule-people');
+            cellContent.append(el('span','camera-schedule-badge',people.length),
+              el('span','',people.map(person=>person.name).join(', ')));
+            cell.append(cellContent);
+          }else{
+            cell.textContent='—';
+          }
+          row.append(cell);
+        }
+        rows.append(row);
+      }
+      table.append(head,rows);
+      const frame=el('div','camera-schedule-table-frame');
+      frame.append(table);
+      body.append(frame);
+    }else{
+      body.append(el('p','camera-schedule-empty','На эту дату нет подтверждённых назначений.'));
     }
-    if(!report.venues.length) venues.append(el('p','meta','На эту дату нет подтверждённых назначений.'));
-    result.replaceChildren(title,freshness,summary,venues);
+    for(const venue of report.venues){
+      for(const person of venue.deliver){
+        const camera=person.suggested_camera;
+        if(!camera) continue;
+        const note=el('p','camera-schedule-stock');
+        note.append(el('strong','',person.name),el('span','',camera.model+' ('+camera.code+') числится на складе'));
+        body.append(note);
+      }
+    }
+    body.append(el('p','camera-schedule-freshness','По открытым выдачам на момент сверки'));
+    card.append(hero,body);
+    result.replaceChildren(card);
     if(report.unmatched.length){
       const details=el('details','camera-schedule-review');
       details.append(el('summary','','Требуют проверки · '+report.unmatched.length));
