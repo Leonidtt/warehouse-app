@@ -279,6 +279,8 @@
 .camera-schedule-result:not(:empty) { margin-top: 16px; }
 
 .camera-schedule-card {
+  --schedule-surface: #f2efe8;
+  --schedule-hero: #172638;
   --schedule-ink: #172638;
   --schedule-muted: #4f5d6b;
   --schedule-edge: #e5dfd5;
@@ -289,14 +291,40 @@
   --schedule-green: #256354;
   overflow: hidden;
   border-radius: 16px;
-  background: #f2efe8;
+  background: var(--schedule-surface);
   color: var(--schedule-ink);
   font-family: system-ui, sans-serif;
+}
+:root[data-theme=dark] .camera-schedule-card {
+  --schedule-surface: var(--beta-page, #0d151e);
+  --schedule-hero: var(--beta-panel-raised, #1c2939);
+  --schedule-ink: var(--text, #f5f5f7);
+  --schedule-muted: var(--r185-muted, #acb9ca);
+  --schedule-edge: var(--beta-edge, #b8d7ff25);
+  --schedule-paper: var(--beta-panel, #17212e);
+  --schedule-peach: #3b2b34;
+  --schedule-red: #ffaea3;
+  --schedule-mint: #203932;
+  --schedule-green: #9fe0c3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .camera-schedule-card {
+    --schedule-surface: var(--beta-page, #0d151e);
+    --schedule-hero: var(--beta-panel-raised, #1c2939);
+    --schedule-ink: var(--text, #f5f5f7);
+    --schedule-muted: var(--r185-muted, #acb9ca);
+    --schedule-edge: var(--beta-edge, #b8d7ff25);
+    --schedule-paper: var(--beta-panel, #17212e);
+    --schedule-peach: #3b2b34;
+    --schedule-red: #ffaea3;
+    --schedule-mint: #203932;
+    --schedule-green: #9fe0c3;
+  }
 }
 .camera-schedule-hero {
   position: relative;
   padding: 19px 14px 41px;
-  background: var(--schedule-ink);
+  background: var(--schedule-hero);
   color: #fffdf9;
 }
 .camera-schedule-date {
