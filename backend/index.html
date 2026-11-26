@@ -1529,10 +1529,12 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 &&(!query||[item.name,item.code,item.category,item.kit_body,item.kit_lens,item.kit_flash]
                     .some(value=>String(value||"").toLowerCase().includes(query))));
             available.sort((a,b)=>{
-                const byName=a.name.localeCompare(b.name,"ru");
+                const byName=a.name.localeCompare(b.name,"ru",{numeric:true,sensitivity:"base"});
                 if(sort==="name-asc")return byName;
                 if(sort==="name-desc")return -byName;
-                return Number(!canTakeItem(a))-Number(!canTakeItem(b))||byName;
+                const order=['camera','flash','laptop','printer'];
+                const rank=item=>{const n=order.indexOf(catalog?.groupFor(item));return n<0?order.length:n;};
+                return rank(a)-rank(b)||Number(!canTakeItem(a))-Number(!canTakeItem(b))||byName;
             });
             if(!available.length){list.innerHTML="<p class='meta' style='text-align:center;padding:18px'>Техника не найдена</p>";return;}
             // Exactly the same visual item card as Home. The checkbox is preserved.
