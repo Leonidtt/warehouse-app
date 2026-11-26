@@ -1,30 +1,174 @@
 /* Beta: staff rota and camera delivery plan. */
+function scheduleWorkbookStorage(owner,file){
+  return new Promise((resolve,reject)=>{
+    const open=indexedDB.open('warehouse-beta-schedules',1);
+    open.onupgradeneeded=()=>open.result.createObjectStore('workbooks');
+    open.onerror=()=>reject(open.error);
+    open.onsuccess=()=>{
+      const db=open.result;
+      const write=file!==undefined;
+      const transaction=db.transaction('workbooks',write?'readwrite':'readonly');
+      const store=transaction.objectStore('workbooks');
+      const operation=write?store.put(file,owner):store.get(owner);
+      transaction.oncomplete=()=>{db.close();resolve(operation.result);};
+      transaction.onabort=()=>{db.close();reject(transaction.error);};
+    };
+  });
+}
+
 function installDeliverySchedule(){
   const main=document.getElementById('screen-main');
   if(!main||document.getElementById('camera-schedule-entry'))return;
-  const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
+  const el=(tag,cls,text)=>{
+    const node=document.createElement(tag);
+    if(cls)node.className=cls;
+    if(text!==undefined)node.textContent=text;
+    return node;
+  };
   const localDate=()=>{
     const pieces=Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
-    const val=k=>pieces.find(x=>x.type===k)?.value;
+    const val=key=>pieces.find(piece=>piece.type===key)?.value;
     return [val('year'),val('month'),val('day')].join('-');
   };
-  const offset=(iso,n)=>{const day=new Date(iso+'T12:00:00Z');day.setUTCDate(day.getUTCDate()+n);return day.toISOString().slice(0,10);};
+  const offset=(iso,n)=>{
+    const day=new Date(iso+'T12:00:00Z');
+    day.setUTCDate(day.getUTCDate()+n);
+    return day.toISOString().slice(0,10);
+  };
+  const chooseDay=(workbook,preferred)=>{
+    const weeks=Object.entries(workbook.weeks).sort(([a],[b])=>a.localeCompare(b));
+    const covers=day=>weeks.some(([start,end])=>day>=start&&day<=end);
+    const today=localDate();
+    if(covers(preferred))return preferred;
+    if(covers(today))return today;
+    return (weeks.filter(([start])=>start<=today).at(-1)||weeks[0])[0];
+  };
   const permitted=()=>currentUser?.can_view_delivery_schedule===true;
-  const entry=el('button','secondary camera-schedule-entry hidden','Фотоаппараты по графику');
-  entry.id='camera-schedule-entry';
-  entry.type='button';
-  entry.onclick=openCameraSchedule;
-  const activity=main.querySelector('#main-activity');
-  if(activity)activity.after(entry);else main.querySelector('#items-list')?.before(entry);
-  const staff=installStaffSchedule(entry,{el,localDate,offset,permitted});
-  function updateAccess(){
-    entry.classList.toggle('hidden',!permitted());
-    staff.setAccess(permitted());
+  const fileInput=el('input','hidden');
+  fileInput.type='file';
+  fileInput.accept='.xlsx';
+  main.append(fileInput);
+  const readWorkbook=file=>{
+    const data=new FormData();
+    data.append('file',file);
+    return api('/api/delivery-schedule/week-preview',{method:'POST',body:data});
+  };
+
+  let owner=null,workbookFile=null,uploadTarget=null,uploading=false,accountRequest=0;
+  function chooseFile(target){
+    if(!permitted()||uploading)return;
+    uploadTarget=target;
+    fileInput.click();
   }
+  function datePreference(section,value){
+    const key='warehouse-beta-schedule-day:'+section+':'+owner;
+    try{
+      if(value)localStorage.setItem(key,value);
+      else{
+        const saved=localStorage.getItem(key);
+        if(/^\d{4}-\d{2}-\d{2}$/.test(saved||''))return saved;
+      }
+    }catch{}
+    return '';
+  }
+  const options={el,localDate,offset,chooseDay,permitted,chooseFile,readWorkbook,datePreference};
+  const camera=installCameraSchedule(options);
+  const activity=main.querySelector('#main-activity');
+  if(activity)activity.after(camera.panel);else main.querySelector('#items-list')?.before(camera.panel);
+  const staff=installStaffSchedule(camera.panel,options);
+  const panels=[camera,staff];
+  function useWorkbook(file,data){
+    workbookFile=file;
+    for(const panel of panels)panel.setWorkbook(file,data);
+  }
+  function updateAccess(){
+    const next=permitted()?String(currentUser.tg_id):null;
+    for(const panel of panels)panel.setAccess(next!==null);
+    if(next===owner)return;
+    owner=next;
+    const revision=++accountRequest;
+    uploading=false;
+    for(const panel of panels)panel.setUploading(false);
+    useWorkbook(null,null);
+    if(next!==null){
+      scheduleWorkbookStorage(next).then(saved=>{
+        if(saved&&revision===accountRequest&&!workbookFile)useWorkbook(saved,null);
+      }).catch(()=>{});
+    }
+  }
+  fileInput.onchange=async()=>{
+    const file=fileInput.files[0];
+    const target=uploadTarget;
+    fileInput.value='';
+    if(!file||!target||!permitted())return;
+    if(!/\.xlsx$/i.test(file.name)||file.size>8_000_000){
+      target.notifyUpload('Выберите файл .xlsx размером до 8 МБ.');
+      return;
+    }
+    const revision=accountRequest;
+    const account=owner;
+    uploading=true;
+    for(const panel of panels)panel.setUploading(true);
+    target.notifyUpload('Загружаем Excel…');
+    try{
+      const data=await readWorkbook(file);
+      if(revision!==accountRequest||!permitted())return;
+      useWorkbook(file,data);
+      target.notifyUpload('');
+      try{
+        await scheduleWorkbookStorage(account,file);
+      }catch{
+        if(revision===accountRequest)target.notifyUpload('Файл открыт. Браузер не смог сохранить его для следующего входа.');
+      }
+    }catch(error){
+      if(revision===accountRequest)target.notifyUpload(error.networkError?'Нет связи со складом. Повторите загрузку.':error.message);
+    }finally{
+      if(revision===accountRequest){
+        uploading=false;
+        for(const panel of panels)panel.setUploading(false);
+      }
+    }
+  };
   const initBefore=init;
   init=async()=>{const result=await initBefore();updateAccess();return result;};
   const loadBefore=loadItems;
   loadItems=async(...args)=>{const result=await loadBefore(...args);updateAccess();return result;};
+}
+
+function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFile,datePreference}){
+  const panel=el('details','delivery-panel camera-schedule-panel hidden');
+  panel.id='camera-schedule-entry';
+  const heading=el('summary','delivery-heading');
+  heading.append(el('strong','','Фотоаппараты по графику'));
+  const body=el('div','delivery-body');
+  const form=el('form','camera-schedule-form');
+  const dayLabel=el('label','','Дата смены');
+  const day=el('input');
+  day.type='date';
+  day.required=true;
+  dayLabel.append(day);
+  const uploadArea=el('div','camera-workbook-control');
+  const upload=el('button','delivery-control delivery-excel','Загрузить Excel');
+  upload.type='button';
+  const filename=el('span','schedule-filename');
+  uploadArea.append(upload,filename);
+  const submit=el('button','','Сверить с выдачами');
+  submit.type='submit';
+  submit.disabled=true;
+  const uploadStatus=el('p','delivery-source');
+  uploadStatus.setAttribute('role','status');
+  const status=el('p','camera-schedule-status');
+  status.setAttribute('role','status');
+  const result=el('div','camera-schedule-result');
+  form.append(dayLabel,uploadArea,submit);
+  body.append(form,uploadStatus,status,result);
+  panel.append(heading,body);
+  let workbook=null,uploading=false,comparing=false,revision=0;
+  const updateControls=()=>{
+    upload.disabled=uploading;
+    day.disabled=comparing;
+    submit.disabled=!workbook||comparing||uploading;
+  };
 
   function cameraScheduleDate(day){
     return new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})
@@ -143,63 +287,80 @@ function installDeliverySchedule(){
     result.append(copy);
   }
 
-  function openCameraSchedule(){
-    if(!permitted()) return;
-    const {o,b}=overlay17('Фотоаппараты по графику');
-    b.classList.add('camera-schedule-dialog');
-    const form=el('form','camera-schedule-form');
-    const dayLabel=el('label','','Дата смены');
-    const day=el('input');
-    day.type='date';day.name='day';day.required=true;
-    day.value=offset(localDate(),1);
-    dayLabel.append(day);
-    const fileLabel=el('label','','График МСК (.xlsx)');
-    const file=el('input');
-    file.type='file';file.name='file';file.required=true;file.accept='.xlsx';
-    fileLabel.append(file);
-    const submit=el('button','','Сверить с выдачами');
-    submit.type='submit';
-    const status=el('p','camera-schedule-status');
-    status.setAttribute('role','status');
-    const result=el('div','camera-schedule-result');
-    form.append(dayLabel,fileLabel,submit);
-    b.append(form,status,result);
-    form.addEventListener('change',()=>{
-      result.replaceChildren();
-      status.textContent='';
-    });
-    form.addEventListener('submit',async event=>{
-      event.preventDefault();
-      if(submit.disabled) return;
-      result.replaceChildren();
-      if(file.files[0].size>8_000_000){
-        status.textContent='Файл должен быть не больше 8 МБ.';
-        return;
-      }
-      const data=new FormData(form);
-      submit.disabled=day.disabled=file.disabled=true;
-      status.textContent='Сверяем график с открытыми выдачами…';
-      try{
-        const report=await api('/api/delivery-schedule/camera-preview',{method:'POST',body:data});
-        if(o.isConnected&&permitted()){
-          renderCameraSchedule(result,report);
-          status.textContent='';
-        }
-      }catch(error){
-        status.textContent=error.networkError?'Нет связи со складом. Повторите сверку.':error.message;
-      }finally{
-        submit.disabled=day.disabled=file.disabled=false;
-      }
-    });
+  function resetReport(){
+    ++revision;
+    comparing=false;
+    result.replaceChildren();
+    status.textContent='';
+    updateControls();
   }
-
+  async function compare(){
+    if(!panel.open||!permitted()||!workbook||!day.value||uploading||comparing)return;
+    const request=++revision;
+    const data=new FormData();
+    data.append('day',day.value);
+    data.append('file',workbook);
+    comparing=true;
+    updateControls();
+    status.textContent='Сверяем график с открытыми выдачами…';
+    try{
+      const report=await api('/api/delivery-schedule/camera-preview',{method:'POST',body:data});
+      if(request!==revision||!permitted())return;
+      renderCameraSchedule(result,report);
+      status.textContent='';
+    }catch(error){
+      if(request===revision){
+        result.replaceChildren();
+        status.textContent=error.networkError?'Нет связи со складом. Повторите сверку.':error.message;
+      }
+    }finally{
+      if(request===revision){
+        comparing=false;
+        updateControls();
+      }
+    }
+  }
+  form.onsubmit=event=>{event.preventDefault();compare();};
+  day.onchange=()=>{
+    if(day.value)datePreference('camera',day.value);
+    resetReport();
+  };
+  panel.addEventListener('toggle',()=>{
+    if(panel.open&&!result.firstChild)compare();
+  });
+  const controller={
+    panel,
+    setAccess(show){
+      panel.classList.toggle('hidden',!show);
+      if(!show)panel.open=false;
+    },
+    setWorkbook(file,data){
+      workbook=file;
+      filename.textContent=file?.name||'';
+      filename.title=filename.textContent;
+      day.value=datePreference('camera')||offset(localDate(),1);
+      if(data)day.value=chooseDay(data,day.value);
+      if(file&&day.value)datePreference('camera',day.value);
+      uploadStatus.textContent='';
+      resetReport();
+      if(panel.open)compare();
+    },
+    setUploading(value){
+      uploading=value;
+      updateControls();
+      if(!uploading&&panel.open&&!result.firstChild)compare();
+    },
+    notifyUpload(message){uploadStatus.textContent=message;},
+  };
+  upload.onclick=()=>chooseFile(controller);
+  return controller;
 }
 
-function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
+function installStaffSchedule(anchor,{el,localDate,offset,chooseDay,permitted,chooseFile,readWorkbook,datePreference}){
   const panel=el('details','delivery-panel staff-panel hidden');
   panel.id='staff-schedule-panel';
   const heading=el('summary','delivery-heading');
-  heading.append(el('strong','','График сотрудников'),el('span','delivery-count',''));
+  heading.append(el('strong','','График сотрудников'));
   const body=el('div','delivery-body');
   const bar=el('div','delivery-bar');
   const datePicker=el('div','delivery-date-picker hidden');
@@ -212,29 +373,33 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
   }
   const dateInput=el('input','delivery-date');
   dateInput.type='date';
-  dateInput.value=localDate();
   dateInput.setAttribute('aria-label','Дата недели графика');
   datePicker.append(previous,dateInput,next);
   const upload=el('button','delivery-control delivery-excel','Загрузить Excel');
   upload.type='button';
-  const file=el('input','hidden');
-  file.type='file';
-  file.accept='.xlsx';
-  bar.append(datePicker,upload,file);
   const range=el('span','staff-week-range');
-  bar.append(range);
-  const content=el('div','staff-content');
-  body.append(bar,content);
-  panel.append(heading,body);
-  anchor.before(panel);
-  const calendar=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-  const formatDate=iso=>iso.slice(8,10)+'.'+iso.slice(5,7);
-  const validColor=color=>/^#[0-9a-f]{6}$/i.test(color||'');
+  bar.append(datePicker,upload,range);
+  const filename=el('p','delivery-source schedule-filename');
   const notice=el('p','delivery-source');
   notice.setAttribute('role','status');
-  content.before(notice);
-  let request=0,loaded='',uploaded=null;
-  let uploading=false;
+  const content=el('div','staff-content');
+  body.append(bar,filename,notice,content);
+  panel.append(heading,body);
+  anchor.before(panel);
+
+  const calendar=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  const formatDate=iso=>iso.slice(8,10)+'.'+iso.slice(5,7);
+  const colorOf=row=>/^#[0-9a-f]{6}$/i.test(row.venue_color||'')?row.venue_color.toUpperCase():'';
+  const venueOf=row=>row.venue||'Площадка не указана';
+  let request=0,loaded='',workbook=null,uploaded=null,uploading=false;
+  let venueFilter='',colorFilter=null;
+
+  function marker(color){
+    const node=el('span','staff-color');
+    if(color)node.style.backgroundColor=color;
+    node.setAttribute('aria-hidden','true');
+    return node;
+  }
 
   function draw(data,selected){
     content.replaceChildren();
@@ -247,106 +412,168 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
     if(data.meta.format_version<2){
       content.append(el('p','delivery-muted','Загрузите Excel заново для полного состава.'));
     }
-    const days=calendar.map((_,i)=>offset(data.start,i));
-    const groups=new Map();
-    for(const row of data.rows||[]){
-      if(row.status==='excluded')continue;
-      const venue=row.venue||'Площадка не указана';
-      if(!groups.has(venue))groups.set(venue,new Map());
-      const people=groups.get(venue), key=JSON.stringify([row.person,row.department]);
-      if(!people.has(key))people.set(key,{name:row.person,department:row.department,days:new Map()});
-      const shifts=people.get(key).days;
-      if(!shifts.has(row.work_date))shifts.set(row.work_date,[]);
-      shifts.get(row.work_date).push(row);
-    }
-    if(!groups.size){
+    const shifts=(data.rows||[]).filter(row=>row.status!=='excluded');
+    if(!shifts.length){
       content.append(el('p','delivery-muted','На эту неделю назначений нет.'));
       return;
     }
-    const colorOf=rows=>rows.find(r=>validColor(r.venue_color))?.venue_color||'';
-    const marker=color=>{
-      const node=el('span','staff-color');
-      if(color)node.style.backgroundColor=color;
-      node.setAttribute('aria-hidden','true');
-      return node;
-    };
-    const ordered=[...groups].sort(([a],[b])=>
-      Number(a==='Площадка не указана')-Number(b==='Площадка не указана')||a.localeCompare(b,'ru'));
-    const fragment=document.createDocumentFragment();
-    for(const [index,[venue,people]] of ordered.entries()){
-      const section=el('details','staff-venue-group');section.open=index===0;
+    const venues=[...new Set(shifts.map(venueOf))].sort((a,b)=>a.localeCompare(b,'ru'));
+    const colors=new Map();
+    for(const shift of shifts){
+      const color=colorOf(shift);
+      if(!colors.has(color))colors.set(color,new Set());
+      colors.get(color).add(venueOf(shift));
+    }
+    if(!venues.includes(venueFilter))venueFilter='';
+    if(!colors.has(colorFilter))colorFilter=null;
+
+    const card=el('section','staff-table-card');
+    const filters=el('div','staff-filters');
+    const venueLabel=el('label','staff-venue-filter','Площадка');
+    const venueSelect=el('select');
+    venueSelect.setAttribute('aria-label','Площадка');
+    venueSelect.add(new Option('Все площадки',''));
+    for(const venue of venues)venueSelect.add(new Option(venue,venue));
+    venueSelect.value=venueFilter;
+    venueLabel.append(venueSelect);
+    const colorField=el('fieldset','staff-color-filter');
+    const colorButtons=el('div','staff-color-options');
+    colorField.append(el('legend','','Цвет смены'),colorButtons);
+    const filterButtons=new Map();
+    const choices=[[null,'Все цвета'], ...[...colors].map(([color,names])=>[
+      color,color?[...names].sort((a,b)=>a.localeCompare(b,'ru')).join(', ')+' · '+color:'Без цвета'
+    ])];
+    for(const [color,label] of choices){
+      const button=el('button','staff-filter-chip',color===null?'Все':undefined);
+      button.type='button';
+      button.title=label;
+      button.setAttribute('aria-label',label);
+      button.setAttribute('aria-pressed',String(color===colorFilter));
+      if(color!==null)button.append(marker(color));
+      button.onclick=()=>{
+        colorFilter=color;
+        for(const [value,control] of filterButtons)control.setAttribute('aria-pressed',String(value===colorFilter));
+        drawRows();
+      };
+      filterButtons.set(color,button);
+      colorButtons.append(button);
+    }
+    venueSelect.onchange=()=>{venueFilter=venueSelect.value;drawRows();};
+    filters.append(venueLabel,colorField);
+    const tableContent=el('div','staff-table-content');
+    card.append(filters,tableContent);
+    content.append(card);
+
+    function drawRows(){
+      const people=new Map();
+      for(const shift of shifts){
+        if(venueFilter&&venueOf(shift)!==venueFilter)continue;
+        if(colorFilter!==null&&colorOf(shift)!==colorFilter)continue;
+        const key=JSON.stringify([shift.person,shift.department]);
+        if(!people.has(key))people.set(key,{name:shift.person,department:shift.department,days:new Map()});
+        const days=people.get(key).days;
+        if(!days.has(shift.work_date))days.set(shift.work_date,[]);
+        days.get(shift.work_date).push(shift);
+      }
       const staff=[...people.values()].sort((a,b)=>a.name.localeCompare(b.name,'ru')||a.department.localeCompare(b.department,'ru'));
-      const shifts=staff.flatMap(person=>[...person.days.values()].flat());
-      const header=el('summary','staff-venue-header');
-      header.append(marker(colorOf(shifts)),el('strong','staff-venue-title',venue),el('span','staff-venue-count',staff.length+' чел.'));
-      section.append(header);
+      const count=staff.length;
+      const noun=new Intl.PluralRules('ru').select(count)==='few'?'человека':'человек';
+      const total=el('p','staff-total',count+' '+noun);
+      total.setAttribute('role','status');
+      tableContent.replaceChildren(total);
+      if(!count){
+        tableContent.append(el('p','delivery-muted','Нет смен по выбранным фильтрам.'));
+        return;
+      }
+
+      const scroll=el('div','staff-scroll');
       const table=el('table','staff-grid');
-      table.setAttribute('aria-label','График площадки '+venue);
-      const thead=el('thead'),head=el('tr'),first=el('th','','Сотрудник');
-      first.scope='col';head.append(first);
+      table.setAttribute('aria-label','График сотрудников на неделю');
+      const thead=el('thead'),header=el('tr'),nameHeader=el('th','','Сотрудник');
+      nameHeader.scope='col';
+      header.append(nameHeader);
+      const days=calendar.map((_,i)=>offset(data.start,i));
       days.forEach((day,i)=>{
         const th=el('th',day===selected?'staff-today':'');
-        th.scope='col';th.title=formatDate(day);
-        th.append(el('span','',calendar[i]),el('small','',day.slice(8,10)));head.append(th);
+        th.scope='col';
+        th.title=formatDate(day);
+        th.append(el('span','',calendar[i]),el('small','',day.slice(8,10)));
+        header.append(th);
       });
-      thead.append(head);table.append(thead);
-      const grid=el('tbody'),detail=el('p','staff-selection');detail.setAttribute('aria-live','polite');
+      thead.append(header);
+      const grid=el('tbody'),detail=el('p','staff-selection');
+      detail.setAttribute('aria-live','polite');
       let active;
       for(const person of staff){
-        const tr=el('tr'),name=el('th','staff-name',person.name);
-        name.scope='row';name.title=person.name+' · '+person.department;tr.append(name);
+        const row=el('tr'),name=el('th','staff-name',person.name);
+        name.scope='row';
+        name.title=[person.name,person.department].filter(Boolean).join(' · ');
+        row.append(name);
         for(const day of days){
-          const td=el('td',day===selected?'staff-today':'');
-          const rows=person.days.get(day)||[];
-          if(rows.length){
+          const cell=el('td',day===selected?'staff-today':'');
+          const entries=person.days.get(day)||[];
+          if(entries.length){
             const slot=el('button','staff-slot');
-            slot.type='button';slot.setAttribute('aria-pressed','false');
-            const hasPhoto=rows.some(r=>r.status==='delivery');
-            slot.append(marker(colorOf(rows)));
-            if(hasPhoto)slot.append(el('span','staff-photo-flag','Ф'));
-            const notes=[...new Set(rows.map(r=>r.assignment).filter(Boolean))];
-            const description=person.name+' · '+formatDate(day)+' · '+venue+
-              (hasPhoto?' · фотоаппарат':'')+(notes.length?' · '+notes.join(', '):'');
-            slot.title=description;slot.setAttribute('aria-label',description);
+            slot.type='button';
+            slot.setAttribute('aria-pressed','false');
+            const marks=new Set(entries.map(colorOf));
+            for(const color of marks)slot.append(marker(color));
+            if(entries.some(entry=>entry.status==='delivery'))slot.append(el('span','staff-photo-flag','Ф'));
+            const descriptions=[...new Set(entries.map(entry=>[
+              venueOf(entry),entry.status==='delivery'?'Фотоаппарат':'',entry.assignment
+            ].filter(Boolean).join(' · ')))];
+            const description=[person.name,formatDate(day),...descriptions].join(' · ');
+            slot.title=description;
+            slot.setAttribute('aria-label',description);
             slot.onclick=()=>{
               active?.setAttribute('aria-pressed','false');
-              active=slot;slot.setAttribute('aria-pressed','true');
+              active=slot;
+              slot.setAttribute('aria-pressed','true');
               detail.textContent=description;
             };
-            td.append(slot);
-          }else td.append(el('span','staff-empty','—'));
-          tr.append(td);
+            cell.append(slot);
+          }else cell.append(el('span','staff-empty','—'));
+          row.append(cell);
         }
-        grid.append(tr);
+        grid.append(row);
       }
-      table.append(grid);
-      const scroll=el('div','staff-scroll');scroll.append(table);
-      section.append(scroll,detail);fragment.append(section);
+      table.append(thead,grid);
+      scroll.append(table);
+      tableContent.append(scroll,detail);
     }
-    content.append(fragment);
+
+    drawRows();
   }
+
   async function load(force=false){
     if(!panel.open||!permitted()||uploading)return;
-    const day=dateInput.value||localDate();
+    let day=dateInput.value||localDate();
     dateInput.value=day;
     if(!force&&loaded===day)return;
-    if(uploaded){
-      const daysFromMonday=(new Date(day+'T12:00:00Z').getUTCDay()+6)%7;
-      const start=offset(day,-daysFromMonday);
-      const end=offset(start,6);
-      draw({start,end,meta:uploaded,rows:uploaded.rows.filter(row=>row.work_date>=start&&row.work_date<=end)},day);
-      loaded=day;
-      return;
-    }
-    loaded='';
-    range.textContent='';
     const revision=++request;
-    content.replaceChildren(el('p','delivery-muted','Загружаем график…'));
+    if(!uploaded){
+      range.textContent='';
+      content.replaceChildren(el('p','delivery-muted','Загружаем график…'));
+    }
     try{
-      const result=await api('/api/delivery-schedule/week?date='+encodeURIComponent(day),{cache:'no-store'});
-      if(revision!==request||!panel.open||!permitted())return;
-      draw(result,day);
-      if(result.review_date)dateInput.value=result.review_date;
+      if(workbook){
+        if(!uploaded){
+          const data=await readWorkbook(workbook);
+          if(revision!==request||!panel.open||!permitted())return;
+          uploaded=data;
+          day=chooseDay(data,day);
+          dateInput.value=day;
+        }
+        const daysFromMonday=(new Date(day+'T12:00:00Z').getUTCDay()+6)%7;
+        const start=offset(day,-daysFromMonday),end=offset(start,6);
+        draw({start,end,meta:uploaded,rows:uploaded.rows.filter(row=>row.work_date>=start&&row.work_date<=end)},day);
+        datePreference('staff',day);
+      }else{
+        const data=await api('/api/delivery-schedule/week?date='+encodeURIComponent(day),{cache:'no-store'});
+        if(revision!==request||!panel.open||!permitted())return;
+        draw(data,data.review_date||day);
+        if(data.review_date)dateInput.value=data.review_date;
+      }
       loaded=dateInput.value;
     }catch(error){
       if(revision!==request||!panel.open||!permitted())return;
@@ -354,55 +581,40 @@ function installStaffSchedule(anchor,{el,localDate,offset,permitted}){
       content.replaceChildren(el('p','delivery-error','Не удалось загрузить график: '+error.message));
     }
   }
-  upload.onclick=()=>file.click();
-  file.onchange=async()=>{
-    const selected=file.files[0];
-    if(!selected||!permitted())return;
-    if(selected.size>8_000_000){
-      notice.textContent='Файл должен быть не больше 8 МБ.';
-      file.value='';
-      return;
-    }
-    const revision=++request;
-    const data=new FormData();
-    data.append('file',selected);
-    upload.disabled=uploading=true;
-    notice.textContent='Загружаем Excel…';
-    try{
-      const workbook=await api('/api/delivery-schedule/week-preview',{method:'POST',body:data});
-      if(revision!==request||!permitted())return;
-      uploaded=workbook;
-      const weeks=Object.entries(workbook.weeks).sort(([first],[second])=>first.localeCompare(second));
-      const today=localDate();
-      dateInput.value=weeks.some(([start,end])=>today>=start&&today<=end)
-        ? today : (weeks.filter(([start])=>start<=today).at(-1)||weeks[0])[0];
-      notice.textContent='График из загруженного файла';
-    }catch(error){
-      if(revision===request)notice.textContent=error.networkError?'Нет связи со складом. Повторите загрузку.':error.message;
-    }finally{
-      upload.disabled=uploading=false;
-      file.value='';
-      if(revision===request&&permitted())load(true);
-    }
-  };
+
   const step=days=>{dateInput.value=offset(dateInput.value||localDate(),days);load();};
   previous.onclick=()=>step(-7);
   next.onclick=()=>step(7);
   dateInput.onchange=()=>load();
   panel.addEventListener('toggle',()=>load());
-  return {
+  const controller={
     setAccess(show){
       panel.classList.toggle('hidden',!show);
-      if(!show){
-        panel.open=false;
-        content.replaceChildren();
-        loaded='';
-        uploaded=null;
-        notice.textContent='';
-        range.textContent='';
-        datePicker.classList.add('hidden');
-        ++request;
-      }
-    }
+      if(!show)panel.open=false;
+    },
+    setWorkbook(file,data){
+      ++request;
+      workbook=file;
+      uploaded=data;
+      loaded='';
+      venueFilter='';
+      colorFilter=null;
+      datePicker.classList.add('hidden');
+      range.textContent='';
+      content.replaceChildren();
+      filename.textContent=file?.name||'';
+      notice.textContent='';
+      dateInput.value=datePreference('staff')||localDate();
+      if(data)dateInput.value=chooseDay(data,dateInput.value);
+      if(panel.open)load();
+    },
+    setUploading(value){
+      uploading=value;
+      upload.disabled=value;
+      if(!uploading&&panel.open)load();
+    },
+    notifyUpload(message){notice.textContent=message;},
   };
+  upload.onclick=()=>chooseFile(controller);
+  return controller;
 }
