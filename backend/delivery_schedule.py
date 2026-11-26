@@ -438,13 +438,21 @@ def camera_availability(conn,people,*,preview=False):
         if held_camera_count(row)
     }
     held=defaultdict(int)
-    handed={r['checkout_id'] for r in conn.execute('SELECT checkout_id FROM checkout_handoffs')}
+    handed=set() if preview else {r['checkout_id'] for r in conn.execute('SELECT checkout_id FROM checkout_handoffs')}
     for row in active_checkout_rows(conn):
-        # A checkout for somebody else is not yet in their hands until "Отдал".
-        delivered=(row['user_id']==row['giver_id'] or not row['taken_for'] or row['id'] in handed)
-        if row['item_code'] in cameras and delivered:
-            index_name(row['user_id'],row['taken_for'] or row['full_name'])
-            held[row['user_id']]+=1
+        if row['item_code'] not in cameras:
+            continue
+        user_id=row['user_id']
+        recipient=plain(row['taken_for'])
+        if not preview and user_id!=row['giver_id'] and recipient and row['id'] not in handed:
+            continue
+        if preview and recipient and camera_name_key(recipient)!=camera_name_key(row['full_name']):
+            # Count the displayed recipient of a legacy checkout, even if its user ID belongs to the giver.
+            key=camera_name_key(recipient)
+            matches=by_name[key] if ' ' in key else by_surname[key]
+            user_id=next(iter(matches)) if len(matches)==1 else ('recipient',key)
+        index_name(user_id,recipient or row['full_name'])
+        held[user_id]+=1
 
     result={}
     for person in people:
