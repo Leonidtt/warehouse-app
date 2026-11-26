@@ -336,7 +336,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
-    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-buyout">
+    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-buyout-cards">
 <link rel="stylesheet" href="/beta_reference_design.css?v=1">
 <script src="/frame-stock.js?v=2" defer></script>
 </head>
@@ -867,7 +867,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             <span id="buyout-sheet-status" class="meta" role="status"></span>
             <button class="secondary compact" id="buyout-sheet-refresh" type="button" onclick="loadBuyoutSheet(true)">Обновить копию</button>
         </div>
-        <div class="buyout-sheet-grid hidden" id="buyout-sheet-grid" role="region" aria-label="Копия таблицы выкупа" tabindex="0"></div>
+        <ul class="buyout-sheet-list hidden" id="buyout-sheet-list" role="list" aria-label="Копия таблицы выкупа"></ul>
     </section>
     <div id="net-state" class="hidden">Нет интернета. Проверьте подключение.</div>
     <div class="bottom-nav hidden">
@@ -2704,31 +2704,77 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         }
 
         function renderBuyoutSheet(snapshot) {
-            const status=$('buyout-sheet-status'),grid=$('buyout-sheet-grid');
-            grid.replaceChildren();
-            grid.classList.toggle('hidden',!snapshot?.rows.length);
+            const status=$('buyout-sheet-status'),list=$('buyout-sheet-list');
+            list.replaceChildren();
+            list.classList.add('hidden');
             if(!snapshot){
                 status.textContent='Копия ещё не загружена';
                 return;
             }
-            const rows=snapshot.rows;
+
+            const [headers=[],...values]=snapshot.rows;
+            const records=values.filter(row=>row.some(value=>String(value??'').trim()));
             const imported=new Date(snapshot.synced_at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'});
-            status.textContent=rows.length?'Обновлено '+imported:'Лист пуст · '+imported;
-            if(!rows.length)return;
-            const columns=rows.reduce((width,row)=>Math.max(width,row.length),0);
-            const table=document.createElement('table');
-            table.setAttribute('aria-label',snapshot.title);
-            const header=table.createTHead(),body=table.createTBody();
-            rows.forEach((values,index)=>{
-                const row=(index===0?header:body).insertRow();
-                for(let column=0;column<columns;column++){
-                    const cell=document.createElement(index===0?'th':'td');
-                    if(index===0)cell.scope='col';
-                    cell.textContent=values[column]??'';
-                    row.append(cell);
+            status.textContent=records.length?'Обновлено '+imported:'Лист пуст · '+imported;
+            if(!records.length)return;
+
+            const width=records.reduce((count,row)=>Math.max(count,row.length),headers.length);
+            const columns=Array.from({length:width},(_,index)=>({
+                index,label:String(headers[index]??'').trim()
+            }));
+            const columnMatching=pattern=>columns.find(column=>pattern.test(column.label.normalize('NFKC').toLowerCase()));
+            const buyer=columnMatching(/^(?:фамилия|фио|ф\.?и\.?о\.?|покупатель|сотрудник)(?=$|[\s,/(])/u);
+            const amount=columnMatching(/^(?:сумма|стоимость|цена)(?=$|[\s,/(])/u);
+            const model=columnMatching(/^(?:модель|техника|оборудование)(?=$|[\s,/(])/u);
+            const budget=columnMatching(/^(?:бюджет|тх|кц)(?=$|[\s,/(])/u);
+            const details=columns.filter(column=>column!==buyer&&column!==amount);
+            const fragment=document.createDocumentFragment();
+            const textFor=(record,column)=>String(record[column.index]??'');
+            function field(record,column,kind='') {
+                const wrapper=document.createElement('div');
+                wrapper.className=kind?'buyout-card-field '+kind:'buyout-card-field';
+                const label=document.createElement('dt');
+                label.textContent=column.label||'Столбец '+(column.index+1);
+                const value=document.createElement('dd');
+                const text=textFor(record,column);
+                value.textContent=text.trim()?text:'—';
+                wrapper.append(label,value);
+                return wrapper;
+            }
+
+            for(const record of records){
+                const card=document.createElement('li');
+                card.className='buyout-sheet-card';
+                const heading=document.createElement('div');
+                heading.className='buyout-card-heading';
+                const name=buyer&&textFor(record,buyer);
+                if(name?.trim()){
+                    const title=document.createElement('h2');
+                    title.textContent=name;
+                    heading.append(title);
                 }
-            });
-            grid.append(table);
+                if(amount&&(amount.label||textFor(record,amount).trim())){
+                    const total=document.createElement('dl');
+                    total.className='buyout-card-amount';
+                    total.append(field(record,amount));
+                    heading.append(total);
+                }
+                if(heading.childElementCount)card.append(heading);
+
+                const fields=document.createElement('dl');
+                fields.className='buyout-card-details';
+                const shown=buyer&&!name?.trim()?[buyer,...details]:details;
+                for(const column of shown){
+                    if(!column.label&&!textFor(record,column).trim())continue;
+                    const kind=column===model?'buyout-field-model':column===budget?'buyout-field-budget':'';
+                    fields.append(field(record,column,kind));
+                }
+                if(fields.childElementCount)card.append(fields);
+                fragment.append(card);
+            }
+            list.setAttribute('aria-label',snapshot.title||'Копия таблицы выкупа');
+            list.append(fragment);
+            list.classList.remove('hidden');
         }
 
         async function loadBuyoutSheet(refresh=false) {
@@ -2741,7 +2787,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 const {snapshot}=await api('/api/beta/buyout-sheet'+suffix,refresh?{method:'POST'}:{});
                 if(currentUser?.role==='admin')renderBuyoutSheet(snapshot);
             }catch(error){
-                if($('buyout-sheet-grid').classList.contains('hidden'))status.textContent=error.message;
+                if($('buyout-sheet-list').classList.contains('hidden'))status.textContent=error.message;
                 else notify(error.message);
             }finally{
                 setLoading(button,false);

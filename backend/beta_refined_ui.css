@@ -435,20 +435,50 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
 }
 
 .buyout-sheet-toolbar{
-  display:flex;align-items:center;justify-content:space-between;
-  gap:10px;margin-block:12px;
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:8px 12px;margin-block:12px;
 }
-#buyout-sheet-refresh{min-height:44px;flex-shrink:0}
-.buyout-sheet-grid{
-  overflow-x:auto;max-width:100%;border:1px solid var(--border);
-  border-radius:14px;background:var(--card-bg);
+#buyout-sheet-status{min-width:0;overflow-wrap:anywhere}
+#buyout-sheet-refresh{min-height:44px;max-width:100%;white-space:normal;flex-shrink:0}
+.buyout-sheet-list{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr));
+  align-items:start;gap:12px;list-style:none;margin:0;padding:0;
 }
-.buyout-sheet-grid table{width:100%;border-collapse:collapse}
-.buyout-sheet-grid :is(td,th){
-  min-width:90px;padding:10px;text-align:left;vertical-align:top;
-  white-space:pre-wrap;overflow-wrap:anywhere;
-  border-bottom:1px solid var(--border);
+.buyout-sheet-card{
+  min-width:0;display:grid;gap:12px;padding:14px;color:var(--text);
+  background:var(--card-bg);border:1px solid var(--border);border-radius:16px;
 }
-.buyout-sheet-grid th{background:var(--bg);font-weight:650}
-.buyout-sheet-grid tr:last-child td{border-bottom:0}
-.buyout-sheet-grid :is(th,td)+:is(th,td){border-inline-start:1px solid var(--border)}
+.buyout-card-heading{
+  display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;
+  gap:8px 12px;
+}
+.buyout-card-heading h2{
+  flex:1 1 8rem;min-width:0;font-size:1.125rem;font-weight:700;line-height:1.25;
+  letter-spacing:-.02em;margin:0;overflow-wrap:anywhere;white-space:pre-wrap;
+}
+.buyout-card-amount,.buyout-card-details{
+  min-width:0;margin:0;
+}
+.buyout-card-amount{
+  max-width:100%;padding:7px 10px;border-radius:11px;
+  background:color-mix(in srgb,var(--primary) 8%,var(--card-bg));
+}
+.buyout-card-amount dd{
+  font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.buyout-card-details{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(4rem,.5fr);gap:10px 14px;
+}
+.buyout-card-heading + .buyout-card-details{
+  border-top:1px solid var(--border);padding-top:10px;
+}
+.buyout-card-field{min-width:0;overflow-wrap:anywhere}
+.buyout-card-details .buyout-card-field{grid-column:1/-1}
+.buyout-card-details :is(.buyout-field-model,.buyout-field-budget){grid-column:auto}
+.buyout-card-field dt{
+  color:var(--text-muted);font-size:.75rem;font-weight:550;line-height:1.35;
+}
+.buyout-card-field dd{
+  margin:3px 0 0;line-height:1.35;white-space:pre-wrap;
+}
+.buyout-field-budget dd{font-weight:650}
