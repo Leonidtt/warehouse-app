@@ -4,6 +4,9 @@
     if(!host||document.getElementById('frame-stock-button'))return;
     const launch=document.createElement('button');launch.id='frame-stock-button';launch.className='secondary';launch.textContent='Рамки';host.after(launch);launch.style.cssText='width:calc(100% - 32px);margin:8px 16px';
     launch.onclick=()=>{if(currentUser?.role==='admin')open()};
+    for(const [name,positions] of [['Винил',['vinyl']],['Фотобумага',['paper46','paper68']]]){
+      const button=launch.cloneNode(false);button.id='material-'+positions[0];button.textContent=name;launch.parentNode.insertBefore(button,launch.nextSibling);button.onclick=()=>{if(currentUser?.role==='admin')openMaterials(name,positions)};
+    }
   }
   const fmt=n=>n==null?'Не посчитано':Number(n).toLocaleString('ru-RU');
   const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}):'—';
@@ -42,6 +45,52 @@
       function update(){try{if(k==='minimum'||k==='unpack')return;const [a,c,d]=numbers();const n=a*500+c*50+d;hint.textContent='Всего: '+fmt(n)+' шт.'+(k==='inventory'&&r.total!=null?' · Расхождение: '+(n-r.total>0?'+':'')+fmt(n-r.total)+' шт.':'')}catch(e){hint.textContent=e.message}}
       for(const f of fields){f.min=0;f.step=1;f.addEventListener('input',update)}update();
       btn17(body,'Сохранить',async()=>{const n=numbers();const payload={position:r.id,kind:k,revision:r.revision,comment:comment?.value||'',destination:destination?.value.trim()||''};if(k==='transfer'&&!payload.destination)throw Error('Укажите площадку');if(k==='minimum')payload.minimum=n[0];else [payload.boxes,payload.packs,payload.loose]=[n[0],n[1],n[2]??0];if(k==='inventory'&&!confirm('Сохранить фактический остаток?'))return;try{await api('/api/frames',{method:'POST',body:JSON.stringify(payload)})}catch(e){if(e.status===409){modal.remove();await refresh()}throw e}modal.remove();showToast('Сохранено');await refresh()},'ok');
+    }
+    await refresh();
+  }
+  async function openMaterials(name,positions){
+    const {b}=overlay17(name);
+    const host=document.createElement('div');b.append(host);
+    const names={vinyl:'Винил',paper46:'4×6',paper68:'6×8'};
+    const ops={inventory:'Инвентаризация',receipt:'Поступление',transfer:'На площадку',issue:'Списание',unpack:'Распаковка',cut:'Нарезка',minimum:'Мин. остаток'};
+    const units=r=>r.position==='vinyl'?['Цельные коробки','Нарезанные коробки']:['Коробки (2 рулона)','Отдельные рулоны'];
+    const amount=r=>r.position==='vinyl'?r.boxes+r.loose:r.boxes*2+r.loose;
+    const describe=r=>units(r).map((u,i)=>u+': '+fmt(i?r.loose:r.boxes)).join('\n')+'\nВсего: '+fmt(amount(r))+(r.position==='vinyl'?' кор.':' рул.');
+    async function refresh(){
+      host.textContent='Загрузка…';
+      try{
+        const data=await api('/api/materials');host.replaceChildren();
+        for(const r of data.rows.filter(r=>positions.includes(r.position))){
+          const c=card17(host,names[r.position],r.counted_at?describe(r):'Не посчитано');
+          if(r.minimum!=null){const p=document.createElement('p');p.textContent='Минимум: '+fmt(r.minimum)+(r.counted_at&&amount(r)<r.minimum?' · Заканчивается':'');if(r.counted_at&&amount(r)<r.minimum)p.style.color='var(--danger)';c.append(p)}
+          for(const k of ['inventory','minimum',...(r.counted_at?['receipt','transfer','issue',r.position==='vinyl'?'cut':'unpack']:[])])btn17(c,ops[k],()=>edit(r,k));
+        }
+        const events=data.events.filter(e=>positions.includes(e.position));
+        card17(host,'Статистика','Выдача со склада, не продажи. По последним 500 операциям.');
+        for(const pos of positions){
+          const totals=[0,0,0];const now=new Date();const day=new Date(now.toLocaleDateString('en-CA',{timeZone:'Europe/Moscow'})+'T00:00:00+03:00');const week=new Date(day);week.setUTCDate(week.getUTCDate()-((new Date(day.getTime()+10800000).getUTCDay()+6)%7));const month=new Date(day);month.setUTCDate(month.getUTCDate()-(Number(now.toLocaleString('en-GB',{day:'numeric',timeZone:'Europe/Moscow'}))-1));
+          for(const e of events.filter(e=>e.position===pos&&['issue','transfer'].includes(e.kind))){[day,week,month].forEach((d,i)=>{if(new Date(e.created_at)>=d)totals[i]+=e.boxes*(pos==='vinyl'?1:2)+e.loose})}
+          card17(host,names[pos], 'День / неделя / месяц: '+totals.map(fmt).join(' / '));
+        }
+        card17(host,'История','Последние операции');
+        for(const e of events)card17(host,ops[e.kind]+' · '+names[e.position],date(e.created_at)+' · '+(e.destination||'')+'\n'+e.before_boxes+'/'+e.before_loose+' → '+e.after_boxes+'/'+e.after_loose+(e.comment?'\n'+e.comment:''));
+      }catch(e){host.textContent=e.message}
+    }
+    function edit(r,k){
+      const {o,b}=overlay17(ops[k]+' · '+names[r.position]);
+      const fields=[];
+      if(k==='minimum')fields.push(field17(b,'Минимум (пусто — отключить)',r.minimum??'','number'));
+      else for(const [i,u] of units(r).entries()){if(k==='unpack'&&i===1)break;fields.push(field17(b,k==='cut'?(i?'Получено нарезанных коробок':'Израсходовано цельных коробок'):u,k==='inventory'?(i?r.loose:r.boxes):0,'number'))}
+      const dest=k==='transfer'?field17(b,'Площадка','','text'):null;
+      const comment=field17(b,'Комментарий','','text');
+      for(const f of fields){f.min=0;f.step=1}
+      btn17(b,'Сохранить',async()=>{
+        const n=fields.map(f=>{if(k==='minimum'&&f.value==='')return null;const v=Number(f.value);if(f.value===''||!Number.isInteger(v)||v<0||v>1000000)throw Error('Введите целое неотрицательное число');return v});
+        const payload={position:r.position,kind:k,revision:r.revision,destination:dest?.value||'',comment:comment.value};
+        if(k==='minimum')payload.minimum=n[0];else {payload.boxes=n[0];payload.loose=n[1]||0}
+        if(k==='inventory'&&!confirm('Сохранить фактический остаток?'))return;
+        await api('/api/materials',{method:'POST',body:JSON.stringify(payload)});o.remove();showToast('Сохранено');await refresh();
+      },'ok');
     }
     await refresh();
   }
