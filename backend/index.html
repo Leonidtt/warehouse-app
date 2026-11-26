@@ -192,7 +192,7 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
     <link rel="stylesheet" href="/warehouse-v18.css?v=1904">
-    <script src="/warehouse-v18.js?v=20261126-apple2"></script>
+    <script src="/warehouse-v18.js?v=20261126-buyout"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=20261126-apple"></script>
     <link rel="stylesheet" href="/release-v183.css">
@@ -336,7 +336,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
-    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-apple">
+    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-buyout">
 <link rel="stylesheet" href="/beta_reference_design.css?v=1">
 <script src="/frame-stock.js?v=2" defer></script>
 </head>
@@ -858,12 +858,24 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
     <div id="screen-login" class="screen hidden"><div class="login-card card"><h1>Склад</h1><p>Открой склад в Telegram, нажми «Вход на сайт» на Главной и введи полученный код.</p><input id="web-code" autocomplete="one-time-code" placeholder="XXXX-XXXX-XXXX" maxlength="16"><button onclick="webLogin(this)">Войти</button><p class="meta">Код действует 5 минут и только один раз.</p></div></div>
     <div id="screen-extra" class="screen hidden"><div class="sticky-header"><button class="sticky-back" onclick="goBack()">← Назад</button><div id="extra-title" class="sticky-title"></div></div><div id="extra-content"></div></div>
+    <section id="screen-buyout-sheet" class="screen hidden">
+        <div class="sticky-header">
+            <button class="sticky-back" type="button" onclick="goBack()">Назад</button>
+            <div class="sticky-title">Выкуп</div>
+        </div>
+        <div class="buyout-sheet-toolbar">
+            <span id="buyout-sheet-status" class="meta" role="status"></span>
+            <button class="secondary compact" id="buyout-sheet-refresh" type="button" onclick="loadBuyoutSheet(true)">Обновить копию</button>
+        </div>
+        <div class="buyout-sheet-grid hidden" id="buyout-sheet-grid" role="region" aria-label="Копия таблицы выкупа" tabindex="0"></div>
+    </section>
     <div id="net-state" class="hidden">Нет интернета. Проверьте подключение.</div>
     <div class="bottom-nav hidden">
         <div class="nav-item active" id="nav-main" onclick="backToMain()"><span class="icon">📦</span><span>Главная</span></div>
         <div class="nav-item" id="nav-platforms" onclick="showPlatforms()"><span class="icon">📍</span><span>Площадки</span></div>
         <div class="nav-item" id="nav-th" onclick="showTH()"><span class="icon">🚢</span><span>Теплоходы</span></div>
         <div class="nav-item hidden" id="nav-rooms" onclick="showRooms()"><span class="icon">🏢</span><span>Склад</span></div>
+        <div class="nav-item v18-admin hidden" id="nav-buyout-sheet" onclick="showBuyoutSheet()"><span class="icon"></span><span>Выкуп</span></div>
         <div class="nav-item hidden" id="nav-settings" onclick="showSettings()"><span class="icon">⚙️</span><span>Настр.</span></div>
     </div>
 
@@ -954,7 +966,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         });
 
         function updateNavActive(id) {
-            ["nav-main", "nav-platforms", "nav-th", "nav-rooms", "nav-settings"].forEach(nav => {
+            ["nav-main", "nav-platforms", "nav-th", "nav-rooms", "nav-buyout-sheet", "nav-settings"].forEach(nav => {
                 const el = document.getElementById(nav);
                 if (el) el.classList.toggle("active", nav === id);
             });
@@ -2657,12 +2669,12 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             screenEpoch184++;
             $('item-open-status').textContent='';
             if(currentScreen==="screen-edit-item"&&id==="screen-item"&&navHistory.at(-1)==="screen-item")navHistory.pop();
-            else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
+            else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-buyout-sheet","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
             currentScreen = id;
             if(id!=="screen-room-view")$("batch-actions").style.display="none";
             updateTakeBatchUI();
 
-            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed", "screen-extra", "screen-login"].forEach(s => { 
+            ["screen-register", "screen-main", "screen-take", "screen-item", "screen-add", "screen-spot-qr", "screen-history", "screen-on-hand", "screen-rooms", "screen-room-view", "screen-users", "screen-buyout-sheet", "screen-settings", "screen-edit-item", "screen-batch-move", "screen-item-history", "screen-terminal", "screen-equipment", "screen-platforms", "screen-th", "screen-inventory", "screen-move-item", "screen-category-stats", "screen-category-detailed", "screen-extra", "screen-login"].forEach(s => { 
                 const el = document.getElementById(s); if (el) el.classList.toggle("hidden", s !== id); 
             }); 
             if (id === "screen-main") updateNavActive("nav-main");
@@ -2671,6 +2683,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             if (id === "screen-th") updateNavActive("nav-th");
             if (id === "screen-rooms") updateNavActive("nav-rooms");
             if (id === "screen-history") updateNavActive("nav-history");
+            if (id === "screen-buyout-sheet") updateNavActive("nav-buyout-sheet");
             if (id === "screen-settings") updateNavActive("nav-settings");
             window.scrollTo(0, id==="screen-main"?mainScroll184:0);
         }
@@ -2681,6 +2694,57 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 const remaining=[...navHistory];currentScreen=null; showScreen(prev);navHistory=remaining;
             } else {
                 backToMain();
+            }
+        }
+
+        function showBuyoutSheet() {
+            if(currentUser?.role!=='admin')return;
+            showScreen('screen-buyout-sheet');
+            loadBuyoutSheet();
+        }
+
+        function renderBuyoutSheet(snapshot) {
+            const status=$('buyout-sheet-status'),grid=$('buyout-sheet-grid');
+            grid.replaceChildren();
+            grid.classList.toggle('hidden',!snapshot?.rows.length);
+            if(!snapshot){
+                status.textContent='Копия ещё не загружена';
+                return;
+            }
+            const rows=snapshot.rows;
+            const imported=new Date(snapshot.synced_at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'});
+            status.textContent=rows.length?'Обновлено '+imported:'Лист пуст · '+imported;
+            if(!rows.length)return;
+            const columns=rows.reduce((width,row)=>Math.max(width,row.length),0);
+            const table=document.createElement('table');
+            table.setAttribute('aria-label',snapshot.title);
+            const header=table.createTHead(),body=table.createTBody();
+            rows.forEach((values,index)=>{
+                const row=(index===0?header:body).insertRow();
+                for(let column=0;column<columns;column++){
+                    const cell=document.createElement(index===0?'th':'td');
+                    if(index===0)cell.scope='col';
+                    cell.textContent=values[column]??'';
+                    row.append(cell);
+                }
+            });
+            grid.append(table);
+        }
+
+        async function loadBuyoutSheet(refresh=false) {
+            if(currentUser?.role!=='admin')return;
+            const button=$('buyout-sheet-refresh'),status=$('buyout-sheet-status');
+            if(button.disabled)return;
+            setLoading(button,true,refresh?'Обновляем…':'Загрузка…');
+            try{
+                const suffix=refresh?'/refresh':'';
+                const {snapshot}=await api('/api/beta/buyout-sheet'+suffix,refresh?{method:'POST'}:{});
+                if(currentUser?.role==='admin')renderBuyoutSheet(snapshot);
+            }catch(error){
+                if($('buyout-sheet-grid').classList.contains('hidden'))status.textContent=error.message;
+                else notify(error.message);
+            }finally{
+                setLoading(button,false);
             }
         }
 
@@ -3019,7 +3083,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
     refreshPreviews();
     new MutationObserver(refreshPreviews).observe(groupRoot,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','hidden','style']});
   }
-  const tabOrder=['screen-main','screen-platforms','screen-th','screen-rooms','screen-settings'];
+  const tabOrder=['screen-main','screen-platforms','screen-th','screen-rooms','screen-buyout-sheet','screen-settings'];
   const nav=document.querySelector('.bottom-nav');
   const capsule=document.createElement('span');capsule.className='beta-tab-capsule';capsule.setAttribute('aria-hidden','true');
   if(nav){

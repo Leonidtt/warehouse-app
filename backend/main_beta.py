@@ -32,6 +32,7 @@ import re
 from urllib.parse import urlsplit
 from contextlib import contextmanager
 from datetime import date
+from buyout_sheet import register_buyout_sheet
 from frame_stock import register_frames, register_materials
 from warehouse_v18 import label_font, label_dimensions, register_v18
 from release_v182 import label_image, prepare_migration, register_release
@@ -2078,6 +2079,8 @@ def repair_photo_download(repair_id:int,x_init_data:Optional[str]=Header(None)):
     if not row: raise HTTPException(404,'Фото отсутствует')
     return StreamingResponse(io.BytesIO(base64.b64decode(row[0])),media_type='image/jpeg')
 
+register_buyout_sheet(app, transaction, contextmanager_session, check_admin,
+                      os.environ.get("BETA_BUYOUT_SPREADSHEET_ID", "").strip())
 register_v18(app, get_user, check_admin, transaction, active_item, audit, web_digest, WEB_COOKIE, _checkout_one, get_history)
 register_frames(app, check_admin, transaction, audit)
 register_materials(app, check_admin, transaction, audit)

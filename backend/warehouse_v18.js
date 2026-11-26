@@ -15,7 +15,7 @@ function installV18(openRoleMenu){
   updateTheme();matchMedia('(prefers-color-scheme:dark)').addEventListener?.('change',updateTheme);
   const accentKey='warehouse_main_accent';function accent(v){document.documentElement.style.setProperty('--primary',v);try{localStorage.setItem(accentKey,v)}catch(e){}}
   try{const v=localStorage.getItem(accentKey);if(/^#[0-9a-f]{6}$/i.test(v||''))accent(v)}catch(e){}
-  const nav=$('nav-main').parentElement;const navNames=[['nav-main','home','Главная'],['nav-platforms','pin','Площадки'],['nav-th','ship','Теплоходы'],['nav-rooms','box','Склад'],['nav-settings','settings','Настройки']];
+  const nav=$('nav-main').parentElement;const navNames=[['nav-main','home','Главная'],['nav-platforms','pin','Площадки'],['nav-th','ship','Теплоходы'],['nav-rooms','box','Склад'],['nav-buyout-sheet','file','Выкуп'],['nav-settings','settings','Настройки']];
   for(const [id,k,label] of navNames){const n=$(id);n.querySelector('.icon').innerHTML=ico(k);n.lastElementChild.textContent=label;n.tabIndex=0;n.setAttribute('role','button');n.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();n.click()}}}
   const brand=document.createElement('div');brand.className='v18-desktop-only v18-laptop-title';brand.textContent='Склад';nav.prepend(brand);
   function navExtra(label,k,fn,admin=false){const el=document.createElement('div');el.className='nav-item v18-desktop-only'+(admin?' v18-admin hidden':'');el.innerHTML='<span class="icon">'+ico(k)+'</span><span>'+safe(label)+'</span>';el.tabIndex=0;el.setAttribute('role','button');el.onclick=()=>{fn()};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};nav.append(el);return el}
