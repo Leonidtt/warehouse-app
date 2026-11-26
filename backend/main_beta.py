@@ -2105,7 +2105,7 @@ register_185(app, check_owner, contextmanager_session, transaction, audit, MAIN_
 with transaction() as conn:
     init_delivery_schedule(conn)
     conn.execute("INSERT OR IGNORE INTO warehouse_release_meta(version) VALUES (?)", (DELIVERY_ROSTER_RELEASE,))
-register_delivery_schedule(app, get_user, transaction, audit)
+register_delivery_schedule(app, get_user, transaction, audit, contextmanager_session)
 with transaction() as conn:
     budget_migration = "beta-equipment-budgets-2026-11-20"
     if not conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?", (budget_migration,)).fetchone():

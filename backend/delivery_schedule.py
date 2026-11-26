@@ -13,7 +13,7 @@ import zipfile
 import zlib
 from datetime import date, datetime, timedelta
 from xml.etree import ElementTree as ET
-from fastapi import File, Header, HTTPException, Query, UploadFile
+from fastapi import File, Form, Header, HTTPException, Query, UploadFile
 from openpyxl.styles.colors import COLOR_INDEX
 from pydantic import BaseModel, Field
 from release_v184 import active_checkout_rows, held_camera_count
@@ -155,12 +155,12 @@ def guess_venue(assignment,names):
             return name
     return ''
 
-def venues_by_color(venues,fills,columns,name_col='A'):
+def venues_by_color(venues,fills,columns,name_col='A',*,preview=False):
     result={}
     for column in columns:
         choices=defaultdict(set)
         for row,name in venues.items():
-            for legend in (name_col,column):
+            for legend in ((name_col,) if preview else (name_col,column)):
                 color=fills.get(legend+str(row))
                 if color:
                     choices[color].add(name)
@@ -174,10 +174,11 @@ def classify(text,needs_camera,venue):
         return 'review'
     return 'delivery' if needs_camera else 'no_camera'
 
-def parse_xlsx_schedule(raw):
+def parse_xlsx_schedule(raw, *, preview=False, camera_day=None):
     if len(raw)>8_000_000 or not raw.startswith(b'PK'):
         raise ValueError('Нужен файл Excel .xlsx не больше 8 МБ')
     rows,coverage=[],set()
+    weeks={}
     count=0
     for sheet,cells,fills,epoch in sheets_from_xlsx(raw):
         count+=1
@@ -196,19 +197,35 @@ def parse_xlsx_schedule(raw):
         dates=[date.fromisoformat(days[col]) for col in sorted(days)]
         if any(dates[i]-dates[i-1]!=timedelta(days=1) for i in range(1,7)):
             continue
-        coverage.update(days.values())
+        if camera_day and camera_day not in days.values():
+            continue
         # The first two tabs have surnames and venue names in B, later tabs in A.
         name_col='B' if plain(cells.get('B4','')).upper()=='МОСКВА' else 'A'
         first_department=next((row for row in range(30,85)
             if plain(cells.get(name_col+str(row),'')).upper() in DEPARTMENTS),None)
         if first_department is None:
             continue
+        if preview and any(day in coverage for day in days.values()):
+            raise ValueError('Одна дата указана на нескольких листах. Оставьте один лист на неделю.')
+        coverage.update(days.values())
+        weeks[min(days.values())]=max(days.values())
         venues={row:cells.get(name_col+str(row),'') for row in range(4,first_department)}
         venues={row:name for row,name in venues.items() if name and name.upper() not in ('МОСКВА','ПИТЕР','НИЖНИЙ НОВГОРОД','ТЕСТ')}
-        colors=venues_by_color(venues,fills,days,name_col)
-        # The photo flag is the dedicated column AFTER the Sunday schedule,
-        # not B ("Ф" there means the foyer) nor a weekday assignment.
-        camera_col=chr(ord(max(days))+1)
+        if preview:
+            if plain(cells.get(name_col+'4')).upper()!='МОСКВА':
+                raise ValueError('В графике отсутствует раздел «Москва»')
+            other_city=next((row for row in range(5,first_department)
+                if plain(cells.get(name_col+str(row))).upper() in
+                ('ПИТЕР','САНКТ-ПЕТЕРБУРГ','СПБ','НИЖНИЙ НОВГОРОД')),first_department)
+            venues={row:name for row,name in venues.items() if row<other_city}
+            colors={col:venues_by_color(
+                {row:name for row,name in venues.items() if cells.get(col+str(row))},
+                fills,[col],name_col,preview=True)[col] for col in days}
+        else:
+            colors=venues_by_color(venues,fills,days,name_col)
+        # The current workbook's camera marker is immediately before Monday.
+        # Preserve the original import rules for saved schedules.
+        camera_col=chr(ord(min(days))-1) if preview else chr(ord(max(days))+1)
         department=''
         for row in range(first_department,350):
             person=cells.get(name_col+str(row),'')
@@ -219,24 +236,31 @@ def parse_xlsx_schedule(raw):
                 continue
             roster_photo=PHOTO.search(cells.get(camera_col+str(row),'')) is not None
             for col,day in days.items():
+                if camera_day and day!=camera_day:
+                    continue
                 address=col+str(row)
                 assignment=cells.get(address,'')
                 fill=fills.get(address,'')
                 colored_venue=colors[col].get(fill,'')
-                if assignment or colored_venue:
-                    venue=colored_venue or guess_venue(assignment,venues.values())
+                needs_camera=roster_photo or (preview and PHOTO.fullmatch(assignment) is not None)
+                if camera_day and not needs_camera:
+                    continue
+                if assignment or colored_venue or camera_day:
+                    venue=colored_venue if preview else colored_venue or guess_venue(assignment,venues.values())
                     rows.append({
                         'work_date':day,'person':person,'department':department,
                         'assignment':assignment,'venue':venue,
                         'venue_color':fill if colored_venue else '',
-                        'status':classify(assignment,roster_photo,venue),'sheet':sheet
+                        'status':classify(assignment,needs_camera,venue),'sheet':sheet
                     })
+    if camera_day and camera_day not in coverage:
+        raise ValueError('Дата не найдена в графике. Проверьте файл и выбранную дату.')
     if count<1 or len(coverage)<7 or len(rows)>12000:
         raise ValueError('Не удалось прочитать недельный график')
-    if not rows:
+    if not rows and not camera_day:
         raise ValueError('В файле нет назначений сотрудников')
     return {'rows':rows,'first_date':min(coverage),'last_date':max(coverage),
-            'format_version':VENUE_ROSTER_VERSION}
+            'format_version':VENUE_ROSTER_VERSION,'weeks':weeks}
 
 def save_schedule(conn,data,source):
     rows=data['rows']
@@ -389,21 +413,19 @@ def init_delivery_schedule(conn):
         freeze_review_snapshot(conn)
 
 
-def camera_availability(conn,people):
+def camera_name_key(value):
+    surname,separator,rest=plain(value).casefold().replace('ё','е').partition(' ')
+    surname=re.sub(r'(ов|ев|ин)ой$',r'\1а',surname)
+    surname=re.sub(r'(ск|цк)ой$',r'\1ая',surname)
+    return surname+separator+rest
+
+
+def camera_availability(conn,people,*,preview=False):
     if not people:
         return {}
-    def name_key(value):
-        return plain(value).casefold().replace('ё','е')
-
-    def nominative_name(key):
-        surname, separator, rest=key.partition(' ')
-        surname=re.sub(r'(ов|ев|ин)ой$',r'\1а',surname)
-        surname=re.sub(r'(ск|цк)ой$',r'\1ая',surname)
-        return surname+separator+rest
-
     by_name,by_surname=defaultdict(set),defaultdict(set)
     def index_name(user_id,name):
-        key=nominative_name(name_key(name))
+        key=camera_name_key(name)
         if key:
             by_name[key].add(user_id)
             by_surname[key.split(' ',1)[0]].add(user_id)
@@ -426,14 +448,75 @@ def camera_availability(conn,people):
 
     result={}
     for person in people:
-        key=nominative_name(name_key(person))
+        key=camera_name_key(person)
         matches=by_name[key] if ' ' in key else by_surname[key]
         parts=key.split()
         if not matches and len(parts)==2:
-            matches=by_name[nominative_name(' '.join(reversed(parts)))]
-        # A missing or ambiguous contact cannot confirm whether a camera is already on hand.
-        result[person]=held[next(iter(matches))] if len(matches)==1 else None
+            matches=by_name[camera_name_key(' '.join(reversed(parts)))]
+            initial=parts[1].rstrip('.')
+            if preview and len(initial)==1 and not matches:
+                prefix=parts[0]+' '+initial
+                matches={user_id for full,ids in by_name.items() if full.startswith(prefix) for user_id in ids}
+        if preview and not matches:
+            result[person]=0
+        else:
+            result[person]=held[next(iter(matches))] if len(matches)==1 else None
     return result
+
+
+def camera_preview_data(conn, day, rows):
+    by_person=defaultdict(list)
+    for row in rows:
+        by_person[camera_name_key(row['person'])].append(row)
+    assignments=[]
+    unmatched=[]
+    for matches in by_person.values():
+        active={row['venue']:row['person'] for row in matches if row['venue'] and row['status']!='excluded'}
+        if len(active)==1:
+            assignments.append(next(iter(active.items())))
+            continue
+        row=matches[0]
+        if active:
+            reason='В графике несколько площадок'
+        elif row['status']=='excluded':
+            reason=row['assignment']
+        else:
+            reason='Московская площадка не указана'
+            if row['assignment']:
+                reason+=' ('+row['assignment']+')'
+        unmatched.append({'name':row['person'],'reason':reason})
+
+    availability=camera_availability(conn,{name for _,name in assignments},preview=True)
+    shelf=[row for row in conn.execute("""SELECT i.code,i.name,i.category,i.kit_body,i.buyout_status
+        FROM items i WHERE i.kind='equipment' AND i.is_archived=0 AND i.needs_repair=0
+          AND trim(coalesce(i.buyout_status,''))<>'' AND EXISTS (
+            SELECT 1 FROM stock s WHERE s.item_code=i.code AND s.quantity>0)
+          AND NOT EXISTS (SELECT 1 FROM checkouts c WHERE c.item_code=i.code AND c.returned_at IS NULL)
+        """) if held_camera_count(row)]
+    groups=defaultdict(lambda:{'deliver':[],'held':[]})
+    for venue,name in assignments:
+        count=availability[name]
+        if count is None:
+            unmatched.append({'name':name,'reason':venue+' · несколько сотрудников с этой фамилией'})
+            continue
+        person={'name':name}
+        if count:
+            groups[venue]['held'].append(person)
+        else:
+            key=camera_name_key(name)
+            cameras=[row for row in shelf if (camera_name_key(row['buyout_status'])==key
+                or (' ' not in key and camera_name_key(row['buyout_status']).startswith(key+' ')))]
+            if len(cameras)==1:
+                camera=cameras[0]
+                person['suggested_camera']={'code':camera['code'],'model':camera['kit_body'] or camera['name']}
+            groups[venue]['deliver'].append(person)
+    venues=[dict(name=name,**group) for name,group in sorted(
+        groups.items(),key=lambda pair:(-len(pair[1]['deliver']),pair[0].casefold()))]
+    return {'date':day, 'venues':venues, 'unmatched':unmatched,
+        'deliver':sum(len(venue['deliver']) for venue in venues),
+        'held':sum(len(venue['held']) for venue in venues),
+        'delivery_venues':sum(bool(venue['deliver']) for venue in venues)}
+
 
 def delivery_data(conn,work_date):
     meta=conn.execute('SELECT * FROM delivery_schedule_meta WHERE id=1').fetchone()
@@ -479,7 +562,7 @@ def can_view_delivery_schedule(user):
     return bool(user.get('is_registered') and user.get('role') in roles and not user.get('preview_role'))
 
 
-def register_delivery_schedule(app,get_user,transaction,audit):
+def register_delivery_schedule(app,get_user,transaction,audit,session):
     def require_reader(init_data):
         if not can_view_delivery_schedule(get_user(init_data)):
             raise HTTPException(403,'Недоступно для этой роли')
@@ -541,18 +624,35 @@ def register_delivery_schedule(app,get_user,transaction,audit):
             audit(conn,user,'Уточнение плана площадки',day+' · '+venue)
         return {'status':'ok'}
 
-    @app.post('/api/delivery-schedule/upload')
-    def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
-        user=require_editor(x_init_data)
+    def read_upload(file, **options):
         if not file.filename or not file.filename.lower().endswith('.xlsx'):
             raise HTTPException(400,'Выберите файл .xlsx')
         raw=file.file.read(8000001)
         try:
-            data=parse_xlsx_schedule(raw)
+            return parse_xlsx_schedule(raw,**options)
         except ValueError as error:
             raise HTTPException(400,str(error)) from None
         except (zipfile.BadZipFile,ET.ParseError,KeyError,IndexError,OSError,RuntimeError,zlib.error):
             raise HTTPException(400,'Не удалось прочитать Excel') from None
+
+    @app.post('/api/delivery-schedule/camera-preview')
+    def camera_preview(day:date=Form(...),file:UploadFile=File(...),x_init_data:str=Header(None)):
+        require_reader(x_init_data)
+        work_date=day.isoformat()
+        upload=read_upload(file,preview=True,camera_day=work_date)
+        with session() as conn:
+            conn.execute('BEGIN')
+            return camera_preview_data(conn,work_date,upload['rows'])
+
+    @app.post('/api/delivery-schedule/week-preview')
+    def staff_preview(file:UploadFile=File(...),x_init_data:str=Header(None)):
+        require_reader(x_init_data)
+        return read_upload(file,preview=True)
+
+    @app.post('/api/delivery-schedule/upload')
+    def upload_delivery(file:UploadFile=File(...),x_init_data:str=Header(None)):
+        user=require_editor(x_init_data)
+        data=read_upload(file)
         with transaction() as conn:
             save_schedule(conn,data,'Загружен Excel: '+os.path.basename(file.filename)[:100])
             audit(conn,user,'Обновление графика доставок',str(len(data['rows']))+' записей')

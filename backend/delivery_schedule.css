@@ -245,3 +245,73 @@
 .staff-venue-group .staff-venue-header{border-left:3px solid transparent;padding-left:7px}
 .staff-venue-group .staff-color{border-color:color-mix(in srgb,var(--border) 70%,var(--text-muted))}
 .staff-photo-flag{display:inline-flex;align-items:center;justify-content:center;min-width:13px;height:16px;border-radius:4px;font-size:10px;background:color-mix(in srgb,var(--primary) 14%,var(--card-bg));color:var(--primary)}
+
+#screen-main .camera-schedule-entry {
+  min-height: 44px;
+  margin: 0 0 var(--warehouse-table-space);
+  border-radius: 14px;
+  text-align: left;
+  font-size: 13px;
+}
+.camera-schedule-dialog .field-row > h2 { font-size: clamp(16px, 4vw, 22px); }
+.camera-schedule-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.camera-schedule-form > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.camera-schedule-form input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+.camera-schedule-form button { grid-column: 1 / -1; margin: 0; min-height: 44px; }
+.camera-schedule-status { margin: 8px 0; font-size: 13px; color: var(--text-muted); }
+.camera-schedule-status:empty { display: none; }
+.camera-schedule-result:not(:empty) { margin-top: 16px; }
+.camera-schedule-result h3, .camera-schedule-result h4, .camera-schedule-result h5 { margin: 0; }
+.camera-schedule-result > p { margin: 4px 0 12px; }
+.camera-schedule-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.camera-schedule-stat {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--r185-control, var(--skeleton-bg));
+  font-size: 12px;
+}
+.camera-schedule-stat strong { font-size: 25px; font-variant-numeric: tabular-nums; line-height: 1; }
+.camera-schedule-delivery h5, .camera-schedule-stat.camera-schedule-delivery { color: var(--r185-red, #b84231); }
+.camera-schedule-held h5, .camera-schedule-stat.camera-schedule-held { color: var(--r185-green, #256354); }
+.camera-schedule-venues { display: grid; gap: 8px; margin-top: 10px; }
+.camera-schedule-venue, .camera-schedule-review { border: 1px solid var(--border); border-radius: 12px; padding: 11px; }
+.camera-schedule-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 7px; }
+.camera-schedule-columns ul, .camera-schedule-review ul {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.camera-schedule-review { margin-top: 8px; font-size: 13px; }
+.camera-schedule-review summary { cursor: pointer; }
+.camera-schedule-result > button { min-height: 44px; }
+
+#staff-schedule-panel .delivery-bar { flex-wrap: wrap; }
+#staff-schedule-panel .delivery-date-picker { flex: 0 0 178px; }
+#staff-schedule-panel .delivery-date { padding-inline: 3px; font-size: 13px; }
+#staff-schedule-panel .delivery-excel { min-height: 44px; white-space: nowrap; }
+.camera-schedule-form input[type=date] { padding-inline: 10px; }
+@media (max-width: 355px) {
+  .camera-schedule-form { grid-template-columns: minmax(0, 1fr); }
+}
