@@ -400,3 +400,11 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
 @media(prefers-reduced-motion:reduce){
   #take-items-list .r190-take-row,#room-items .r190-unified-card{transition:none!important}
 }
+
+#take-items-list .take-row.r190-take-row{grid-template-columns:28px minmax(0,1fr)!important;justify-items:stretch;}
+#take-items-list .r190-take-row>.r190-unified-card{width:100%!important;max-width:none!important;justify-self:stretch;justify-content:flex-start!important;}
+#take-items-list .r190-unified-card .r184-item-main{width:100%;justify-content:flex-start!important;}
+#take-items-list .r190-unified-card .r184-item-info{width:0;flex:1 1 0%;}
+#take-items-list .r190-unified-card .r1857-state.free{flex:0 0 auto;max-width:none;}
+#take-items-list .r190-unified-card .r1857-state.free .r1857-state-label{overflow:visible;text-overflow:clip;}
+#take-items-list .r190-take-row>.take-checkbox{appearance:auto!important;-webkit-appearance:checkbox!important;}
