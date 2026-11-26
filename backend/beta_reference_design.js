@@ -155,7 +155,34 @@ function installBetaReferenceDesign(){
     for(const element of [actions,low,roomTitle,roomList])if(element)rooms.append(element);
     const root=make('section','r191-stock-main');
     root.id='r191-stock-catalog';
-    root.append(search,categories,counters,toolbar,filterBox,rows,rooms);
+    const sections=make('div','r191-stock-sections');
+    sections.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0';
+    const catalog=make('div','hidden');
+    catalog.append(search,categories,counters,toolbar,filterBox,rows);
+    rooms.open=true;
+    rooms.style.display='none';
+    const sectionDefs=[['Склад 11','consumable'],['Офис 7','accessory'],['Техника','camera'],['Рамки','accessory'],['Винил','consumable'],['Фотобумага','printer']];
+    for(const [name,kind] of sectionDefs){
+      const button=make('button','r191-category');
+      button.type='button';button.style.cssText='min-height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px';
+      button.append(svg(pict[kind]),make('span','',name));
+      button.onclick=async()=>{
+        if(currentUser?.role!=='admin')return;
+        const special={'Рамки':'frame-stock-button','Винил':'material-vinyl','Фотобумага':'material-paper46'}[name];
+        if(special){const target=byId(special);if(target)target.click();else showToast('Раздел ещё загружается');return;}
+        try{
+          const locations=await api('/api/locations_view');
+          const norm=v=>String(v).toLowerCase().replace(/[^а-яё0-9]/g,'');
+          const room=locations.find(r=>norm(r.name)===norm(name));
+          if(!room){showToast('Помещение не найдено');return;}
+          openRoom(room.id,room.name);
+        }catch(e){showToast(e.message)}
+      };
+      sections.append(button);
+    }
+    const other=make('button','secondary','Другие помещения и инструменты');
+    other.type='button';other.onclick=()=>{rooms.style.display=rooms.style.display==='none'?'':'none'};
+    root.append(sections,other,catalog,rooms);
     header.after(root);
     for(const [key,label]of options){
       const button=make('button','r191-category');
