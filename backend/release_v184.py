@@ -33,7 +33,7 @@ def component_present(value):
 def held_camera_count(row):
     category = str(row['category'] or '').strip().casefold()
     name = str(row['name'] or '').strip().casefold()
-    return int(component_present(row['kit_body']) or category in ('фотоаппараты','камеры')
+    return int(component_present(row['kit_body']) or category in ('фотоаппараты','фотокомплекты','камеры')
                or re.match(r'^(фотоаппарат|камера)(?:\s|$)',name) is not None)
 
 
@@ -44,11 +44,18 @@ def active_checkout_rows(conn):
         WHERE c.returned_at IS NULL""")
 
 
+def held_laptop_count(row):
+    category = str(row['category'] or '').strip().casefold()
+    name = str(row['name'] or '').strip().casefold()
+    return int(bool(re.search(r'ноутбук|л[эе]птоп|макбук|macbook|laptop', category)
+                    or re.match(r'^(ноутбук|л[эе]птоп|макбук|macbook|apple macbook|thinkpad|lenovo thinkpad|dell latitude)(?:\s|$)', name)))
+
+
 def component_counts(row):
     body, flash = int(component_present(row['kit_body'])), int(component_present(row['kit_flash']))
     cat = str(row['category'] or '').strip().casefold()
     name = str(row['name'] or '').strip().casefold()
-    if not body and (cat in ('фотоаппараты','камеры') or re.match(r'^(фотоаппарат|камера)\b',name)):
+    if not body and (cat in ('фотоаппараты','фотокомплекты','камеры') or re.match(r'^(фотоаппарат|камера)\b',name)):
         body = 1
     if not flash and (cat in ('вспышки','фотовспышки') or re.match(r'^(вспышка|фотовспышка)\b',name)):
         flash = 1
@@ -153,21 +160,24 @@ def register_184(app, get_user, real_user, session, transaction, digest, list_it
             raise HTTPException(403,'Сводка доступна руководителю')
         # In office = all physical storage rooms; checkout quantities are separate.
         rows=list_items(x_init_data)
-        office={'cameras':0,'flashes':0,'standalone_flashes':0}; held={'cameras':0,'flashes':0,'standalone_flashes':0}; people={}; rooms={}
+        office={'cameras':0,'flashes':0,'standalone_flashes':0}; held={'cameras':0,'flashes':0,'standalone_flashes':0,'laptops':0}; people={}; rooms={}
         for row in rows:
             if row['kind']!='equipment':continue
             cam,flash=component_counts(row)
-            if not cam and not flash:continue
-            for s in row['stocks']:
+            laptop=held_laptop_count(row)
+            if laptop:cam,flash=0,0
+            if not (cam or flash or laptop):continue
+            for s in row['stocks'] if cam or flash else ():
                 q=s['quantity']; office['cameras']+=cam*q;office['flashes']+=flash*q;office['standalone_flashes']+=(flash if not cam else 0)*q
                 r=rooms.setdefault(s['location_id'],{'name':s['location_name'],'cameras':0,'flashes':0});r['cameras']+=cam*q;r['flashes']+=flash*q
             for h in row['holders']:
+                held['laptops']+=laptop
                 held['cameras']+=cam;held['flashes']+=flash;held['standalone_flashes']+=flash if not cam else 0
                 name=h.get('taken_for') or h.get('full_name') or 'Не указан'
                 key=(h['user_id'],name)
                 p=people.setdefault(key,{'name':name,'cameras':0,'flashes':0,'items':[]})
                 p['person_id']=h['user_id']; p['cameras']+=cam; p['flashes']+=flash
-                p['items'].append({'code':row['code'],'name':row['name'],'camera':row['kit_body'],'flash':row['kit_flash'],'lens':row.get('kit_lens',''),'camera_count':cam,'flash_count':flash,'buyout_status':row.get('buyout_status',''),'taken_at':h.get('taken_at','')})
+                p['items'].append({'code':row['code'],'name':row['name'],'camera':row['kit_body'],'flash':row['kit_flash'],'lens':row.get('kit_lens',''),'camera_count':cam,'flash_count':flash,'laptop_count':laptop,'buyout_status':row.get('buyout_status',''),'taken_at':h.get('taken_at','')})
         return {'office':office,'held':held,'people':sorted(people.values(),key=lambda p:p['name'].casefold()),'rooms':sorted(rooms.values(),key=lambda r:r['name'].casefold()),'buyouts':boss_buyouts(rows)}
 
     @app.get('/api/v1855/boss/rentals')

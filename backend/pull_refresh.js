@@ -4,6 +4,7 @@
   const PULL_SCREENS=new Set(['screen-main','screen-take','screen-platforms','screen-th','screen-rooms','screen-settings']);
   const NO_BACK_SCREENS=new Set(['screen-main','screen-login','screen-register','screen-edit-item','screen-add','screen-move-item','screen-batch-move']);
   const EDGE=34, AXIS_START=12, PULL_TRIGGER=48, BACK_TRIGGER=82;
+  const BACK_PROJECTION_MS=99;
   const pullOffset=delta=>72*(1-Math.exp(-Math.max(0,delta-AXIS_START)/69));
 
   function install(){
@@ -43,41 +44,89 @@
     const blocked=()=>!!document.querySelector('.modal-overlay:not(.hidden):not([inert]),dialog[open]');
     const editing=target=>!!target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"],.bottom-nav,.floating-bar,.modal-content');
     const pageTop=()=>window.scrollY<3;
-    const resetTimers=new WeakMap();
+    const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+    const settling=new Map();
 
     function ring(anchor,distance){
       indicator.style.opacity=String(Math.min(1,distance/24));
-      indicator.style.transform='translate3d(-50%,'+(anchor+distance*.48)+'px,0)';
-      wheel.style.transform='rotate('+distance*3+'deg)';
+      const offset=reducedMotion.matches?28:distance*.48;
+      indicator.style.transform='translate3d(-50%,'+(anchor+offset)+'px,0)';
+      wheel.style.transform=reducedMotion.matches?'none':'rotate('+distance*3+'deg)';
     }
     function hideRing(anchor){
       indicator.classList.add('settling');
       indicator.classList.remove('loading');
       ring(anchor,0);
     }
-    function translateBack(root,amount){
-      clearTimeout(resetTimers.get(root));
-      root.style.transition='none';
-      root.style.transform='translate3d('+amount+'px,0,0)';
+    function stopReturn(root){
+      const frame=settling.get(root);
+      if(frame!==undefined)cancelAnimationFrame(frame);
+      settling.delete(root);
     }
-    function springBack(root){
-      clearTimeout(resetTimers.get(root));
-      root.style.transition='transform 270ms cubic-bezier(.2,.8,.2,1)';
-      root.style.transform='translate3d(0,0,0)';
-      resetTimers.set(root,setTimeout(()=>{
-        root.style.removeProperty('transition');
-        root.style.removeProperty('transform');
-      },285));
+    function clearDrag(root){
+      stopReturn(root);
+      root.style.removeProperty('transform');
     }
+    function readOffset(root){
+      const value=getComputedStyle(root).transform;
+      return value==='none'?0:new DOMMatrixReadOnly(value).m41;
+    }
+    function renderOffset(root,offset){
+      root.style.transform='translate3d('+offset+'px,0,0)';
+    }
+    function backOffset(g){
+      const drag=Math.max(0,g.amount-AXIS_START);
+      const resistance=Math.max(100,innerWidth*.6);
+      const travel=drag<=BACK_TRIGGER?drag:
+        BACK_TRIGGER+resistance*(drag-BACK_TRIGGER)/(resistance+drag-BACK_TRIGGER);
+      return g.startOffset+(g.side==='left'?1:-1)*travel;
+    }
+    function trackBack(g,time,inward){
+      g.samples.push({time,inward});
+      while(g.samples.length>1&&time-g.samples[0].time>110)g.samples.shift();
+    }
+    function backVelocity(g,releaseTime=g.samples.at(-1).time){
+      const end=g.samples.at(-1),previous=g.samples.at(-2);
+      if(!previous||releaseTime-end.time>=120)return 0;
+      // Use motion samples, decaying after a pause. A stationary touchend is not a move.
+      const start=end.inward<previous.inward ? previous : g.samples[0];
+      const duration=end.time-start.time;
+      const decay=1-Math.max(0,releaseTime-end.time-50)/70;
+      return duration>0?Math.max(-2,Math.min(2,(end.inward-start.inward)/duration))*decay:0;
+    }
+    function projectedBack(g,velocity=backVelocity(g)){
+      return g.amount>=32&&g.amount+velocity*BACK_PROJECTION_MS>=BACK_TRIGGER;
+    }
+    function returnToRest(g,velocity=0){
+      if(reducedMotion.matches){clearDrag(g.root);return}
+      const root=g.root;
+      const offset=readOffset(root);
+      const initialVelocity=velocity*(g.side==='left'?1:-1)*1000;
+      const start=performance.now(), damping=20;
+      stopReturn(root);
+      function frame(now){
+        const dt=Math.max(0,(now-start)/1000);
+        const position=(offset+(initialVelocity+damping*offset)*dt)*Math.exp(-damping*dt);
+        if(dt>.45||(dt>.1&&Math.abs(position)<.5)){clearDrag(root);return}
+        renderOffset(root,position);
+        settling.set(root,requestAnimationFrame(frame));
+      }
+      settling.set(root,requestAnimationFrame(frame));
+    }
+    reducedMotion.addEventListener?.('change',()=>{
+      if(!reducedMotion.matches)return;
+      for(const root of settling.keys())clearDrag(root);
+      if(gesture?.axis==='x')clearDrag(gesture.root);
+    });
     function paint(){
       frame=0;
       if(!gesture)return;
-      const {axis,amount,root,side,anchor}=gesture;
+      const {axis,amount,root,anchor}=gesture;
       if(axis==='y')ring(anchor,amount);
-      if(axis==='x')translateBack(root,(side==='left'?1:-1)*Math.min(52,amount*.32));
+      if(axis==='x'&&!reducedMotion.matches)renderOffset(root,backOffset(gesture));
     }
     function finishGesture(){
-      if(frame){cancelAnimationFrame(frame);frame=0}
+      if(frame){cancelAnimationFrame(frame);paint()}
       const finished=gesture;
       gesture=null;
       backHint.classList.remove('visible','left','right');
@@ -85,11 +134,12 @@
     }
     function cancelGesture(){
       const finished=finishGesture();
-      if(finished?.axis==='x')springBack(finished.root);
+      if(finished?.axis==='x')returnToRest(finished);
       if(finished?.axis==='y')hideRing(finished.anchor);
     }
-    function readyFeedback(g,threshold){
-      if(g.amount<threshold||g.ready)return;
+    function readyFeedback(g,ready){
+      if(!ready){g.ready=false;return}
+      if(g.ready)return;
       g.ready=true;
       try{tg?.HapticFeedback?.impactOccurred('light')}catch(error){}
     }
@@ -143,7 +193,7 @@
       if(!backAllowed&&!pullAllowed)return;
       const header=root.querySelector('.sticky-header');
       const anchor=pullAllowed?Math.max(54,Math.round(header?.getBoundingClientRect().bottom||0)+8):0;
-      gesture={root,screenId,x:touch.clientX,y:touch.clientY,axis:null,side,pullAllowed,backAllowed,anchor,amount:0};
+      gesture={root,screenId,x:touch.clientX,y:touch.clientY,axis:null,side,pullAllowed,backAllowed,anchor,amount:0,samples:[{time:event.timeStamp,inward:0}],startOffset:0};
     },{passive:true});
     document.addEventListener('touchmove',event=>{
       const g=gesture;
@@ -154,6 +204,8 @@
       if(!g.axis){
         if(g.backAllowed&&inward>AXIS_START&&Math.abs(dx)>Math.abs(dy)*1.35){
           g.axis='x';
+          g.startOffset=reducedMotion.matches?0:readOffset(g.root);
+          stopReturn(g.root);
           backHint.classList.add('visible',g.side);
         }else if(g.pullAllowed&&dy>AXIS_START&&dy>Math.abs(dx)*1.3&&pageTop()){
           g.axis='y';
@@ -164,16 +216,25 @@
         }
       }
       if(event.cancelable)event.preventDefault();
-      g.amount=g.axis==='y'?pullOffset(dy):Math.max(0,inward);
-      readyFeedback(g,g.axis==='y'?PULL_TRIGGER:BACK_TRIGGER);
+      g.amount=g.axis==='y'?pullOffset(dy):inward;
+      if(g.axis==='x')trackBack(g,event.timeStamp,inward);
+      readyFeedback(g,g.axis==='y'?g.amount>=PULL_TRIGGER:projectedBack(g));
       if(!frame)frame=requestAnimationFrame(paint);
     },{passive:false});
     document.addEventListener('touchend',event=>{
       if(event.touches.length){cancelGesture();return}
       const g=finishGesture();
       if(g?.axis==='x'){
-        springBack(g.root);
-        if(g.amount>=BACK_TRIGGER)goBack();
+        const x=event.changedTouches[0]?.clientX;
+        if(Number.isFinite(x))g.amount=g.side==='left'?x-g.x:g.x-x;
+        if(g.amount!==g.samples.at(-1).inward)trackBack(g,event.timeStamp,g.amount);
+        const velocity=backVelocity(g,event.timeStamp);
+        if(projectedBack(g,velocity)){
+          clearDrag(g.root);
+          goBack();
+        }else{
+          returnToRest(g,velocity);
+        }
       }else if(g?.axis==='y'){
         if(g.amount>=PULL_TRIGGER)refresh(g);
         else hideRing(g.anchor);

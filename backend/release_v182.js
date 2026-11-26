@@ -1,4 +1,6 @@
 /* v18.2: presentation layer. Existing operations and permissions remain server-side. */
+const cameraCategory182 = '__all_cameras__';
+const isCameraCategory182 = category => ['фотокомплекты','фотоаппараты'].includes(String(category ?? '').trim().toLowerCase());
 const money182 = n => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:2}).format(Number(n)||0)+' ₽';
 async function sendOwnerBackup182(){
   if(!currentUser?.is_owner)throw Error('Доступ только владельцу');
@@ -15,10 +17,24 @@ function installRelease182(){
   const main=$('screen-main'),quick=main.querySelector('.v18-quick');
   quick.prepend(quick.querySelector('.take-btn'));quick.before($('dashboard-v17'));quick.querySelector('.qr-btn-main').lastChild.textContent=' Сканировать QR';
   quick.before($('daily-report-box'));
-  const addNoCategory=()=>{if(![...$('filter-category').options].some(o=>o.value==='__without_category__'))$('filter-category').add(new Option('Без категории','__without_category__'))};const oldCategories=loadCategories17;loadCategories17=async()=>{await oldCategories();addNoCategory()};addNoCategory();
+  const addOverviewFilters=()=>{
+    const select=$('filter-category');
+    for(const [label,value] of [['Без категории','__without_category__'],['Все фотоаппараты',cameraCategory182]]){
+      if(![...select.options].some(option=>option.value===value))select.add(new Option(label,value));
+    }
+  };
+  const oldCategories=loadCategories17;
+  loadCategories17=async()=>{
+    const select=$('filter-category'),current=select.value;
+    await oldCategories();
+    addOverviewFilters();
+    if([cameraCategory182,'__without_category__'].includes(current))select.value=current;
+  };
+  addOverviewFilters();
   const filter=$('filter-status');filter.add(new Option('На складе','stock182'));filter.add(new Option('В работе','work182'));
   const prevMatches=matchesStatus17;matchesStatus17=(i,s)=>s==='stock182'?i.kind==='equipment'&&!i.needs_repair&&i.total>0:s==='work182'?i.kind==='equipment'&&!i.needs_repair&&i.holders.length>0:prevMatches(i,s);
   function filterTo(category,status=''){
+    window.dispatchEvent(new Event('warehouse-reset-catalog-filters'));
     const select=$('filter-category');
     if(![...select.options].some(option=>option.value===category))select.add(new Option(category,category));
     select.value=category;
@@ -28,7 +44,7 @@ function installRelease182(){
     $('filter-location').value='';
     $('search-input').value='';
     filterItems();
-    $('items-list').scrollIntoView({block:'start',behavior:'smooth'});
+    $('items-list').scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   }
   const historyType=el('select');historyType.id='history-type182';[['','Все действия'],['checkout','Выдача'],['return','Возврат'],['writeoff','Списание'],['move','Перемещение']].forEach(([v,t])=>historyType.add(new Option(t,v)));$('history-date').after(historyType);historyType.onchange=()=>renderHistory17();
   async function openDailyHistory(date,key){$('history-query').value='';$('history-date').value=date;historyType.value={taken:'checkout',returned:'return',written_off:'writeoff'}[key]||'';await showHistory()}
@@ -36,7 +52,7 @@ function installRelease182(){
   const countNum=v=>new Intl.NumberFormat('ru-RU').format(Number(v)||0);
   function categoryWidget(category,label,counts={}){
     const widget=el('section','r182-summary-main');
-    widget.dataset.gear=category==='Фотокомплекты'?'camera':category==='Вспышки'?'flash':category==='Ноутбуки'?'laptop':'printer';
+    widget.dataset.gear=category===cameraCategory182?'camera':category==='Вспышки'?'flash':category==='Ноутбуки'?'laptop':'printer';
     widget.setAttribute('aria-label',label);
     const content=el('div','r182-featured-card');
     widget.append(el('h2','r182-featured-title',label),content);
@@ -65,11 +81,15 @@ function installRelease182(){
     const {categories,booked,daily:d,low:short,consumables=0}=data;
     booked17=new Set(booked);
     const byName=new Map(categories.map(category=>[category.name,category]));
+    const cameras={total:0,stock:0,working:0,repair:0};
+    for(const category of categories.filter(row=>isCameraCategory182(row.name))){
+      for(const key of Object.keys(cameras))cameras[key]+=Number(category[key])||0;
+    }
     // Preserve the open/closed state when overview data refreshes.
     const expanded=dashboard.querySelector('details.r188-disclosure')?.open??false;
     const primary=el('div','r182-summary r182-featured r188-top');
     primary.append(
-      categoryWidget('Фотокомплекты','Фотоаппараты',byName.get('Фотокомплекты')),
+      categoryWidget(cameraCategory182,'Фотоаппараты',cameras),
       categoryWidget('Вспышки','Вспышки',byName.get('Вспышки')),
     );
     const detail=el('details','r182-disclosure r188-disclosure');

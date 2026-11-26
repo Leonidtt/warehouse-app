@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Склад Бета">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="/pull-refresh.js?v=4" defer></script>
+    <script src="/pull-refresh.js?v=20261126-apple" defer></script>
     <style>
         :root {
             --bg: #f5f5f7; --card-bg: #ffffff; --text: #1d1d1f; --text-muted: #86868b;
@@ -192,13 +192,13 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
     <link rel="stylesheet" href="/warehouse-v18.css?v=1904">
-    <script src="/warehouse-v18.js?v=1904"></script>
+    <script src="/warehouse-v18.js?v=20261126-apple"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
-    <script src="/release-v182.js?v=1899"></script>
+    <script src="/release-v182.js?v=20261126-apple"></script>
     <link rel="stylesheet" href="/release-v183.css">
     <script src="/release-v183.js?v=1874"></script>
-    <link rel="stylesheet" href="/release-v184.css?v=1899">
-    <script src="/release-v184.js?v=1904"></script>
+    <link rel="stylesheet" href="/release-v184.css?v=20261126-apple">
+    <script src="/release-v184.js?v=20261126-apple"></script>
     <link rel="stylesheet" href="/release-v185.css?v=1873">
     <script src="/release-v185.js?v=1902"></script>
     <link rel="stylesheet" href="/delivery_schedule.css?v=9">
@@ -336,12 +336,13 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
-    <link rel="stylesheet" href="/beta_refined_ui.css?v=7">
+    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-apple">
 <link rel="stylesheet" href="/beta_reference_design.css?v=1">
 <script src="/frame-stock.js?v=1" defer></script>
 </head>
 <body>
 
+    <div id="item-open-status" class="beta-request-status" role="status" aria-atomic="true"></div>
     <div id="toast-container"></div>
     <div id="scroll-top-btn" onclick="window.scrollTo({top:0, behavior:'smooth'})">↑</div>
 
@@ -419,6 +420,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 <button type="button" class="secondary" onclick="openBatchTakeFor()">Взять для</button>
                 <button type="button" onclick="executeBatchTake()">Взять себе</button>
             </div>
+            <span id="batch-take-status" class="beta-batch-status" role="status"></span>
             <div class="take-batch-footer">
                 <span aria-live="polite">Выбрано <strong id="take-selected-count">0</strong></span>
                 <button type="button" class="secondary take-clear" onclick="deselectAllTakeItems()">Сбросить выбор</button>
@@ -442,6 +444,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             <div class="sticky-title" id="user-info" onclick="editMyName()" style="cursor:pointer;">Учёт</div>
             <div style="width: 80px;"></div>
         </div>
+
+        <button type="button" class="secondary beta-catalog-jump" onclick="focusCatalogSearch()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>
+            Поиск по складу
+        </button>
 
         <button class="qr-btn-main" onclick="scanQr()">
             <span style="font-size: 24px;">📷</span> Сканировать QR-код
@@ -483,7 +490,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
         <div class="search-wrapper" id="main-search-wrapper">
             <span class="search-icon">🔍</span>
-            <input type="text" id="search-input" placeholder="Поиск по названию, коду..." oninput="handleSearchInput(this, 'main-search-wrapper')">
+            <input type="text" id="search-input" aria-label="Поиск по складу" placeholder="Поиск по названию, коду..." oninput="handleSearchInput(this, 'main-search-wrapper')">
             <span class="search-clear" onclick="clearSearch('search-input', 'main-search-wrapper')">✕</span>
         </div>
         
@@ -1481,6 +1488,14 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             }).join(""); 
         }
 
+        function focusCatalogSearch() {
+            window.dispatchEvent(new Event('warehouse-reset-catalog-filters'));
+            filterItems();
+            const input=$('search-input');
+            input.focus({preventScroll:true});
+            $('main-search-wrapper').scrollIntoView({block:'start',behavior:'instant'});
+        }
+
         function filterItems() { 
             const query = document.getElementById("search-input").value.toLowerCase(); 
             const filterLoc = parseInt(document.getElementById("filter-location").value) || 0;
@@ -1600,6 +1615,8 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             const count = $("take-selected-count");
             const total = String(selectedTakeItems.length);
             if (count.textContent !== total) count.textContent = total;
+            const batchStatus=$('batch-take-status');
+            if(batchStatus.textContent!==(batchTakePending?'Выдаём…':''))batchStatus.textContent=batchTakePending?'Выдаём…':'';
             bar.querySelectorAll("button").forEach(button => { button.disabled = batchTakePending; });
         }
 
@@ -1882,6 +1899,8 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 
         async function openItem(code) {
             const requestId=++itemRequest184, epoch=screenEpoch184;
+            const status=$('item-open-status');
+            status.textContent='Открываем карточку…';
             try {
                 const data=await api(`/api/items/${encodeURIComponent(code)}`);
                 if(requestId!==itemRequest184||epoch!==screenEpoch184)return;
@@ -1974,7 +1993,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 renderActions(); loadRepairs17(currentItem.code);
                 loadComments(currentItem.code); 
                 showScreen("screen-item"); 
-            } catch (e) { if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message); } 
+            } catch (e) {
+                if(requestId===itemRequest184&&epoch===screenEpoch184)notify(e.message);
+            } finally {
+                if(requestId===itemRequest184)status.textContent='';
+            } 
         }
         
         function showEditForm() { 
@@ -2249,7 +2272,11 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             const {code} = currentItem;
             const buttons = $('actions').querySelectorAll('.beta-checkout-actions button');
             checkoutPending = true;
+            const buttonToUpdate=buttons[takenFor||recipientId ? 1 : 0];
+            setLoading(buttonToUpdate,true,'Выдаём…');
             buttons.forEach(button => { button.disabled = true; });
+            const actions=$('actions');
+            actions.setAttribute('aria-busy','true');
             try {
                 await api('/api/checkout', {
                     method: 'POST',
@@ -2263,6 +2290,8 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 notify(e.message);
             } finally {
                 checkoutPending = false;
+                actions.removeAttribute('aria-busy');
+                setLoading(buttonToUpdate,false);
                 buttons.forEach(button => { button.disabled = false; });
             }
         }
@@ -2465,10 +2494,13 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             modal.querySelectorAll('details[open]').forEach(details => { details.open = false; });
             modal.classList.remove('hidden');
             modal.querySelector('.modal-content').scrollTop = 0;
+            manageSheet(modal,modal.querySelector('.modal-content'),modal.querySelector('h2'),closeAddItemModal);
         }
 
         function closeAddItemModal() {
-            document.getElementById("create-item-modal").classList.add("hidden");
+            const modal=$('create-item-modal');
+            modal.classList.add('hidden');
+            releaseSheet(modal);
         }
 
         function onNameInput() {
@@ -2623,6 +2655,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             if(currentScreen===id&&!$(id)?.classList.contains("hidden"))return;
             if(currentScreen==="screen-main")mainScroll184=window.scrollY;
             screenEpoch184++;
+            $('item-open-status').textContent='';
             if(currentScreen==="screen-edit-item"&&id==="screen-item"&&navHistory.at(-1)==="screen-item")navHistory.pop();
             else if (["screen-main","screen-platforms","screen-th","screen-rooms","screen-settings"].includes(id)) navHistory=[]; else if (currentScreen && currentScreen !== id) navHistory.push(currentScreen);
             currentScreen = id;
@@ -2674,7 +2707,88 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
         function cacheSet17(name,v){try{localStorage.setItem(cacheKey17(name),v)}catch(e){}}
         function cycleTheme(){let old=document.documentElement.dataset.theme;let next=old==='light'?'dark':old==='dark'?'':'light';document.documentElement.dataset.theme=next;try{localStorage.setItem('warehouse_main_theme',next)}catch(e){}showToast(next==='light'?'Светлая тема':next==='dark'?'Тёмная тема':'Тема системы');}
         async function copyText(text){if(!text)return notify('Нет текста');try{await navigator.clipboard.writeText(text);showToast('Скопировано');haptic()}catch(e){const el=document.createElement('textarea');el.value=text;document.body.append(el);el.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}el.remove();if(ok)showToast('Скопировано');else prompt('Скопируйте текст:',text)}}
-        function overlay17(title){ const o=document.createElement('div');o.className='modal-overlay';const b=document.createElement('div');b.className='modal-content';b.style.height='auto';b.style.maxHeight='90vh';const h=document.createElement('div');h.className='field-row';h.innerHTML='<h2>'+safe(title)+'</h2><button class="secondary compact">Закрыть</button>';h.querySelector('button').onclick=()=>o.remove();b.append(h);o.append(b);document.body.append(o);return {o,b};}
+        const managedSheets=[], inertSheetBackground=new Set();
+        let sheetTitleId=0;
+        function updateSheetBackground() {
+            const top=managedSheets.at(-1)?.root;
+            for(const node of [...inertSheetBackground]){
+                if(top && node!==top && node.isConnected)continue;
+                node.inert=false;
+                inertSheetBackground.delete(node);
+            }
+            if(!top)return;
+            for(const node of document.body.children){
+                if(node===top || node.inert || node.matches('script,style,#toast-container'))continue;
+                node.inert=true;
+                inertSheetBackground.add(node);
+            }
+        }
+        function manageSheet(root,content,title,close) {
+            if(managedSheets.some(sheet=>sheet.root===root))return;
+            const opener=document.activeElement;
+            if(!title.id)title.id='beta-sheet-title-'+(++sheetTitleId);
+            content.setAttribute('role','dialog');
+            content.setAttribute('aria-modal','true');
+            content.setAttribute('aria-labelledby',title.id);
+            title.tabIndex=-1;
+            managedSheets.push({root,content,title,close,opener});
+            updateSheetBackground();
+            title.focus({preventScroll:true});
+        }
+        function releaseSheet(root) {
+            const index=managedSheets.findIndex(sheet=>sheet.root===root);
+            if(index===-1)return;
+            const wasTop=index===managedSheets.length-1;
+            const [{opener}]=managedSheets.splice(index,1);
+            updateSheetBackground();
+            if(!wasTop)return;
+            if(opener?.isConnected && opener.getClientRects().length && !opener.closest('[inert]')){
+                opener.focus({preventScroll:true});
+            }else{
+                managedSheets.at(-1)?.title.focus({preventScroll:true});
+            }
+        }
+        document.addEventListener('keydown',event=>{
+            const sheet=managedSheets.at(-1);
+            if(!sheet || document.querySelector('dialog:modal') || event.defaultPrevented)return;
+            if(event.key==='Escape'){
+                event.preventDefault();
+                sheet.close();
+            }
+            if(event.key!=='Tab')return;
+            const controls=[...sheet.content.querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex]')]
+                .filter(node=>node.tabIndex>=0 && !node.matches(':disabled') && node.getClientRects().length && getComputedStyle(node).visibility==='visible');
+            const at=controls.indexOf(document.activeElement);
+            if(at===-1 || (event.shiftKey ? at===0 : at===controls.length-1)){
+                event.preventDefault();
+                ((event.shiftKey ? controls.at(-1) : controls[0]) || sheet.title).focus();
+            }
+        });
+        function overlay17(title) {
+            const o=document.createElement('div');
+            o.className='modal-overlay';
+            const b=document.createElement('div');
+            b.className='modal-content';
+            b.style.height='auto';
+            b.style.maxHeight='90vh';
+            const header=document.createElement('div');
+            header.className='field-row';
+            const heading=document.createElement('h2');
+            heading.textContent=title;
+            const close=document.createElement('button');
+            close.type='button';
+            close.className='secondary compact';
+            close.textContent='Закрыть';
+            const remove=o.remove.bind(o);
+            o.remove=()=>{remove();releaseSheet(o);};
+            close.onclick=()=>o.remove();
+            header.append(heading,close);
+            b.append(header);
+            o.append(b);
+            document.body.append(o);
+            manageSheet(o,b,heading,()=>close.click());
+            return {o,b};
+        }
         function btn17(parent,text,fn,cls='secondary'){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){notify(e.message)}finally{b.disabled=false}};parent.append(b);return b;}
         async function issueWebCode(target='site'){
             const isApp=target==='app';
@@ -2927,19 +3041,30 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
   function positionCapsule(){
     if(!nav)return;
     const item=nav.querySelector('.nav-item.active:not(.hidden)');
-    if(reduced()||!item||!nav.getClientRects().length||!item.getClientRects().length){if(nav.classList.contains('beta-tab-motion'))nav.classList.remove('beta-tab-motion');navReady=false;lastNav=null;return}
-    const r=item.getBoundingClientRect(),base=nav.getBoundingClientRect();
-    if(window.matchMedia('(max-width:899px)').matches) {
+    if(lastNav!==item){
+      lastNav=item;
+      for(const tab of nav.querySelectorAll('.nav-item')){
+        if(tab===item)tab.setAttribute('aria-current','page');
+        else tab.removeAttribute('aria-current');
+      }
+    }
+    const base=nav.getBoundingClientRect();
+    if(base.height&&window.matchMedia('(max-width:899px)').matches){
       const clearance=Math.max(82,Math.ceil(window.innerHeight-base.top));
       document.documentElement.style.setProperty('--beta-dock-clearance',clearance+'px');
     }
+    if(reduced()||!item||!base.height||!item.getClientRects().length){
+      nav.classList.remove('beta-tab-motion');
+      navReady=false;
+      return;
+    }
+    const r=item.getBoundingClientRect();
     if(!r.width||!r.height)return;
     if(!navReady)capsule.style.transition='none';
     capsule.style.width=r.width+'px';capsule.style.height=r.height+'px';
     capsule.style.transform='translate('+(r.left-base.left-nav.clientLeft+nav.scrollLeft)+'px,'+(r.top-base.top-nav.clientTop+nav.scrollTop)+'px)';
     if(!nav.classList.contains('beta-tab-motion'))nav.classList.add('beta-tab-motion');
     if(!navReady){void capsule.offsetWidth;capsule.style.transition='';navReady=true}
-    if(lastNav!==item){lastNav=item;for(const tab of nav.querySelectorAll('.nav-item')){if(tab===item)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current')}}
   }
   const queueCapsule=()=>{cancelAnimationFrame(navFrame);navFrame=requestAnimationFrame(positionCapsule)};
   const oldNavActive=updateNavActive;

@@ -126,3 +126,18 @@ details[open] > .r1856-heading .r1856-chevron { transform: rotate(45deg); }
 .r1859-boss-cost-budget.kc{background:rgba(255,59,48,.13);color:var(--danger)}
 .r1859-boss-cost-price{justify-self:end;font-size:12px;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
 .r1859-boss-cost-empty{padding:var(--warehouse-table-cell-padding)}
+
+.r1853-person-line.r1853-held-line{
+  grid-template-columns:minmax(72px,1fr) repeat(2,minmax(44px,53px)) 38px minmax(34px,auto) 10px;
+}
+.r1853-held-line .r1853-name{white-space:normal;overflow-wrap:anywhere}
+.r1853-total.laptop,.r1853-cell.laptop{color:var(--primary)}
+@media(max-width:440px){
+  .r1853-person-line.r1853-held-line{
+    grid-template-columns:repeat(3,minmax(37px,auto)) minmax(40px,1fr) 12px;
+    grid-template-rows:auto auto;column-gap:8px;row-gap:4px;padding-block:7px;
+  }
+  .r1853-held-line .r1853-name{grid-column:1/5;font-size:13px}
+  .r1853-held-line :is(.r1853-cell,.r1853-buyout){grid-row:2}
+  .r1853-held-line .r1853-arrow{grid-area:1/5/3/6}
+}
