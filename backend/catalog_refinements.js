@@ -81,7 +81,7 @@
     if(takeTools){
       takeTools.setAttribute('role','group');
       takeTools.setAttribute('aria-label','Категории и сортировка выдачи');
-      const takeButtons=options.slice(0,3).map(([key,label])=>{
+      const takeButtons=options.slice(0,4).map(([key,label])=>{
         const button=categoryButton(key,label);
         button.onclick=()=>{
           view.takeSelected=view.takeSelected===key?'':key;
@@ -92,7 +92,7 @@
         return [key,button];
       });
       const orders=[
-        ['available','Свободные первыми'],
+        ['available','По типу · свободные первыми'],
         ['name-asc','Название: А–Я'],
         ['name-desc','Название: Я–А']
       ];
