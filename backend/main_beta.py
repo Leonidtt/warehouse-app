@@ -38,7 +38,7 @@ from release_v182 import label_image, prepare_migration, register_release
 from release_v184 import active_checkout_rows, effective_user, held_camera_count, register_184
 from release_v185 import register_185, deny_blocked
 from release_v183 import register_183
-from fixed_office7 import office7_location_id, consolidate_office7_stock, normalize_office
+from fixed_office7 import normalize_office
 from owner_backup import register_owner_backup
 from telegram_beta import register_telegram_app_bot
 from snapshot_import import fetch_snapshot, import_snapshot, save_snapshot
@@ -257,8 +257,60 @@ DELIVERY_ROSTER_RELEASE = "18.5.9-beta-delivery"
 if os.path.exists(DB_PATH):
     prepare_migration(DB_PATH, "18.5.4")
     prepare_migration(DB_PATH, DELIVERY_ROSTER_RELEASE)
-    prepare_migration(DB_PATH, "18.6.0-beta-office7")
+    prepare_migration(DB_PATH, "18.6.1-beta-equipment-room")
 init_db(DB_PATH)
+
+import uuid
+def equipment_location_id(conn, create=False):
+    matches=[row['id'] for row in conn.execute("SELECT id,name FROM locations")
+             if normalize_office(row['name'])=='техника']
+    if len(matches)>1:
+        raise HTTPException(409,'Найдено несколько помещений «Техника». Уточните названия.')
+    if matches:
+        return matches[0]
+    if not create:
+        raise HTTPException(409,'Помещение «Техника» не найдено.')
+    result=conn.execute("INSERT INTO locations(name,type) VALUES('Техника','storage')")
+    return result.lastrowid
+
+def consolidate_equipment_stock(conn):
+    """Archive original locations before relocating available equipment.
+
+    Caller controls transaction; checkout, movement and booking history stays intact.
+    """
+    office=equipment_location_id(conn,create=True)
+    bad=conn.execute("""SELECT COUNT(*) FROM stock s
+        JOIN items i ON i.code=s.item_code
+        WHERE i.kind='equipment' AND s.quantity<0""").fetchone()[0]
+    if bad:
+        raise RuntimeError('Отрицательные остатки оборудования — перенос отменён')
+    total_before=conn.execute("""SELECT COALESCE(SUM(s.quantity),0) FROM stock s
+        JOIN items i ON i.code=s.item_code WHERE i.kind='equipment'""").fetchone()[0]
+    conn.execute("""CREATE TABLE IF NOT EXISTS beta_equipment_stock_rollback(
+        batch_id TEXT NOT NULL, item_code TEXT NOT NULL,
+        original_location_id INTEGER NOT NULL, quantity INTEGER NOT NULL,
+        moved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(batch_id,item_code,original_location_id))""")
+    rows=conn.execute("""SELECT s.item_code,s.location_id,s.quantity FROM stock s
+        JOIN items i ON i.code=s.item_code
+        WHERE i.kind='equipment' AND s.quantity>0 AND s.location_id<>?
+        ORDER BY s.item_code,s.location_id""",(office,)).fetchall()
+    batch=uuid.uuid4().hex
+    for row in rows:
+        code,location,amount=row['item_code'],row['location_id'],row['quantity']
+        conn.execute("""INSERT INTO beta_equipment_stock_rollback
+            (batch_id,item_code,original_location_id,quantity) VALUES(?,?,?,?)""",
+            (batch,code,location,amount))
+        conn.execute("""INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?)
+            ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity""",
+            (code,office,amount))
+        conn.execute("DELETE FROM stock WHERE item_code=? AND location_id=?",(code,location))
+    total_after=conn.execute("""SELECT COALESCE(SUM(s.quantity),0) FROM stock s
+        JOIN items i ON i.code=s.item_code WHERE i.kind='equipment'""").fetchone()[0]
+    if total_after!=total_before:
+        raise RuntimeError('Общий остаток изменился — перенос отменён')
+    return len(rows)
+
 
 def seed_beta_demo_items(db_path):
     # One-time demo fixture for the isolated Beta database only.
@@ -305,11 +357,11 @@ with sqlite3.connect(DB_PATH,timeout=15) as office_conn:
     office_conn.execute("BEGIN IMMEDIATE")
     office_conn.execute("CREATE TABLE IF NOT EXISTS warehouse_release_meta(version TEXT PRIMARY KEY)")
     if not office_conn.execute("SELECT 1 FROM warehouse_release_meta WHERE version=?",
-            ("18.6.0-beta-office7",)).fetchone():
-        count=consolidate_office7_stock(office_conn)
+            ("18.6.1-beta-equipment-room",)).fetchone():
+        count=consolidate_equipment_stock(office_conn)
         office_conn.execute("INSERT INTO warehouse_release_meta(version) VALUES(?)",
-                            ("18.6.0-beta-office7",))
-        print("Beta Office 7 available equipment aligned:",count,flush=True)
+                            ("18.6.1-beta-equipment-room",))
+        print("Beta equipment room aligned:",count,flush=True)
     office_conn.commit()
 
 def verify_init_data(init_data: str, token: str) -> dict:
@@ -709,7 +761,7 @@ def replenish_item(code: str, req: ReplenishRequest, x_init_data: Optional[str] 
     if req.unit_price is not None and (req.unit_price<0 or not math.isfinite(req.unit_price)): raise HTTPException(400,"Некорректная цена")
     with transaction() as conn:
         item=active_item(conn,code)
-        location_id=office7_location_id(conn,create=True) if item["kind"]=="equipment" else req.location_id
+        location_id=equipment_location_id(conn,create=True) if item["kind"]=="equipment" else req.location_id
         valid_location(conn,location_id)
         if item["kind"]=="equipment" and (req.quantity!=1 or conn.execute("SELECT 1 FROM stock WHERE item_code=? AND quantity>0",(code,)).fetchone() or conn.execute("SELECT 1 FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone()): raise HTTPException(409,"Каждая единица оборудования должна иметь собственный QR-код")
         conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,?) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+excluded.quantity", (code,location_id,req.quantity))
@@ -777,7 +829,7 @@ def locations_view(x_init_data: Optional[str] = Header(None)):
             FROM locations l LEFT JOIN stock s ON s.location_id=l.id AND s.quantity>0
             LEFT JOIN items i ON i.code=s.item_code AND i.is_archived=0
             GROUP BY l.id,l.name,l.type ORDER BY l.id""").fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows if normalize_office(row["name"]) not in ("этаж2","2этаж") or row["count"]>0]
 
 @app.get("/api/room_detail/{location_id}")
 def room_detail(location_id: int, x_init_data: Optional[str] = Header(None)):
@@ -810,8 +862,8 @@ def create_location(req: LocationCreate, x_init_data: Optional[str] = Header(Non
     check_admin(x_init_data)
     with transaction() as conn:
         name=req.name.strip()
-        if normalize_office(name)=='офис7':
-            raise HTTPException(409,"Помещение «Офис 7» создаётся и защищается автоматически")
+        if normalize_office(name)=='техника':
+            raise HTTPException(409,"Помещение «Техника» создаётся и защищается автоматически")
         try: conn.execute("INSERT INTO locations (name) VALUES (?)", (name,))
         except sqlite3.IntegrityError: raise HTTPException(400, "Такая комната уже есть")
     return {"status": "ok"}
@@ -823,10 +875,10 @@ def update_location(req: LocationUpdate, x_init_data: Optional[str] = Header(Non
         old=conn.execute("SELECT name FROM locations WHERE id=?",(req.id,)).fetchone()
         if not old: raise HTTPException(404,"Помещение не найдено")
         new_name=req.name.strip()
-        if normalize_office(old["name"])=='офис7' and normalize_office(new_name)!='офис7':
-            raise HTTPException(409,"«Офис 7» закреплён за оборудованием и не может быть переименован")
-        if normalize_office(new_name)=='офис7' and normalize_office(old["name"])!='офис7':
-            raise HTTPException(409,"Имя «Офис 7» зарезервировано для оборудования")
+        if normalize_office(old["name"])=='техника' and normalize_office(new_name)!='техника':
+            raise HTTPException(409,"«Техника» закреплён за оборудованием и не может быть переименован")
+        if normalize_office(new_name)=='техника' and normalize_office(old["name"])!='техника':
+            raise HTTPException(409,"Имя «Техника» зарезервировано для оборудования")
         try: conn.execute("UPDATE locations SET name=? WHERE id=?",(new_name,req.id))
         except sqlite3.IntegrityError: raise HTTPException(400,"Такая комната уже есть")
     return {"status": "ok"}
@@ -1166,7 +1218,7 @@ async def create_item(code: str = Form(""), name: str = Form(...), kind: str = F
 
     with transaction() as conn:
         if kind == "equipment":
-            location_id = office7_location_id(conn,create=True)
+            location_id = equipment_location_id(conn,create=True)
         elif location_id == 0:
             location = conn.execute("SELECT id FROM locations ORDER BY id LIMIT 1").fetchone()
             location_id = location["id"] if location else 1
@@ -1304,7 +1356,7 @@ async def return_item(code: str, x_init_data: Optional[str] = Header(None)):
         co=conn.execute("SELECT id,location_id FROM checkouts WHERE item_code=? AND returned_at IS NULL",(code,)).fetchone()
         if not co: raise HTTPException(400,"Не выдано")
         item=active_item(conn,code)
-        destination=office7_location_id(conn,create=True) if item["kind"]=="equipment" else co["location_id"]
+        destination=equipment_location_id(conn,create=True) if item["kind"]=="equipment" else co["location_id"]
         conn.execute("UPDATE checkouts SET returned_at=CURRENT_TIMESTAMP,returned_by=? WHERE id=?",(user["tg_id"],co["id"]))
         conn.execute("INSERT INTO stock(item_code,location_id,quantity) VALUES(?,?,1) ON CONFLICT(item_code,location_id) DO UPDATE SET quantity=quantity+1",(code,destination))
     return {"status":"ok"}
@@ -1320,7 +1372,7 @@ def _move_one(conn,user,code,source,dest,quantity):
     if quantity<=0 or source==dest: raise HTTPException(400,"Проверьте количество и помещения")
     item=active_item(conn,code)
     if item["kind"]=="equipment":
-        raise HTTPException(409,"Оборудование закреплено за «Офисом 7». Доступны выдача и возврат.")
+        raise HTTPException(409,"Оборудование закреплено за «Техникой». Доступны выдача и возврат.")
     valid_location(conn,source); valid_location(conn,dest)
     row=conn.execute("SELECT quantity FROM stock WHERE item_code=? AND location_id=?",(code,source)).fetchone()
     if not row or row[0]<quantity: raise HTTPException(400,"Недостаточно товара")
@@ -1582,7 +1634,7 @@ def apply_warehouse_snapshot(path, actor):
             WHERE c.returned_at IS NULL
         """).fetchall()
         tables = import_snapshot(conn, path, DB_PATH)
-        consolidate_office7_stock(conn)
+        consolidate_equipment_stock(conn)
         apply_equipment_budgets(conn)
         conn.execute("DELETE FROM checkout_return_reminders")
         conn.execute("DELETE FROM checkout_handoffs")
