@@ -31,9 +31,11 @@ def _create_snapshot(db_path, target):
         attach_warehouse(conn, db_path)
         profiles = ", ".join(f"src.{quote_identifier(column)}" for column in PROFILE_COLUMNS)
         conn.execute(f"CREATE TABLE users AS SELECT {profiles} FROM incoming.users AS src")
-        for table in WAREHOUSE_TABLES:
+        tables = [(table, "*") for table in WAREHOUSE_TABLES]
+        tables.append(("equipment_buyout_amounts", "item_code, total_cents, remaining_cents"))
+        for table, columns in tables:
             name = quote_identifier(table)
-            conn.execute(f"CREATE TABLE {name} AS SELECT * FROM incoming.{name}")
+            conn.execute(f"CREATE TABLE {name} AS SELECT {columns} FROM incoming.{name}")
             size = conn.execute("PRAGMA main.page_count").fetchone()[0]
             size *= conn.execute("PRAGMA main.page_size").fetchone()[0]
             if size > MAX_SNAPSHOT_BYTES:

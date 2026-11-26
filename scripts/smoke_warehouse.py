@@ -136,6 +136,27 @@ class WarehouseSmokeTest(unittest.TestCase):
         self.assertTrue(pdf.content.startswith(b"%PDF-"))
         self.assertEqual(pdf.headers["content-type"],"application/pdf")
 
+    def test_snapshot_includes_only_buyout_amount_fields(self):
+        with closing(sqlite3.connect(self.database)) as conn, conn:
+            conn.execute("INSERT INTO items(code,name,buyout_status) VALUES ('CAM-1','Камера','Получатель')")
+            conn.execute("INSERT INTO equipment_buyout_amounts VALUES ('CAM-1',120000,40000)")
+            conn.execute("INSERT INTO web_sessions VALUES ('private-session',1,4102444800)")
+        token = "offline-snapshot-test-token-only-" + "x" * 16
+        endpoint = "/api/internal/warehouse-snapshot"
+        with patch.dict(os.environ, {"WAREHOUSE_SNAPSHOT_TOKEN": token}):
+            self.assertEqual(self.client.get(endpoint).status_code, 403)
+            response = self.client.get(endpoint, headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        snapshot = self.database.with_name("snapshot.db")
+        snapshot.write_bytes(response.content)
+        with closing(sqlite3.connect(snapshot)) as conn:
+            fields = [row[1] for row in conn.execute("PRAGMA table_info(equipment_buyout_amounts)")]
+            self.assertEqual(fields, ["item_code", "total_cents", "remaining_cents"])
+            self.assertEqual(conn.execute("SELECT * FROM equipment_buyout_amounts").fetchall(),
+                             [("CAM-1", 120000, 40000)])
+            self.assertFalse(conn.execute("SELECT 1 FROM sqlite_master WHERE name='web_sessions'").fetchone())
+
     def test_concurrent_checkout_and_retry_of_return(self):
         session = "smoke-session"
         with closing(sqlite3.connect(self.database)) as conn, conn:
