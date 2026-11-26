@@ -44,8 +44,107 @@ def prepare_migration(path, version="18.2"):
                 os.unlink(pending)
 
 
-def label_image(code, name, dpi=203, width_mm=50, height_mm=80):
-    label_dimensions(width_mm, height_mm)
+def label_size(kind, width_mm=None, height_mm=None):
+    default_width, default_height = (30, 50) if kind == 'equipment' else (50, 80)
+    size = (default_width if width_mm is None else width_mm,
+            default_height if height_mm is None else height_mm)
+    label_dimensions(*size)
+    return size
+
+
+def equipment_label_image(code, name, dpi, width_mm, height_mm):
+    width, height = (round(v / 25.4 * dpi) for v in (width_mm, height_mm))
+    image = Image.new('RGB', (width, height), 'white')
+    draw = ImageDraw.Draw(image)
+    inset = max(1, round(dpi * .2 / 25.4))
+    stroke = max(1, round(dpi * .16 / 25.4))
+    edge = inset + stroke + 1
+    radius = max(4, round(dpi * 1.8 / 25.4))
+    gap = max(2, round(dpi * .6 / 25.4))
+    head_x = edge + gap
+    head_y = edge + gap
+    text_pad = max(3, gap)
+    text_width = width - 2 * (head_x + text_pad)
+    name = ' '.join(str(name).split())
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=4, box_size=1)
+    qr.add_data(str(code))
+    qr.make(fit=True)
+    modules = qr.modules_count + 8
+    fonts = {}
+
+    def text_layout(size, available_height):
+        if size not in fonts:
+            fonts[size] = label_font(size)
+        font = fonts[size]
+        # Keep a short inventory name/number on one line, as on the approved label.
+        if len(name) <= 16 and draw.textlength(name, font=font) > text_width:
+            return None
+        lines, line = [], ''
+        for word in name.split():
+            joined = (line + ' ' + word).strip()
+            if draw.textlength(joined, font=font) <= text_width:
+                line = joined
+                continue
+            if line:
+                lines.append(line)
+                line = ''
+            for char in word:
+                if line and draw.textlength(line + char, font=font) > text_width:
+                    lines.append(line)
+                    line = ''
+                line += char
+        if line:
+            lines.append(line)
+        value = '\n'.join(lines)
+        spacing = max(1, size // 12)
+        bbox = draw.multiline_textbbox((0, 0), value, font=font, spacing=spacing, align='center')
+        if bbox[2] - bbox[0] > text_width or bbox[3] - bbox[1] > available_height:
+            return None
+        return value, font, spacing, bbox
+
+    # Whole-pixel modules and an untouched four-module quiet zone.
+    # Maximize QR width first; shrink only if the full title cannot fit.
+    min_font = max(11, round(dpi * .055))
+    chosen = None
+    for scale in range(min((width - 2 * edge) // modules, (height - 2 * edge) // modules), 2, -1):
+        side = modules * scale
+        qr_y = height - edge - side
+        head_bottom = qr_y - gap
+        available = head_bottom - head_y - 2 * text_pad
+        if available < min_font or not text_layout(min_font, available):
+            continue
+        low, high = min_font, max(min_font, min(text_width * 2, available * 2))
+        best = text_layout(low, available)
+        while low <= high:
+            mid = (low + high) // 2
+            candidate = text_layout(mid, available)
+            if candidate:
+                best = candidate
+                low = mid + 1
+            else:
+                high = mid - 1
+        chosen = scale, qr_y, head_bottom, best
+        break
+    if not chosen:
+        raise HTTPException(400, 'Увеличьте этикетку или сократите название')
+    scale, qr_y, head_bottom, (value, font, spacing, bbox) = chosen
+    draw.rounded_rectangle((inset, inset, width - inset - 1, height - inset - 1),
+                           radius=radius, outline='black', width=stroke)
+    draw.rounded_rectangle((head_x, head_y, width - head_x - 1, head_bottom - 1),
+                           radius=max(3, radius - gap), fill='black')
+    draw.multiline_text(((width - (bbox[2] - bbox[0])) / 2 - bbox[0],
+                         head_y + (head_bottom - head_y - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+                        value, font=font, spacing=spacing, align='center', fill='white')
+    qr.box_size = scale
+    rendered = qr.make_image(fill_color='black', back_color='white').convert('RGB')
+    image.paste(rendered, ((width - rendered.width) // 2, qr_y))
+    return image
+
+
+def label_image(code, name, dpi=203, width_mm=None, height_mm=None, kind='consumable'):
+    width_mm, height_mm = label_size(kind, width_mm, height_mm)
+    if kind == 'equipment':
+        return equipment_label_image(code, name, dpi, width_mm, height_mm)
     width, height = (round(v / 25.4 * dpi) for v in (width_mm, height_mm))
     image = Image.new('RGB', (width, height), 'white')
     draw = ImageDraw.Draw(image)

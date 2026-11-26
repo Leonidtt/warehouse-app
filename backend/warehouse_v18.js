@@ -134,11 +134,11 @@ function installV18(openRoleMenu){
   async function showSessions(){const {b}=overlay17('Активные сеансы сайта');try{const rows=await api('/api/v18/sessions');if(!rows.length)card17(b,'Нет активных браузерных сеансов');for(const r of rows){const c=card17(b,r.current?'Текущий браузер':'Другой браузер',`Действует до ${new Date(r.expires*1000).toLocaleString('ru-RU')}`);btn17(c,'Завершить сеанс',async()=>{if(!await ask('Завершить сеанс?','Потребуется новый код входа.','Завершить'))return;await api('/api/v18/sessions/'+r.id,{method:'DELETE'});if(r.current&&!tg.initData)location.reload();else c.remove()})}}catch(e){notify(e.message)}}
   function showAccent(){const {b}=overlay17('Акцентный цвет');const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:7px';for(const v of ['#007aff','#5856d6','#0b8862','#c45d20','#b53b7b','#42647e']){const e=btn('',()=>accent(v),null,'v18-accent');e.style.background=v;e.setAttribute('aria-label','Цвет '+v);row.append(e)}b.append(row);btn17(b,'По умолчанию',()=>accent('#007aff'))}
   function showChangelog(){const {b}=overlay17('Что нового · v18.5.2');for(const [t,d]of [['v18.5.2','Реалистичные иллюстрации, Telegram-ники, блокировка по ID, обновлённые стили.'],['v18.4','Кнопки под обзором; расходники отдельным разделом; возврат расходников; автоматическое обновление площадок и теплоходов; массовые действия.'],['Liquid Glass','Компактная навигация, тема в верхнем углу, новая страница настроек.'],['Сайт','Боковая панель и таблица товаров для компьютера.'],['Рабочие инструменты','Избранное, недавние, комплекты, шаблоны, массовое редактирование, Excel.'],['Этикетки','Настраиваемая ширина и высота; PNG и PDF.']])card17(b,t,d)}
-  const labelQuery=()=>{const d=labelSettings();return 'width_mm='+d.width+'&height_mm='+d.height};
-  function configureLabels(){const {o,b}=overlay17('Размер QR-этикетки');const d=labelSettings(),w=field17(b,'Ширина, мм (30–100)',d.width,'number'),h=field17(b,'Высота, мм (40–150)',d.height,'number');btn17(b,'Сохранить',()=>{const width=Number(w.value),height=Number(h.value);if(!Number.isInteger(width)||!Number.isInteger(height)||width<30||width>100||height<40||height>150)throw Error('Проверьте размеры');cacheSet17('label_dimensions',JSON.stringify({width,height}));o.remove();showToast('Размер сохранён')},'ok');btn17(b,'По умолчанию 50 × 80 мм',()=>{w.value=50;h.value=80})}
-  showLabelPreview17=async(code,name,img)=>image17(img,'/api/label/'+encodeURIComponent(code)+'?name='+encodeURIComponent(name)+'&'+labelQuery());
-  showQr=async()=>{const {code,name,kind}=currentItem;if(kind==='consumable'&&currentUser.role==='admin')return showLabelPrint17([{code,name}]);const {b}=overlay17('Этикетка');const d=labelSettings();card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery();try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name));if(currentUser.role==='admin'){btn17(b,'Скачать PNG',()=>downloadFile(p,code+'.png'));btn17(b,'Скачать PDF',()=>downloadFile(p+'&format=pdf',code+'.pdf'));btn17(b,'PDF · 300 dpi',()=>downloadFile(p+'&format=pdf&dpi=300',code+'.pdf'));btn17(b,'Excel для B21S',()=>downloadLabelExport17([{code}],'xlsx'))}};
-  $('export-qr-btn').onclick=()=>downloadFile('/api/export_labels?'+labelQuery(),'labels.pdf');exportStock=()=>downloadFile('/api/v18/stock.xlsx','warehouse_stock.xlsx');
+  const labelQuery=(kind='consumable')=>{const d=labelSettings(kind);return 'width_mm='+d.width+'&height_mm='+d.height};
+  function configureLabels(){const {o,b}=overlay17('Размер QR-этикетки расходников');const d=labelSettings(),w=field17(b,'Ширина, мм (30–100)',d.width,'number'),h=field17(b,'Высота, мм (40–150)',d.height,'number');btn17(b,'Сохранить',()=>{const width=Number(w.value),height=Number(h.value);if(!Number.isInteger(width)||!Number.isInteger(height)||width<30||width>100||height<40||height>150)throw Error('Проверьте размеры');cacheSet17('label_dimensions',JSON.stringify({width,height}));o.remove();showToast('Размер сохранён')},'ok');btn17(b,'По умолчанию 50 × 80 мм',()=>{w.value=50;h.value=80})}
+  showLabelPreview17=async(code,name,img,kind=$('add-kind')?.value||'consumable')=>image17(img,'/api/label/'+encodeURIComponent(code)+'?'+new URLSearchParams({name,kind})+'&'+labelQuery(kind));
+  showQr=async()=>{const {code,name,kind}=currentItem;if(currentUser.role==='admin')return showLabelPrint17([{code,name,kind}]);const {b}=overlay17('Этикетка');const d=labelSettings(kind);card17(b,name,code+' · '+d.width+' × '+d.height+' мм');const img=document.createElement('img');img.className='label-img';img.alt='QR-этикетка';b.append(img);const p='/api/label/'+encodeURIComponent(code)+'?'+labelQuery(kind);try{await image17(img,p)}catch(e){img.remove();card17(b,'Не удалось создать этикетку',e.message)}btn17(b,'Копировать код',()=>copyText(code));btn17(b,'Копировать название',()=>copyText(name))};
+  $('export-qr-btn').onclick=()=>{const {o,b}=overlay17('Печать QR-этикеток');btn17(b,'Техника · 30 × 50 мм',()=>{o.remove();chooseConsumableLabels17('equipment')});btn17(b,'Расходники',()=>{o.remove();chooseConsumableLabels17()});btn17(b,'Все этикетки (PDF)',()=>downloadFile('/api/export_labels','labels.pdf'))};exportStock=()=>downloadFile('/api/v18/stock.xlsx','warehouse_stock.xlsx');
   downloadFile=async(url,filename)=>{try{const response=await fetch(url,{headers:authHeaders17(),credentials:'same-origin'});if(!response.ok){const e=await response.json().catch(()=>({}));throw Error(e.detail||'HTTP '+response.status)}const blob=await response.blob(),a=document.createElement('a'),obj=URL.createObjectURL(blob);a.href=obj;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(obj),10000)}catch(e){notify('Ошибка скачивания: '+e.message)}};
   deleteItemFromEdit=async()=>{const {code,name}=currentItem;if(!await ask('Отправить в архив?',name,'В архив'))return;try{await api('/api/items/'+encodeURIComponent(code),{method:'DELETE'});backToMain();const {o,b}=overlay17('Товар в архиве');card17(b,name,'Можно восстановить без потери остатка.');btn17(b,'Отменить архивирование',async()=>{await api('/api/archive/'+encodeURIComponent(code)+'/restore',{method:'POST'});o.remove();showToast('Товар восстановлен');refresh(true)},'ok')}catch(e){notify(e.message)}};
   renameLocation=async(id,oldName)=>{const name=await ask('Переименовать помещение','','Сохранить',oldName);if(!name?.trim()||name===oldName)return;try{await api('/api/locations/update',{method:'POST',body:JSON.stringify({id,name:name.trim()})});await loadLocations();showToast('Обновлено')}catch(e){notify(e.message)}};
@@ -151,7 +151,8 @@ function installV18(openRoleMenu){
   const search=main.querySelector('.search-icon');if(search)search.innerHTML=ico('search');
 }
 
-function labelSettings(){
+function labelSettings(kind='consumable'){
+  if(kind==='equipment')return {width:30,height:50};
   try{
     const settings=JSON.parse(cacheGet17('label_dimensions')||'{}');
     if(settings.width>=30&&settings.width<=100&&settings.height>=40&&settings.height<=150)return settings;
@@ -159,10 +160,11 @@ function labelSettings(){
   return {width:50,height:80};
 }
 
-async function chooseConsumableLabels17(){
+async function chooseConsumableLabels17(kind='consumable'){
   if(currentUser?.role!=='admin')return;
-  const {o,b}=overlay17('QR расходников');
-  const search=field17(b,'Найти расходник','');
+  const equipment=kind==='equipment';
+  const {o,b}=overlay17(equipment?'QR техники':'QR расходников');
+  const search=field17(b,equipment?'Найти технику':'Найти расходник','');
   search.type='search';
   const list=document.createElement('div');
   list.className='warehouse-label-picker';
@@ -208,10 +210,10 @@ async function chooseConsumableLabels17(){
       row.append(checkbox,text);
       return row;
     }));
-    if(!shown.length)list.textContent=items.length?'Ничего не найдено':'На складе нет расходников';
+    if(!shown.length)list.textContent=items.length?'Ничего не найдено':equipment?'На складе нет техники':'На складе нет расходников';
   }
   try{
-    items=(await api('/api/items')).filter(item=>item.kind==='consumable');
+    items=(await api('/api/items')).filter(item=>item.kind===kind);
     search.addEventListener('input',render);
     render();
   }catch(error){list.textContent=error.message}
@@ -232,7 +234,7 @@ async function downloadLabelExport17(items,format,settings={}){
   const href=URL.createObjectURL(await response.blob());
   const link=document.createElement('a');
   link.href=href;
-  link.download=excel?'B21S-qr-labels.xlsx':items.length===1?items[0].code+'.pdf':'qr-consumables.pdf';
+  link.download=excel?'B21S-qr-labels.xlsx':items.length===1?items[0].code+'.pdf':'qr-labels.pdf';
   document.body.append(link);
   link.click();
   link.remove();
@@ -255,7 +257,8 @@ function showLabelPrint17(items){
   const controls=document.createElement('div');
   controls.className='warehouse-label-controls';
   b.append(controls);
-  const settings=labelSettings();
+  const equipment=items.every(item=>item.kind==='equipment');
+  const settings=labelSettings(equipment?'equipment':'consumable');
   const width=field17(controls,'Ширина, мм',settings.width,'number');
   const height=field17(controls,'Высота, мм',settings.height,'number');
   const copies=field17(controls,items.length===1?'Копий':'Копий на позицию',1,'number');
@@ -362,6 +365,17 @@ function showLabelPrint17(items){
     const path=previewPath(items[0].code,parameters());
     return downloadFile(path,items[0].code+'.png');
   });
+  if(items.length===1){
+    btn17(b,'Копировать код',()=>copyText(items[0].code));
+    btn17(b,'Копировать название',()=>copyText(items[0].name));
+  }
+  const help=document.createElement('details');
+  const summary=document.createElement('summary');summary.textContent='Как печатать в NIIMBOT';help.append(summary);
+  const tip=document.createElement('p');tip.className='meta';
+  tip.textContent=equipment
+    ? 'PNG: вставьте готовую этикетку как изображение на всю наклейку. Excel: откройте шаблон 30 × 50 мм, привяжите верхний текст к «Название», нижний элемент QR-кода к «QR». Для точного внешнего вида используйте PNG или один раз сохраните аналогичный шаблон в NIIMBOT.'
+    : 'PNG: вставьте готовую этикетку как изображение. Excel: подключите файл как источник данных, привяжите текстовые элементы к «Название» и «Код», элемент QR-кода к «QR».';
+  help.append(tip);b.append(help);
   preview();
 }
 

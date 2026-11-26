@@ -9,10 +9,14 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
+from PIL import Image, ImageChops
+import qrcode
 
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend"
@@ -76,6 +80,61 @@ class WarehouseSmokeTest(unittest.TestCase):
         assets = ("/pwa/manifest.webmanifest", "/pwa/sw.js", "/warehouse-v18.js", "/warehouse-v18.css")
         for path in assets:
             self.assertEqual(self.client.get(path).status_code, 200, path)
+
+    def test_niimbot_labels(self):
+        session = "label-export-session"
+        items = [("KOR-1", "Коробочка для рамок", "consumable"),
+                 ("KAM-12", "КЦ-12", "equipment"),
+                 ("0007", "7", "equipment"), ("=1+1", "Код как текст", "equipment"),
+                 ("тх8", "8", "equipment")]
+        with closing(sqlite3.connect(self.database)) as conn, conn:
+            conn.execute("INSERT OR REPLACE INTO users(tg_id, full_name, role, is_registered) VALUES (1, 'Admin', 'admin', 1)")
+            conn.execute("INSERT INTO web_sessions VALUES (?, ?, ?)",
+                         (self.main["web_digest"](session), 1, int(time.time()) + 300))
+            conn.executemany("INSERT INTO items(code,name,kind) VALUES (?,?,?)", items)
+        headers = {"Cookie": f"{self.main['WEB_COOKIE']}={session}", "Origin": "http://testserver"}
+        self.assertEqual(self.client.post("/api/export_labels?format=xlsx",
+                         json={"codes":["KAM-12"]}).status_code, 401)
+        response = self.client.post("/api/export_labels?format=xlsx",
+                                    json={"codes":[code for code, _, _ in items],"copies":2},headers=headers)
+        self.assertEqual(response.status_code, 200, response.text if not response.is_success else "")
+        with closing(load_workbook(BytesIO(response.content))) as workbook:
+            sheet = workbook.active
+            self.assertEqual(list(sheet.values), [("Код","Название","QR")] +
+                             [(code,name,code) for code,name,_ in items for _ in range(2)])
+            self.assertTrue(all(c.data_type == "s" and c.number_format == "@" for row in sheet.iter_rows(min_row=2) for c in row))
+            self.assertEqual(len(sheet._images), 0)
+
+        for dpi in (203,300):
+            for code, name, kind in (items[0],items[1],items[4]):
+                response = self.client.get("/api/label/"+code,params={"dpi":dpi},headers=headers)
+                self.assertEqual(response.status_code,200)
+                with Image.open(BytesIO(response.content)) as image:
+                    w,h=(30,50) if kind=="equipment" else (50,80)
+                    self.assertEqual(image.size,(round(w/25.4*dpi),round(h/25.4*dpi)))
+                    if kind=="equipment":
+                        qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,border=4,box_size=1)
+                        qr.add_data(code);qr.make(fit=True)
+                        edge=max(1,round(dpi*.2/25.4))+max(1,round(dpi*.16/25.4))+1
+                        qr.box_size=(image.width-2*edge)//(qr.modules_count+8)
+                        expected=qr.make_image(fill_color='black',back_color='white').convert('RGB')
+                        x=(image.width-expected.width)//2
+                        y=image.height-edge-expected.height
+                        self.assertIsNone(ImageChops.difference(image.convert('RGB').crop((x,y,x+expected.width,y+expected.height)),expected).getbbox())
+                        head_y=edge+max(2,round(dpi*.6/25.4))
+                        self.assertEqual(image.convert('RGB').getpixel((image.width//2,head_y)),(0,0,0))
+        custom=self.client.get("/api/label/KAM-12",params={"width_mm":40,"height_mm":60},headers=headers)
+        self.assertEqual(custom.status_code,200)
+        with Image.open(BytesIO(custom.content)) as image:
+            self.assertEqual(image.size,(round(40/25.4*203),round(60/25.4*203)))
+        provisional=self.client.get("/api/label/PREVIEW",params={"name":"КЦ-99","kind":"equipment"},headers=headers)
+        self.assertEqual(provisional.status_code,200)
+        with Image.open(BytesIO(provisional.content)) as image:
+            self.assertEqual(image.size,(round(30/25.4*203),round(50/25.4*203)))
+        pdf=self.client.post("/api/export_labels",json={"codes":["KAM-12","KOR-1"],"copies":2},headers=headers)
+        self.assertEqual(pdf.status_code,200)
+        self.assertTrue(pdf.content.startswith(b"%PDF-"))
+        self.assertEqual(pdf.headers["content-type"],"application/pdf")
 
     def test_concurrent_checkout_and_retry_of_return(self):
         session = "smoke-session"
