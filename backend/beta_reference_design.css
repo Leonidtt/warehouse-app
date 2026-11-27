@@ -678,7 +678,7 @@
  content:"";display:block;position:static;z-index:auto;transform:none;
  grid-column:2;grid-row:1;order:1;
  width:min(100%,80px);height:auto;aspect-ratio:1;
- opacity:.96;filter:brightness(1.1) saturate(1.04);pointer-events:none;
+ opacity:1;filter:none;pointer-events:none;
 }
 #screen-main.r191-reference-home .r182-overview .r188-bottom > [data-gear] .r182-total::before{
  -webkit-mask-image:none;mask-image:none;
