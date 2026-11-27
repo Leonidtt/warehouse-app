@@ -17,6 +17,7 @@ from fastapi import File, Form, Header, HTTPException, Query, UploadFile
 from openpyxl.styles.colors import COLOR_INDEX
 from pydantic import BaseModel, Field
 from release_v184 import active_checkout_rows, held_camera_count
+from camera_overrides import person_key, init_camera_overrides, save_camera_override, apply_camera_overrides
 
 N='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 RN='{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
@@ -281,6 +282,7 @@ def save_schedule(conn,data,source):
         (source,first_date,last_date,data.get('format_version',1)))
 
 def init_delivery_schedule(conn):
+    init_camera_overrides(conn)
     conn.execute("""CREATE TABLE IF NOT EXISTS delivery_schedule(
         id INTEGER PRIMARY KEY AUTOINCREMENT,work_date TEXT NOT NULL,
         person TEXT NOT NULL,department TEXT NOT NULL,assignment TEXT NOT NULL,
@@ -650,7 +652,31 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
         upload=read_upload(file,preview=True,camera_day=work_date)
         with session() as conn:
             conn.execute('BEGIN')
-            return camera_preview_data(conn,work_date,upload['rows'])
+            return apply_camera_overrides(conn,camera_preview_data(conn,work_date,upload['rows']))
+
+    @app.post('/api/delivery-schedule/camera-correction')
+    def camera_correction(day:date=Form(...),name:str=Form(...,max_length=160),
+                          action:str=Form(...,max_length=16),venue:str=Form('',max_length=160),
+                          file:UploadFile=File(...),x_init_data:str=Header(None)):
+        user=get_user(x_init_data)
+        if not can_view_delivery_schedule(user) or user.get('role')!='admin':
+            raise HTTPException(403,'Корректировки доступны только администратору')
+        work_date=day.isoformat()
+        upload=read_upload(file,preview=True,camera_day=work_date)
+        rows=upload['rows']
+        name=plain(name)
+        if not name or not any(person_key(r['person'])==person_key(name) for r in rows):
+            raise HTTPException(404,'Сотрудник не найден в графике на эту дату')
+        venue=plain(venue)
+        if action=='venue' and venue not in {r['venue'] for r in rows if r['venue']}:
+            raise HTTPException(400,'Выберите площадку из графика на эту дату')
+        with transaction() as conn:
+            try:
+                save_camera_override(conn,work_date,name,action,venue)
+            except ValueError as exc:
+                raise HTTPException(400,str(exc)) from None
+            audit(conn,user,'Ручная корректировка сводки камер',work_date+' · '+name+' · '+action+(' · '+venue if action=='venue' else ''))
+            return apply_camera_overrides(conn,camera_preview_data(conn,work_date,rows))
 
     @app.post('/api/delivery-schedule/week-preview')
     def staff_preview(file:UploadFile=File(...),x_init_data:str=Header(None)):
