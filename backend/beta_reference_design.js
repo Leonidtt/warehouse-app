@@ -29,6 +29,8 @@ function installBetaReferenceDesign(){
     checkout:'<path d="M5 19 19 5M9 5h10v10"/>',
     repair:'<path d="m14 6 4 4 3-3a6 6 0 0 1-8 8l-7 7-4-4 7-7a6 6 0 0 1 8-8z"/>',
     history:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
+    issued:'<rect x="3" y="6" width="18" height="15" rx="2"/><path d="M3 10h18M8 3v4m8-4v4m-7 8 2 2 4-4"/>',
+    calendar:'<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M8 3v5m8-5v5M4 10h16m-11 5h2m3 0h2"/>',
     hand:'<path d="M8 12V5a2 2 0 0 1 4 0v5-6a2 2 0 0 1 4 0v8-5a2 2 0 0 1 4 0v7c0 4-2 7-7 7h-2c-3 0-6-2-7-5L2 11a2 2 0 0 1 4-1l2 2"/>',
     price:'<path d="M3 11V4h7l11 11-7 7L3 11Z"/><circle cx="7" cy="8" r="1"/>',
     wallet:'<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18"/><path d="M16 14h2"/>'
@@ -38,6 +40,11 @@ function installBetaReferenceDesign(){
   const activity=byId('main-activity');
   if(home&&activity){
     home.classList.add('r191-reference-home');
+    const styleHomeRow=(row,label,icon)=>{
+      row.classList.add('r191-home-row');
+      label.classList.add('r191-home-row-label');
+      row.prepend(svg(pict[icon]));
+    };
     const title=activity.querySelector('.beta-activity-title');
     if(title)title.setAttribute('aria-hidden','true');
     const quick=home.querySelector('.v18-quick');
@@ -48,13 +55,19 @@ function installBetaReferenceDesign(){
     }
     const historyButton=byId('main-history-btn');
     if(historyButton){
+      const label=make('span','','История');
+      historyButton.replaceChildren(label);
+      styleHomeRow(historyButton,label,'history');
       historyButton.classList.add('r191-history-shortcut');
       historyButton.setAttribute('aria-label','Открыть историю действий');
     }
     const mySection=byId('my-items-section');
     if(mySection){
       const details=make('details','r191-my-items-drawer');
-      details.append(make('summary','','Моя выданная техника'),mySection);
+      const summary=make('summary'),label=make('span','','Моя выданная техника');
+      summary.append(label);
+      styleHomeRow(summary,label,'issued');
+      details.append(summary,mySection);
       activity.append(details);
       const update=()=>details.classList.toggle('hidden',mySection.classList.contains('hidden'));
       update();
@@ -63,14 +76,16 @@ function installBetaReferenceDesign(){
     const actions=make('div','r191-home-actions');
     actions.id='r191-home-actions';
     activity.after(actions);
-    for(const id of ['held-list1857','buyout-list1856','boss-equipment-costs1859']){
-      const element=byId(id);
-      if(element)actions.append(element);
+    for(const [id,icon] of [['held-list1857','hand'],['buyout-list1856','checkout'],['boss-equipment-costs1859','price']]){
+      const panel=byId(id);
+      if(!panel)continue;
+      actions.append(panel);
+      const summary=panel.querySelector(':scope > summary'),label=summary?.querySelector('.r1856-title');
+      if(label)styleHomeRow(summary,label,icon);
     }
-    const icons={held:'hand',buyout:'checkout',prices:'price'};
-    for(const [id,k] of [['held-list1857','held'],['buyout-list1856','buyout'],['boss-equipment-costs1859','prices']]){
-      const panel=byId(id),summary=panel?.querySelector(':scope > summary');
-      if(summary&&!summary.querySelector('.r191-line-icon'))summary.prepend(svg(pict[icons[k]]));
+    for(const [id,icon] of [['staff-schedule-panel','calendar'],['camera-schedule-entry','camera']]){
+      const summary=byId(id)?.querySelector(':scope > summary'),label=summary?.querySelector('strong');
+      if(label)styleHomeRow(summary,label,icon);
     }
   }
 
