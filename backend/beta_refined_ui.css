@@ -434,51 +434,117 @@ body .floating-bar{bottom:calc(var(--beta-dock-clearance) + 10px)!important}
   #screen-main.r191-reference-home .r188-top .r182-stat span{font-size:10px}
 }
 
-.buyout-sheet-toolbar{
-  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
-  gap:8px 12px;margin-block:12px;
+#screen-buyout-sheet {
+  --buyout-due: #815012;
+  --buyout-paid: #236a4b;
 }
-#buyout-sheet-status{min-width:0;overflow-wrap:anywhere}
-#buyout-sheet-refresh{min-height:44px;max-width:100%;white-space:normal;flex-shrink:0}
-.buyout-sheet-list{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr));
-  align-items:start;gap:12px;list-style:none;margin:0;padding:0;
+:root[data-theme=dark] #screen-buyout-sheet {
+  --buyout-due: #f4ca91;
+  --buyout-paid: #a2dfbf;
 }
-.buyout-sheet-card{
-  min-width:0;display:grid;gap:12px;padding:14px;color:var(--text);
-  background:var(--card-bg);border:1px solid var(--border);border-radius:16px;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) #screen-buyout-sheet {
+    --buyout-due: #f4ca91;
+    --buyout-paid: #a2dfbf;
+  }
 }
-.buyout-card-heading{
-  display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;
-  gap:8px 12px;
+.buyout-sheet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px 9px;
+  margin-block: 8px;
 }
-.buyout-card-heading h2{
-  flex:1 1 8rem;min-width:0;font-size:1.125rem;font-weight:700;line-height:1.25;
-  letter-spacing:-.02em;margin:0;overflow-wrap:anywhere;white-space:pre-wrap;
+#buyout-sheet-status { min-width: 0; overflow-wrap: anywhere; }
+#buyout-sheet-refresh { min-height: 44px; max-width: 100%; white-space: normal; flex-shrink: 0; }
+.buyout-sheet-list { display: grid; gap: 8px; color: var(--text); }
+.buyout-balance-overview {
+  padding: 8px 10px;
+  border: 1px solid var(--beta-edge,var(--border));
+  border-radius: 12px;
+  background: var(--beta-panel-raised,var(--card-bg));
 }
-.buyout-card-amount,.buyout-card-details{
-  min-width:0;margin:0;
+.buyout-balance-overview-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
 }
-.buyout-card-amount{
-  max-width:100%;padding:7px 10px;border-radius:11px;
-  background:color-mix(in srgb,var(--primary) 8%,var(--card-bg));
+.buyout-balance-overview h2 { margin: 0; font-size: 13px; line-height: 1.3; }
+.buyout-balance-overview p { margin: 3px 0 0; }
+.buyout-balance-total { color: var(--buyout-due); font-size: 21px; font-variant-numeric: tabular-nums; }
+.buyout-balance-group { min-width: 0; }
+#screen-buyout-sheet .buyout-balance-heading {
+  margin: 0 2px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
 }
-.buyout-card-amount dd{
-  font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;
+.buyout-balance-rows {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid var(--beta-edge,var(--border));
+  border-radius: 12px;
+  background: var(--beta-panel,var(--card-bg));
 }
-.buyout-card-details{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(4rem,.5fr);gap:10px 14px;
+.buyout-balance-item + .buyout-balance-item { border-top: 1px solid var(--beta-edge,var(--border)); }
+.buyout-balance-summary {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,auto) 10px;
+  gap: 7px;
+  align-items: center;
+  min-height: 46px;
+  padding: 5px 8px;
+  cursor: pointer;
+  list-style: none;
 }
-.buyout-card-heading + .buyout-card-details{
-  border-top:1px solid var(--border);padding-top:10px;
+.buyout-balance-summary::-webkit-details-marker { display: none; }
+.buyout-balance-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.buyout-balance-identity,.buyout-balance-state { min-width: 0; overflow-wrap: anywhere; }
+.buyout-balance-name,.buyout-balance-meta { display: block; line-height: 1.25; }
+.buyout-balance-name { font-size: 13px; font-weight: 700; }
+.buyout-balance-meta { margin-top: 2px; color: var(--text-muted); font-size: 11px; }
+.buyout-balance-state { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.buyout-balance-due { color: var(--buyout-due); }
+.buyout-balance-paid { color: var(--buyout-paid); font-weight: 650; }
+.buyout-balance-chevron {
+  width: 6px;
+  height: 6px;
+  border: solid var(--text-muted);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
 }
-.buyout-card-field{min-width:0;overflow-wrap:anywhere}
-.buyout-card-details .buyout-card-field{grid-column:1/-1}
-.buyout-card-details :is(.buyout-field-model,.buyout-field-budget){grid-column:auto}
-.buyout-card-field dt{
-  color:var(--text-muted);font-size:.75rem;font-weight:550;line-height:1.35;
+.buyout-balance-record[open] .buyout-balance-chevron { transform: rotate(45deg); }
+.buyout-balance-progress {
+  display: block;
+  width: 100%;
+  min-width: 58px;
+  height: 4px;
+  margin-top: 3px;
+  overflow: hidden;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  background: var(--beta-edge,var(--border));
+  accent-color: var(--primary);
 }
-.buyout-card-field dd{
-  margin:3px 0 0;line-height:1.35;white-space:pre-wrap;
+.buyout-balance-progress::-webkit-progress-bar { background: transparent; }
+.buyout-balance-progress::-webkit-progress-value { border-radius: 4px; background: var(--primary); }
+.buyout-balance-progress::-moz-progress-bar { border-radius: 4px; background: var(--primary); }
+.buyout-balance-fields {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 6px 10px;
+  margin: 0;
+  padding: 8px;
+  border-top: 1px solid var(--beta-edge,var(--border));
+  background: var(--beta-panel-raised,var(--card-bg));
 }
-.buyout-field-budget dd{font-weight:650}
+.buyout-balance-field { min-width: 0; overflow-wrap: anywhere; }
+.buyout-balance-field dt { color: var(--text-muted); font-size: 11px; line-height: 1.3; }
+.buyout-balance-field dd { margin: 2px 0 0; font-size: 12px; line-height: 1.35; white-space: pre-wrap; }

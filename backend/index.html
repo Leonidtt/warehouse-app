@@ -336,7 +336,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
-    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261126-buyout-cards">
+    <link rel="stylesheet" href="/beta_refined_ui.css?v=20261127-buyout-balance">
 <link rel="stylesheet" href="/beta_reference_design.css?v=1">
 <script src="/frame-stock.js?v=2" defer></script>
 </head>
@@ -867,7 +867,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             <span id="buyout-sheet-status" class="meta" role="status"></span>
             <button class="secondary compact" id="buyout-sheet-refresh" type="button" onclick="loadBuyoutSheet(true)">Обновить копию</button>
         </div>
-        <ul class="buyout-sheet-list hidden" id="buyout-sheet-list" role="list" aria-label="Копия таблицы выкупа"></ul>
+        <div class="buyout-sheet-list hidden" id="buyout-sheet-list" role="region" aria-label="Копия таблицы выкупа"></div>
     </section>
     <div id="net-state" class="hidden">Нет интернета. Проверьте подключение.</div>
     <div class="bottom-nav hidden">
@@ -2703,6 +2703,16 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             loadBuyoutSheet();
         }
 
+        function buyoutSheetCents(value) {
+            const text=String(value??'').normalize('NFKC').trim()
+                .replace(/^(?:₽|RUB)\s*/iu,'')
+                .replace(/\s*(?:₽|руб(?:лей|ля)?\.?|р\.?|RUB)$/iu,'').trim();
+            const match=/^(\d+|\d{1,3}(?: \d{3})+)(?:[,.](\d{1,2}))?$/.exec(text);
+            if(!match)return null;
+            const cents=Number(match[1].replaceAll(' ',''))*100+Number((match[2]||'').padEnd(2,'0'));
+            return Number.isSafeInteger(cents)?cents:null;
+        }
+
         function renderBuyoutSheet(snapshot) {
             const status=$('buyout-sheet-status'),list=$('buyout-sheet-list');
             list.replaceChildren();
@@ -2711,7 +2721,6 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
                 status.textContent='Копия ещё не загружена';
                 return;
             }
-
             const [headers=[],...values]=snapshot.rows;
             const records=values.filter(row=>row.some(value=>String(value??'').trim()));
             const imported=new Date(snapshot.synced_at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'});
@@ -2719,59 +2728,124 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             if(!records.length)return;
 
             const width=records.reduce((count,row)=>Math.max(count,row.length),headers.length);
-            const columns=Array.from({length:width},(_,index)=>({
-                index,label:String(headers[index]??'').trim()
-            }));
-            const columnMatching=pattern=>columns.find(column=>pattern.test(column.label.normalize('NFKC').toLowerCase()));
-            const buyer=columnMatching(/^(?:фамилия|фио|ф\.?и\.?о\.?|покупатель|сотрудник)(?=$|[\s,/(])/u);
-            const amount=columnMatching(/^(?:сумма|стоимость|цена)(?=$|[\s,/(])/u);
-            const model=columnMatching(/^(?:модель|техника|оборудование)(?=$|[\s,/(])/u);
-            const budget=columnMatching(/^(?:бюджет|тх|кц)(?=$|[\s,/(])/u);
-            const details=columns.filter(column=>column!==buyer&&column!==amount);
+            const columns=Array.from({length:width},(_,index)=>{
+                const label=String(headers[index]??'').trim();
+                return {index,label,key:label.normalize('NFKC').toLowerCase().replaceAll('ё','е').replace(/\s+/gu,' ')};
+            });
+            const pick=pattern=>columns.find(column=>pattern.test(column.key));
+            const buyer=pick(/^(?:фамилия|фио|ф\.?и\.?о\.?|покупатель|сотрудник|кому)(?=$|[\s,/(])/u);
+            const model=pick(/^(?:модель|техника|оборудование|наименование|что выкупает)(?=$|[\s,/(])/u);
+            const budget=pick(/^(?:бюджет|тх|кц)(?=$|[\s,/(])/u);
+            const balance=pick(/^(?:остаток|осталось|долг|(?:сумма )?к оплате|не оплачено)(?=$|[\s,:/(])/u);
+            const paid=pick(/^(?:оплачено|внесено|уплачено|сумма оплат[ы]?|оплаченная сумма)(?=$|[\s,/(])/u);
+            const amount=columns.find(column=>column!==paid&&column!==balance&&
+                /^(?:сумма|стоимость|цена|полная сумма|общая сумма)(?=$|[\s,/(])/u.test(column.key));
+            const textFor=(record,column)=>String(record[column?.index]??'').trim();
+            const rubles=new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
+            const money=cents=>rubles.format(cents/100);
+            const element=(tag,className,text)=>{
+                const node=document.createElement(tag);
+                if(className)node.className=className;
+                if(text!==undefined)node.textContent=text;
+                return node;
+            };
+
+            const entries=records.map((record,index)=>{
+                const total=buyoutSheetCents(textFor(record,amount));
+                const enteredPaid=buyoutSheetCents(textFor(record,paid));
+                const rawBalance=textFor(record,balance);
+                const name=textFor(record,buyer);
+                const device=textFor(record,model);
+                const identity=(name||device||textFor(record,{index:0})).toLowerCase();
+                const isTotal=/^(?:всего|итого|подытог|итоги)(?=$|[\s:])/u.test(identity);
+                const remaining=rawBalance
+                    ? buyoutSheetCents(rawBalance)
+                    : total!==null&&enteredPaid!==null&&enteredPaid<=total?total-enteredPaid:null;
+                return {record,name,device,total,remaining,isTotal,index};
+            });
+            const positions=entries.filter(entry=>!entry.isTotal);
+            const active=positions.filter(entry=>entry.remaining>0)
+                .sort((a,b)=>b.remaining-a.remaining||a.index-b.index);
+            const closed=positions.filter(entry=>entry.remaining===0);
+            const unknown=positions.filter(entry=>entry.remaining===null);
+            const totals=entries.filter(entry=>entry.isTotal);
+            const confirmed=active.length+closed.length;
+            const outstanding=active.reduce((sum,entry)=>sum+entry.remaining,0);
+
+            const overview=element('section','buyout-balance-overview');
+            const overviewLine=element('div','buyout-balance-overview-line');
+            overviewLine.append(element('h2','','Осталось оплатить'),
+                element('strong','buyout-balance-total',confirmed?money(outstanding):'—'));
+            overview.append(overviewLine);
+            if(unknown.length){
+                overview.append(element('p','meta',confirmed?'По известным остаткам':'В таблице нет подтверждённых остатков'));
+            }
             const fragment=document.createDocumentFragment();
-            const textFor=(record,column)=>String(record[column.index]??'');
-            function field(record,column,kind='') {
-                const wrapper=document.createElement('div');
-                wrapper.className=kind?'buyout-card-field '+kind:'buyout-card-field';
-                const label=document.createElement('dt');
-                label.textContent=column.label||'Столбец '+(column.index+1);
-                const value=document.createElement('dd');
-                const text=textFor(record,column);
-                value.textContent=text.trim()?text:'—';
-                wrapper.append(label,value);
-                return wrapper;
+            fragment.append(overview);
+
+            function buildEntry(entry,kind){
+                const item=element('li','buyout-balance-item');
+                const record=element('details','buyout-balance-record');
+                const summary=element('summary','buyout-balance-summary');
+                const identity=element('div','buyout-balance-identity');
+                const first=textFor(entry.record,columns[0]);
+                identity.append(element('strong','buyout-balance-name',
+                    entry.name||entry.device||first||'Строка '+(entry.index+2)));
+                const context=[entry.name&&entry.device,textFor(entry.record,budget)].filter(Boolean).join(' · ');
+                if(context)identity.append(element('span','buyout-balance-meta',context));
+                const state=element('div','buyout-balance-state');
+                if(kind==='active'){
+                    state.append(element('strong','buyout-balance-due',money(entry.remaining)));
+                    if(entry.total>0&&entry.remaining<=entry.total){
+                        const percent=Math.round(100*(entry.total-entry.remaining)/entry.total);
+                        const progress=element('progress','buyout-balance-progress');
+                        progress.max=entry.total;
+                        progress.value=entry.total-entry.remaining;
+                        progress.setAttribute('aria-label','Оплачено '+percent+'%');
+                        state.append(progress);
+                    }
+                }else if(kind==='closed'){
+                    state.append(element('span','buyout-balance-paid','Закрыто'));
+                }else if(kind==='unknown'){
+                    state.append(element('span','buyout-balance-meta','—'));
+                }else if(entry.total!==null){
+                    state.append(element('strong','buyout-balance-source-total',money(entry.total)));
+                }
+                summary.append(identity,state,element('span','buyout-balance-chevron'));
+                const fields=element('dl','buyout-balance-fields');
+                for(const column of columns){
+                    if(column===buyer&&entry.name)continue;
+                    const value=textFor(entry.record,column);
+                    if(!value&&!column.label)continue;
+                    const field=element('div','buyout-balance-field');
+                    field.append(element('dt','',column.label||'Столбец '+(column.index+1)),
+                        element('dd','',value||'—'));
+                    fields.append(field);
+                }
+                if(!textFor(entry.record,balance)&&entry.remaining!==null&&!entry.isTotal){
+                    const field=element('div','buyout-balance-field');
+                    field.append(element('dt','','Остаток по сумме и оплате'),element('dd','',money(entry.remaining)));
+                    fields.append(field);
+                }
+                record.append(summary,fields);
+                item.append(record);
+                return item;
+            }
+            for(const [kind,label,group] of [
+                ['active','На оплате',active],
+                ['closed','Закрыто',closed],
+                ['unknown','Уточнить остаток',unknown],
+                ['source-total','Итоги из таблицы',totals],
+            ]){
+                if(!group.length)continue;
+                const section=element('section','buyout-balance-group');
+                section.append(element('h2','buyout-balance-heading',label));
+                const recordsList=element('ul','buyout-balance-rows');
+                for(const entry of group)recordsList.append(buildEntry(entry,kind));
+                section.append(recordsList);
+                fragment.append(section);
             }
 
-            for(const record of records){
-                const card=document.createElement('li');
-                card.className='buyout-sheet-card';
-                const heading=document.createElement('div');
-                heading.className='buyout-card-heading';
-                const name=buyer&&textFor(record,buyer);
-                if(name?.trim()){
-                    const title=document.createElement('h2');
-                    title.textContent=name;
-                    heading.append(title);
-                }
-                if(amount&&(amount.label||textFor(record,amount).trim())){
-                    const total=document.createElement('dl');
-                    total.className='buyout-card-amount';
-                    total.append(field(record,amount));
-                    heading.append(total);
-                }
-                if(heading.childElementCount)card.append(heading);
-
-                const fields=document.createElement('dl');
-                fields.className='buyout-card-details';
-                const shown=buyer&&!name?.trim()?[buyer,...details]:details;
-                for(const column of shown){
-                    if(!column.label&&!textFor(record,column).trim())continue;
-                    const kind=column===model?'buyout-field-model':column===budget?'buyout-field-budget':'';
-                    fields.append(field(record,column,kind));
-                }
-                if(fields.childElementCount)card.append(fields);
-                fragment.append(card);
-            }
             list.setAttribute('aria-label',snapshot.title||'Копия таблицы выкупа');
             list.append(fragment);
             list.classList.remove('hidden');
