@@ -584,3 +584,16 @@
 @media (max-width: 355px) {
   .camera-schedule-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Manual, date-specific report corrections. */
+.camera-exclusion-pill{display:inline-block;margin:10px 0 0!important;padding:6px 10px;border:1px solid rgba(190,218,250,.28);border-radius:20px;background:rgba(120,162,215,.16);color:#e6f0fd!important;font-weight:600;overflow-wrap:anywhere}
+.camera-correction-box{margin:10px 0;border:1px solid var(--beta-edge,var(--border));border-radius:16px;background:var(--beta-panel,var(--card-bg));overflow:hidden}
+.camera-correction-box>summary{cursor:pointer;padding:12px;min-height:44px;box-sizing:border-box;font-size:13px;font-weight:650;line-height:1.5}
+.camera-correction-body{display:grid;gap:8px;padding:0 12px 12px;min-width:0}
+.camera-correction-body select,.camera-correction-body button{width:100%;min-width:0;min-height:44px;margin:0;font-size:13px}
+.camera-correction-body .hidden{display:none!important}
+.camera-excluded-name{margin:0;padding:8px;border-radius:10px;background:var(--beta-panel-raised,var(--card-bg));color:var(--text);font-size:13px;overflow-wrap:anywhere}
+.camera-schedule-card{border:1px solid var(--beta-edge,var(--border));border-radius:20px}
+.camera-schedule-stat{border-radius:14px}
+.camera-schedule-table-frame{border-radius:14px}
+.camera-schedule-review{min-height:44px;box-sizing:border-box;border-radius:14px}

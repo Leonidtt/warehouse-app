@@ -192,6 +192,8 @@ function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFi
     icon.setAttribute('aria-hidden','true');
     icon.append(el('span'));
     hero.append(shiftDate,el('h3','','Фотоаппараты'),el('p','','Выдача и доставка по площадкам'),icon);
+    const exclusions=report.excluded||[];
+    if(exclusions.length)hero.append(el('p','camera-exclusion-pill','Исключения: '+exclusions.map(p=>p.name).join(', ')));
 
     const body=el('div','camera-schedule-body');
     const summary=el('div','camera-schedule-summary');
@@ -232,7 +234,7 @@ function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFi
           if(people.length){
             const cellContent=el('div','camera-schedule-people');
             cellContent.append(el('span','camera-schedule-badge',people.length),
-              el('span','',people.map(person=>person.name).join(', ')));
+              el('span','',people.map(person=>person.name+(person.manual?' *':'')).join(', ')));
             cell.append(cellContent);
           }else{
             cell.textContent='—';
@@ -257,7 +259,8 @@ function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFi
         body.append(note);
       }
     }
-    body.append(el('p','camera-schedule-freshness','По открытым выдачам на момент сверки'));
+    body.append(el('p','camera-schedule-freshness','По открытым выдачам Беты на момент сверки'));
+    if((report.corrections||[]).length)body.append(el('p','camera-schedule-freshness','* Ручная корректировка отчёта, без изменения выдачи'));
     card.append(hero,body);
     result.replaceChildren(card);
     if(report.unmatched.length){
@@ -268,6 +271,49 @@ function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFi
       details.append(list);
       result.append(details);
     }
+    const corrections=el('details','camera-correction-box');
+    corrections.append(el('summary','','Исключения · '+exclusions.length+' / Корректировки · '+(report.corrections||[]).length));
+    const correctionBody=el('div','camera-correction-body');
+    for(const person of exclusions)correctionBody.append(el('p','camera-excluded-name',person.name+' — не учитывать'+(person.venue?' · '+person.venue:'')));
+    if(currentUser?.role==='admin'&&!currentUser?.preview_role){
+      const candidates=new Set([...report.venues.flatMap(v=>[...v.deliver,...v.held]).map(p=>p.name),...report.unmatched.map(p=>p.name),...exclusions.map(p=>p.name)]);
+      const name=el('select'),action=el('select'),venue=el('select');
+      name.setAttribute('aria-label','Сотрудник');
+      action.setAttribute('aria-label','Корректировка');
+      venue.setAttribute('aria-label','Новая площадка');
+      name.add(new Option('Выберите сотрудника',''));
+      [...candidates].sort((a,b)=>a.localeCompare(b,'ru')).forEach(n=>name.add(new Option(n,n)));
+      for(const [v,t] of [['exclude','Не учитывать на эту дату'],['held','Камера уже на руках'],['delivery','Нужно привезти камеру'],['venue','Изменить площадку'],['reset','Сбросить ручные изменения']])action.add(new Option(t,v));
+      venue.add(new Option('Выберите площадку',''));
+      for(const v of report.venues)venue.add(new Option(v.name,v.name));
+      for(const p of exclusions)if(p.venue&&!Array.from(venue.options).some(o=>o.value===p.venue))venue.add(new Option(p.venue,p.venue));
+      venue.classList.add('hidden');
+      const save=el('button','secondary','Применить');
+      save.type='button';
+      save.disabled=true;
+      const update=()=>{venue.classList.toggle('hidden',action.value!=='venue');save.disabled=comparing||!name.value||(action.value==='venue'&&!venue.value);};
+      name.onchange=action.onchange=venue.onchange=update;
+      save.onclick=async()=>{
+        if(comparing||!permitted()||!workbook||day.value!==report.date||!name.value)return;
+        const req=++revision;
+        const data=new FormData();
+        data.append('day',report.date);data.append('file',workbook);
+        data.append('name',name.value);data.append('action',action.value);data.append('venue',venue.value);
+        comparing=true;updateControls();update();
+        status.textContent='Сохраняем корректировку…';
+        try{
+          const fresh=await api('/api/delivery-schedule/camera-correction',{method:'POST',body:data});
+          if(req!==revision||!permitted())return;
+          renderCameraSchedule(result,fresh);
+          result.querySelector('.camera-correction-box').open=true;
+          status.textContent='Корректировка сохранена на выбранную дату.';
+        }catch(e){if(req===revision)status.textContent=e.message;}
+        finally{if(req===revision){comparing=false;updateControls();update();}}
+      };
+      correctionBody.append(el('p','delivery-muted','Изменения действуют только на выбранную дату и не изменяют складские выдачи.'),name,action,venue,save);
+    }
+    corrections.append(correctionBody);
+    result.append(corrections);
     const copy=el('button','secondary','Скопировать сводку');
     copy.type='button';
     copy.onclick=()=>{
@@ -282,6 +328,8 @@ function installCameraSchedule({el,localDate,offset,chooseDay,permitted,chooseFi
         lines.push('','Требуют проверки');
         for(const person of report.unmatched) lines.push(person.name+' — '+person.reason);
       }
+      if(exclusions.length)lines.push('','Исключены: '+exclusions.map(p=>p.name).join(', '));
+      if((report.corrections||[]).length)lines.push('','Ручные корректировки: '+report.corrections.map(p=>p.name).join(', '));
       return copyText(lines.join('\n'));
     };
     result.append(copy);
