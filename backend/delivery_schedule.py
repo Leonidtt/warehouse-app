@@ -568,19 +568,18 @@ def freeze_review_snapshot(conn):
 
 
 def can_view_delivery_schedule(user):
-    roles = ('admin', 'boss') if FROZEN_REVIEW_DATE else ('admin',)
-    return bool(user.get('is_registered') and user.get('role') in roles and not user.get('preview_role'))
+    return bool(user.get('is_registered') and user.get('role') == 'admin' and not user.get('preview_role'))
 
 
 def register_delivery_schedule(app,get_user,transaction,audit,session):
-    def require_reader(init_data):
-        if not can_view_delivery_schedule(get_user(init_data)):
+    def require_admin(init_data):
+        user=get_user(init_data)
+        if not can_view_delivery_schedule(user):
             raise HTTPException(403,'Недоступно для этой роли')
+        return user
 
     def require_editor(init_data):
-        user=get_user(init_data)
-        if not user.get('is_registered') or user.get('role')!='admin':
-            raise HTTPException(403,'Недоступно для этой роли')
+        user=require_admin(init_data)
         if FROZEN_REVIEW_DATE:
             raise HTTPException(403,'График заморожен до согласования')
         return user
@@ -595,7 +594,7 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
 
     @app.get('/api/delivery-schedule')
     def delivery_on_date(work_date:str=Query(alias='date'),x_init_data:str=Header(None)):
-        require_reader(x_init_data)
+        require_admin(x_init_data)
         with transaction() as conn:
             if FROZEN_REVIEW_DATE:
                 return review_snapshot(conn,'delivery_json')
@@ -608,7 +607,7 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
 
     @app.get('/api/delivery-schedule/week')
     def staff_week(work_date:date=Query(alias='date'),x_init_data:str=Header(None)):
-        require_reader(x_init_data)
+        require_admin(x_init_data)
         with transaction() as conn:
             if FROZEN_REVIEW_DATE:
                 return review_snapshot(conn,'staff_json')
@@ -647,7 +646,7 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
 
     @app.post('/api/delivery-schedule/camera-preview')
     def camera_preview(day:date=Form(...),file:UploadFile=File(...),x_init_data:str=Header(None)):
-        require_reader(x_init_data)
+        require_admin(x_init_data)
         work_date=day.isoformat()
         upload=read_upload(file,preview=True,camera_day=work_date)
         with session() as conn:
@@ -658,9 +657,7 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
     def camera_correction(day:date=Form(...),name:str=Form(...,max_length=160),
                           action:str=Form(...,max_length=16),venue:str=Form('',max_length=160),
                           file:UploadFile=File(...),x_init_data:str=Header(None)):
-        user=get_user(x_init_data)
-        if not can_view_delivery_schedule(user) or user.get('role')!='admin':
-            raise HTTPException(403,'Корректировки доступны только администратору')
+        user=require_admin(x_init_data)
         work_date=day.isoformat()
         upload=read_upload(file,preview=True,camera_day=work_date)
         rows=upload['rows']
@@ -680,7 +677,7 @@ def register_delivery_schedule(app,get_user,transaction,audit,session):
 
     @app.post('/api/delivery-schedule/week-preview')
     def staff_preview(file:UploadFile=File(...),x_init_data:str=Header(None)):
-        require_reader(x_init_data)
+        require_admin(x_init_data)
         return read_upload(file,preview=True)
 
     @app.post('/api/delivery-schedule/upload')
