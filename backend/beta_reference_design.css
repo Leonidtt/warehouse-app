@@ -797,3 +797,8 @@ body #r191-stock-catalog .r191-stock-item .r1857-state{min-width:0;max-width:65%
 #screen-th .r193-vessel-delivery-field{display:grid;gap:3px;min-width:0}
 #screen-th .r193-vessel-delivery-field>strong{font-size:11px;line-height:1.4;color:var(--text-muted);font-weight:650;overflow-wrap:anywhere}
 #screen-th .r193-vessel-delivery-field>.r182-event-note{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Clean Stock landing; retain access via existing Settings groups. */
+#r191-stock-catalog>.r191-stock-rooms[hidden]{display:none!important}
+#locations-list .r194-open-room{display:flex;align-items:center;min-height:44px;flex:1;min-width:0;color:var(--text);text-decoration:none;overflow-wrap:anywhere}
+#locations-list .r194-open-room:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:8px}
