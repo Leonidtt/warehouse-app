@@ -162,13 +162,13 @@ function installBetaReferenceDesign(){
     rooms.open=true;
     rooms.style.display='';
     const sectionDefs=[['Склад 11','warehouse'],['Офис 7','office'],['Техника','camera'],['Рамки','frame'],['Винил','vinyl'],['Фотобумага','paper']];
-    const roomPict={warehouse:'<path d="M2 21V8l10-5 10 5v13M6 21V10h12v11M6 14h12M6 18h12"/>',office:'<path d="M4 21V3h16v18M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2M10 21v-3h4v3"/>',camera:pict.camera,frame:'<rect x="2" y="3" width="20" height="18" rx="2"/><rect x="5" y="6" width="14" height="12" rx="1"/><path d="m5 16 5-5 4 4 3-2 2 2"/>',vinyl:'<ellipse cx="7" cy="12" rx="5" ry="8"/><path d="M7 4h10a5 8 0 0 1 0 16H7"/><ellipse cx="7" cy="12" rx="2" ry="4"/>',paper:'<path d="m2 8 10-5 10 5-10 5-10-5zm0 4 10 5 10-5M2 16l10 5 10-5"/>'};
+    const oldRoomIcon={warehouse:'consumable',office:'accessory',camera:'camera',frame:'accessory',vinyl:'consumable',paper:'printer'};
     for(const [name,kind] of sectionDefs){
       const button=make('button','r191-category');
       button.type='button';button.classList.add('r192-room-tile');button.dataset.roomKind=kind;
       button.append(make('span','r192-room-title',name));
       const art=make('span','r192-room-art');art.setAttribute('aria-hidden','true');
-      if(kind!=='camera')art.append(svg(roomPict[kind]));
+      art.append(svg(pict[oldRoomIcon[kind]]));
       button.append(art);
       button.onclick=async()=>{
         if(currentUser?.role!=='admin')return;
