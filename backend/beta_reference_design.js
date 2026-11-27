@@ -146,20 +146,20 @@ function installBetaReferenceDesign(){
     rows.setAttribute('aria-live','polite');
     const rooms=make('details','r191-stock-rooms');
     const roomSummary=make('summary');
-    roomSummary.append(svg(pict.consumable),make('span','','Помещения и учёт'),svg(pict.chevron));
+    roomSummary.append(svg(pict.consumable),make('span','','Все помещения и QR-этикетки'),svg(pict.chevron));
     rooms.append(roomSummary);
     const actions=stock.querySelector('.warehouse-room-actions');
     const low=byId('low-stock-banner');
     const roomTitle=stock.querySelector('.r1851-rooms-label');
     const roomList=byId('rooms-list');
-    for(const element of [actions,low,roomTitle,roomList])if(element)rooms.append(element);
+    for(const element of [actions,roomTitle,roomList])if(element)rooms.append(element);
     const root=make('section','r191-stock-main');
     root.id='r191-stock-catalog';
     const sections=make('div','r191-stock-sections');
     sections.classList.add('r192-room-grid');
     const catalog=make('div','hidden');
     catalog.append(search,categories,counters,toolbar,filterBox,rows);
-    rooms.open=true;
+    rooms.open=false;
     rooms.style.display='';
     const sectionDefs=[['Склад 11','warehouse'],['Офис 7','office'],['Техника','camera'],['Рамки','frame'],['Винил','vinyl'],['Фотобумага','paper']];
     const oldRoomIcon={warehouse:'consumable',office:'accessory',camera:'camera',frame:'accessory',vinyl:'consumable',paper:'printer'};
@@ -184,8 +184,14 @@ function installBetaReferenceDesign(){
       };
       sections.append(button);
     }
-    if(add){root.append(add);add.classList.add('r192-stock-add');}
-    root.append(sections,rooms,catalog);
+    if(add){root.append(add);add.classList.add('r192-stock-add');add.textContent='Добавить товар';}
+    root.append(sections);
+    if(low){
+      low.classList.add('r193-stock-statistics');
+      low.append(rooms);
+      root.append(low);
+    }else{root.append(rooms);}
+    root.append(catalog);
     header.after(root);
     for(const [key,label]of options){
       const button=make('button','r191-category');

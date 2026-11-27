@@ -117,7 +117,10 @@ function installRelease182(){
         daily.append(metric);
       }
     }
-    low.className='card r182-consumables r182-disclosure';
+    const stockTools=low.querySelector('.r191-stock-rooms');
+    const stockWasOpen=low.open;
+    low.className='card r182-consumables r182-disclosure'+(stockTools?' r193-stock-statistics':'');
+    low.open=stockWasOpen;
     const stockTitle=el('summary');
     stockTitle.append(el('span','','Статистика расходников'),icon('right'));
     const stockBody=el('div','r182-consumables-body');
@@ -134,6 +137,7 @@ function installRelease182(){
       row.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));
       stockBody.append(row);
     }
+    if(stockTools)stockBody.append(stockTools);
     filterItems();
   }
   let pendingOverview=null,lastOverview=0;

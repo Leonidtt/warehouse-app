@@ -709,3 +709,78 @@
  #screen-main.r191-reference-home .r182-overview .r188-bottom .r182-stat strong{font-size:17px}
  #screen-main.r191-reference-home .r182-overview .r188-bottom .r182-stat span{font-size:10px}
 }
+
+/* Stable compact equipment rows: use a full-width text column in every list.
+   Scope to list cards only: the four dashboard illustrations are untouched. */
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact{
+ box-sizing:border-box;width:100%;max-width:none;min-width:0;align-self:stretch;justify-self:stretch;
+ justify-content:flex-start!important;text-align:left;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r184-item-main{
+ display:flex;align-items:center;justify-content:flex-start!important;
+ width:100%;max-width:100%;min-width:0;flex:1 1 0%;gap:8px;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r184-thumb{
+ width:40px;height:40px;flex:0 0 40px;margin:0;border-radius:8px;align-self:center;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r184-item-info{
+ display:flex;flex-direction:column;justify-content:center;align-items:stretch;
+ flex:1 1 0%;width:0;min-width:0;max-width:100%;gap:2px;text-align:left;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-top{
+ display:flex;align-items:flex-start;justify-content:space-between;gap:6px;width:100%;min-width:0;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-top .name{
+ flex:1 1 0%;min-width:0;margin:0!important;font-size:13px;line-height:17px;font-weight:650;
+ white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-state{
+ display:flex;align-items:baseline;justify-content:flex-end;gap:3px;
+ flex:0 1 auto;max-width:65%;min-width:0;text-align:right;font-size:10px;line-height:14px;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-state-label{
+ min-width:0;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere;text-overflow:clip;
+}
+body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-summary{
+ width:100%;min-width:0;height:auto;max-height:none;line-height:15px;font-size:11.5px;
+ white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;
+}
+#room-items.r190-room-list{align-items:stretch}
+body #room-items.r190-room-list>.r1857-compact{min-height:54px;padding:6px 8px!important}
+body #room-items.r190-room-list>.room-item-card{
+ display:grid;grid-template-columns:40px minmax(0,1fr) 23px 10px;
+ width:100%;max-width:none;min-width:0;align-self:stretch;gap:8px;
+ padding:6px 8px!important;margin:0!important;border:0;border-bottom:1px solid var(--ref-line);
+ border-radius:0;background:transparent;box-shadow:none;
+}
+body #room-items.r190-room-list>.room-item-card:last-child{border-bottom:0}
+body #room-items.r190-room-list>.room-item-card .room-item-media{
+ grid-column:1;grid-row:1;width:40px;height:40px;
+}
+body #room-items.r190-room-list>.room-item-card .room-item-media .r184-thumb{width:40px;height:40px;flex-basis:40px}
+body #room-items.r190-room-list>.room-item-card .room-item-content{grid-column:2;grid-row:1;min-width:0;overflow-wrap:anywhere}
+body #room-items.r190-room-list>.room-item-card .room-item-checkbox{grid-column:3;grid-row:1;position:static}
+body #room-items.r190-room-list>.room-item-card .room-item-tail{grid-column:4;grid-row:1}
+body #room-items.r190-room-list>.room-item-card.beta-fixed-office .room-item-content{grid-column:2 / 4}
+body #my-items-list .r190-my-row .r184-item-main{width:100%;min-width:0}
+body #r191-stock-catalog .r191-stock-item .r1857-state{min-width:0;max-width:65%}
+@media(max-width:355px){
+ body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-top{flex-wrap:wrap}
+ body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-state{max-width:100%;margin-left:auto}
+}
+/* Three stock landing blocks. Extra rooms and QR remain in the statistics disclosure. */
+#r191-stock-catalog>.r193-stock-statistics{
+ margin:0!important;padding:0!important;min-width:0;
+ background:var(--beta-panel);border:1px solid var(--beta-edge);
+ border-radius:20px;box-shadow:inset 0 1px 0 var(--beta-rim),var(--beta-panel-shadow);
+}
+#r191-stock-catalog>.r193-stock-statistics>summary{
+ min-height:48px;padding:11px 13px;box-sizing:border-box;font-size:14px;font-weight:680;
+}
+#r191-stock-catalog .r193-stock-statistics .r182-consumables-body{padding:0 12px 12px}
+#r191-stock-catalog .r193-stock-statistics .r182-consumable-metric{
+ min-height:52px;border-radius:13px;background:var(--beta-panel-raised);border-color:var(--beta-edge);
+}
+#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms{margin:8px 0 0;border-radius:14px}
+#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms>summary{min-height:44px}
+#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms #rooms-list{padding:8px!important}
