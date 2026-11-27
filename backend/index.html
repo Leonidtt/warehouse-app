@@ -192,7 +192,7 @@
 .calendar-grid17{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:12px 0;text-align:center}.calendar-grid17 button{font-size:12px;padding:8px 2px;margin:0;box-shadow:none}.calendar-grid17 span{font-size:12px;color:var(--text-muted)}
 </style>
     <link rel="stylesheet" href="/warehouse-v18.css?v=1904">
-    <script src="/warehouse-v18.js?v=20261126-buyout"></script>
+    <script src="/warehouse-v18.js?v=20261128-stock9"></script>
     <link rel="stylesheet" href="/release-v182.css?v=1875">
     <script src="/release-v182.js?v=20261128-stock8"></script>
     <link rel="stylesheet" href="/release-v183.css">
@@ -205,7 +205,7 @@
     <script src="/delivery_schedule.js?v=20261128-ui1"></script>
     <link rel="stylesheet" href="/catalog_refinements.css?v=5">
     <script src="/catalog_refinements.js?v=5"></script>
-<script src="/beta_reference_design.js?v=20261128-stock8"></script>
+<script src="/beta_reference_design.js?v=20261128-stock9"></script>
 <style>
 .screen .card{padding:10px;border-radius:12px;margin-bottom:6px;box-shadow:none}
 #my-items-list .my-item-card{padding:7px 9px;margin-bottom:5px;border-radius:9px;gap:8px;box-shadow:none}
@@ -337,7 +337,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
 </style>
     <link rel="stylesheet" href="/beta_appearance.css?v=1">
     <link rel="stylesheet" href="/beta_refined_ui.css?v=20261128-rx1hs">
-<link rel="stylesheet" href="/beta_reference_design.css?v=20261128-lists8">
+<link rel="stylesheet" href="/beta_reference_design.css?v=20261128-lists9">
 <script src="/frame-stock.js?v=2" defer></script>
 </head>
 <body>
@@ -1232,7 +1232,7 @@ body.pwa-mode .sticky-header { top: env(safe-area-inset-top); }
             addLocation.value = locations.some(location => String(location.id) === selected) ? selected : '';
             document.getElementById("filter-location").innerHTML = `<option value="">Все комнаты</option>` + locations.map(l => `<option value="${l.id}">${escapeOwnerText(l.name)}</option>`).join("");
             const list = document.getElementById("locations-list"); 
-            if (list) list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><div><b>${escapeOwnerText(l.name)}</b></div><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, ${jsArg17(l.name)})">✏️</button></div>`).join(""); 
+            if (list) list.innerHTML = locations.map(l => `<div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;"><a class="r194-open-room" href="#" onclick="if(currentUser?.role==='admin')openRoom(${l.id}, ${jsArg17(l.name)});return false"><b>${escapeOwnerText(l.name)}</b></a><button class="secondary" style="width:auto; padding:8px 12px; margin:0; font-size:12px;" onclick="renameLocation(${l.id}, ${jsArg17(l.name)})">✏️</button></div>`).join(""); 
             const invSelect = document.getElementById("inv-location");
             if (invSelect) invSelect.innerHTML = locations.map(l => `<option value="${l.id}">${escapeOwnerText(l.name)}</option>`).join("");
         }

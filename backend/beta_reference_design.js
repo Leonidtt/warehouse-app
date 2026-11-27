@@ -160,7 +160,8 @@ function installBetaReferenceDesign(){
     const catalog=make('div','hidden');
     catalog.append(search,categories,counters,toolbar,filterBox,rows);
     rooms.open=false;
-    rooms.style.display='';
+    rooms.hidden=true;
+    rooms.style.display='none';
     const sectionDefs=[['Склад 11','warehouse'],['Офис 7','office'],['Техника','camera'],['Рамки','frame'],['Винил','vinyl'],['Фотобумага','paper']];
     const oldRoomIcon={warehouse:'consumable',office:'accessory',camera:'camera',frame:'accessory',vinyl:'consumable',paper:'printer'};
     for(const [name,kind] of sectionDefs){
@@ -191,9 +192,9 @@ function installBetaReferenceDesign(){
       low.open=true;
       stockStatistics.append(low);
     }
-    stockStatistics.append(rooms);
     root.append(stockStatistics);
-    root.append(catalog);
+    // Keep the existing room list and launch targets mounted, but not on the visible Stock screen.
+    root.append(rooms,catalog);
     header.after(root);
     for(const [key,label]of options){
       const button=make('button','r191-category');
