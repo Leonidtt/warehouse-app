@@ -186,11 +186,13 @@ function installBetaReferenceDesign(){
     }
     if(add){root.append(add);add.classList.add('r192-stock-add');add.textContent='Добавить товар';}
     root.append(sections);
+    const stockStatistics=make('section','r193-stock-statistics');
     if(low){
-      low.classList.add('r193-stock-statistics');
-      low.append(rooms);
-      root.append(low);
-    }else{root.append(rooms);}
+      low.open=true;
+      stockStatistics.append(low);
+    }
+    stockStatistics.append(rooms);
+    root.append(stockStatistics);
     root.append(catalog);
     header.after(root);
     for(const [key,label]of options){

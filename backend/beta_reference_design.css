@@ -784,3 +784,16 @@ body #r191-stock-catalog .r191-stock-item .r1857-state{min-width:0;max-width:65%
 #r191-stock-catalog .r193-stock-statistics .r191-stock-rooms{margin:8px 0 0;border-radius:14px}
 #r191-stock-catalog .r193-stock-statistics .r191-stock-rooms>summary{min-height:44px}
 #r191-stock-catalog .r193-stock-statistics .r191-stock-rooms #rooms-list{padding:8px!important}
+
+/* Stable statistics wrapper; room tools remain accessible even when overview refresh fails. */
+#r191-stock-catalog>.r193-stock-statistics{display:grid;gap:8px;padding:8px!important}
+#r191-stock-catalog>.r193-stock-statistics>#low-stock-banner{margin:0!important;border:0;box-shadow:none;background:transparent}
+#r191-stock-catalog>.r193-stock-statistics>#low-stock-banner>summary{min-height:44px;padding:8px 5px;font-size:14px;font-weight:680}
+#r191-stock-catalog>.r193-stock-statistics .r182-consumables-body{padding:0 4px 4px}
+#screen-rooms.r191-reference-stock #r191-stock-catalog>.r192-stock-add{width:100%!important;min-height:48px!important;border-radius:16px!important;background:var(--beta-accent-fill)!important;color:#fff!important;font-size:14px!important}
+#screen-th .r193-vessel-delivery{display:grid;gap:7px;min-width:0;padding:9px 11px;border-radius:12px;background:var(--beta-panel-raised)}
+#screen-th .r193-vessel-delivery.r182-event-shortage{background:color-mix(in srgb,var(--r182-red,var(--danger)) 8%,var(--beta-panel));border-left:2px solid var(--r182-red,var(--danger))}
+#screen-th .r193-vessel-delivery>.r182-event-status{justify-self:start;max-width:100%;text-align:left}
+#screen-th .r193-vessel-delivery-field{display:grid;gap:3px;min-width:0}
+#screen-th .r193-vessel-delivery-field>strong{font-size:11px;line-height:1.4;color:var(--text-muted);font-weight:650;overflow-wrap:anywhere}
+#screen-th .r193-vessel-delivery-field>.r182-event-note{white-space:pre-wrap;overflow-wrap:anywhere}

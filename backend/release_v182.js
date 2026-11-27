@@ -117,10 +117,7 @@ function installRelease182(){
         daily.append(metric);
       }
     }
-    const stockTools=low.querySelector('.r191-stock-rooms');
-    const stockWasOpen=low.open;
-    low.className='card r182-consumables r182-disclosure'+(stockTools?' r193-stock-statistics':'');
-    low.open=stockWasOpen;
+    low.className='card r182-consumables r182-disclosure';
     const stockTitle=el('summary');
     stockTitle.append(el('span','','Статистика расходников'),icon('right'));
     const stockBody=el('div','r182-consumables-body');
@@ -137,7 +134,6 @@ function installRelease182(){
       row.append(el('span','',item.name),el('b','',countNum(item.stock)+' / '+countNum(item.minimum)+' '+item.unit),icon('right'));
       stockBody.append(row);
     }
-    if(stockTools)stockBody.append(stockTools);
     filterItems();
   }
   let pendingOverview=null,lastOverview=0;
@@ -170,7 +166,11 @@ function installRelease182(){
   function eventRows(key){let raw=key==='site'?cachedPlatforms:cachedTH;return raw.filter(r=>r&&typeof r==='object').map(row=>{
     if(key==='site')return {name:String(row['Площадка']||'—'),date:String(row['дата']||row['Дата']||''),status:String(row['чего не хватает']||''),fields:[['Администратор',row['админ']],['Счётчик',row['счетчик']],['Запас',row['запас']]].filter(x=>x[1]!==undefined&&x[1]!==''&&x[1]!==null)};
     const askKey=Object.keys(row).find(k=>/просят|нужно|статус|не хватает/i.test(k));const fallback=Object.entries(row).find(([k,v])=>/хватает|недостат/i.test(String(v)))?.[0];const statusKey=askKey||fallback;
-    return {name:String(row['Название']||Object.values(row)[0]||'—'),date:String(row['Дата']||row['дата']||''),status:String(statusKey?row[statusKey]||'':''),fields:Object.entries(row).filter(([k,v])=>!['Название','Дата','дата',statusKey].includes(k)&&v!==''&&v!=null)};
+    const deliveryKey=k=>/привез|достав|просят|не хватает|коммент|примечан|что нужно/i.test(k);
+    const entries=Object.entries(row).filter(([k,v])=>!['Название','Дата','дата'].includes(k)&&v!==''&&v!=null);
+    const deliveryFields=entries.filter(([k])=>deliveryKey(k));
+    const fields=entries.filter(([k])=>k!==statusKey&&!deliveryKey(k));
+    return {name:String(row['Название']||Object.values(row)[0]||'—'),date:String(row['Дата']||row['дата']||''),status:String(statusKey?row[statusKey]||'':''),statusKey,deliveryFields,fields};
   }).map(r=>({...r,state:classify(r.status)})).sort((a,b)=>({issue:0,unknown:1,ok:2}[a.state]-{issue:0,unknown:1,ok:2}[b.state])||dateKey(b.date)-dateKey(a.date));}
   function eventValue(key,label,value){
     const node=el('b','r182-event-value',value);
@@ -189,14 +189,29 @@ function installRelease182(){
     const title=el('div','r182-event-title');
     title.append(el('h3','',row.name));
     if(row.date)title.append(el('span','r182-event-date',row.date));
-    const bring=key==='site'&&row.state==='issue';
+    const vessel=key==='vessel';
+    const bring=row.state==='issue'&&(key==='site'||vessel);
+    const deliveryFields=row.deliveryFields||[];
+    const groupDelivery=vessel&&(bring||deliveryFields.length>0);
     const label=bring?'Нужно привезти':statusLabels[row.state];
     const status=el('span','r182-event-status r182-status-'+row.state,label);
     header.append(title);
-    if(!bring)header.append(status);
+    if(!bring&&!groupDelivery)header.append(status);
     card.append(header);
 
-    if(bring){
+    if(groupDelivery){
+      const delivery=el('section',bring?'r182-event-shortage r193-vessel-delivery':'r193-vessel-delivery');
+      delivery.append(status);
+      if(bring&&row.status.trim().toLowerCase()!==label.toLowerCase()&&!deliveryFields.some(([k])=>k===row.statusKey)){
+        delivery.append(el('p','r182-event-note',row.status));
+      }
+      for(const [heading,value] of deliveryFields){
+        const field=el('div','r193-vessel-delivery-field');
+        field.append(el('strong','',heading),el('p','r182-event-note',String(value)));
+        delivery.append(field);
+      }
+      card.append(delivery);
+    }else if(bring){
       const shortage=el('div','r182-event-shortage');
       shortage.append(status);
       if(row.status.trim().toLowerCase()!==label.toLowerCase()){
@@ -216,7 +231,7 @@ function installRelease182(){
       }
       card.append(fields);
     }
-    if(!bring && row.state==='issue' && row.status.trim().toLowerCase()!==label.toLowerCase()){
+    if(!groupDelivery && !bring && row.state==='issue' && row.status.trim().toLowerCase()!==label.toLowerCase()){
       card.append(el('p','r182-event-note',row.status));
     }
     if(key==='vessel' && currentUser?.role!=='employee'){
@@ -231,7 +246,7 @@ function installRelease182(){
     const cfg=sections[key],all=eventRows(key),query=$(cfg.search).value.trim().toLowerCase();
     const filtered=all.filter(r=>(cfg.filter==='all'||r.state===cfg.filter)&&r.name.toLowerCase().includes(query));
     cfg.tabs.replaceChildren(...Object.entries(statusLabels).map(([status,label])=>{
-      const bring=key==='site'&&status==='issue';
+      const bring=status==='issue'&&(key==='site'||key==='vessel');
       const count=all.filter(r=>status==='all'||r.state===status).length;
       const title=(bring?'Нужно привезти':label)+' · '+count;
       const tab=button(title,()=>{cfg.filter=status;renderEvent(key)},'r182-event-tab');
