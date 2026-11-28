@@ -9,6 +9,13 @@ function installBetaReferenceDesign(){
     if(text!==undefined)node.textContent=String(text);
     return node;
   };
+  const groupControls=(before,label,...controls)=>{
+    const group=make('div','beta-list-controls');
+    group.setAttribute('role','group');
+    group.setAttribute('aria-label',label);
+    before.before(group);
+    group.append(...controls.filter(Boolean));
+  };
   const svg=path=>{
     const node=make('span','r191-line-icon');
     node.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+path+'</svg>';
@@ -64,7 +71,27 @@ function installBetaReferenceDesign(){
     if(quick){
       const take=quick.querySelector('.take-btn'),scan=quick.querySelector('.qr-btn-main');
       if(take)take.classList.add('r191-take-action');
-      if(scan)scan.classList.add('r191-scan-action');
+      if(scan){
+        scan.classList.add('r191-scan-action');
+        scan.setAttribute('aria-label','Сканировать QR');
+        scan.replaceChildren(...[scan.querySelector('svg'),make('span','','QR')].filter(Boolean));
+      }
+    }
+    const overview=byId('dashboard-v17');
+    if(overview){
+      const compact=()=>{
+        if(home.classList.contains('hidden'))return;
+        const threshold=home.classList.contains('beta-home-compact')?72:48;
+        home.classList.toggle('beta-home-compact',overview.getBoundingClientRect().bottom<threshold);
+      };
+      let scrollFrame=0;
+      const scheduleCompact=()=>{
+        if(scrollFrame)return;
+        scrollFrame=requestAnimationFrame(()=>{scrollFrame=0;compact()});
+      };
+      window.addEventListener('scroll',scheduleCompact,{passive:true});
+      window.addEventListener('resize',scheduleCompact);
+      new MutationObserver(scheduleCompact).observe(home,{attributes:true,attributeFilter:['class']});
     }
     const historyButton=byId('main-history-btn');
     if(historyButton){
@@ -77,13 +104,17 @@ function installBetaReferenceDesign(){
     if(mySection){
       const details=make('details','r191-my-items-drawer');
       const summary=make('summary'),label=make('span','','Мои вещи');
-      summary.append(label);
+      const count=make('span','r1856-count');
+      summary.append(label,count);
       styleHomeRow(summary,label,'issued');
       details.append(summary,mySection);
       issues.append(details);
-      const update=()=>details.classList.toggle('hidden',mySection.classList.contains('hidden'));
+      const update=()=>{
+        details.classList.toggle('hidden',mySection.classList.contains('hidden'));
+        count.textContent=mySection.dataset.count||'';
+      };
       update();
-      new MutationObserver(update).observe(mySection,{attributes:true,attributeFilter:['class']});
+      new MutationObserver(update).observe(mySection,{attributes:true,attributeFilter:['class','data-count']});
     }
     for(const [id,icon,list] of [
       ['held-list1857','hand',issues],
@@ -187,8 +218,13 @@ function installBetaReferenceDesign(){
     for(const element of [actions,roomTitle,roomList])if(element)rooms.append(element);
     const root=make('section','r191-stock-main');
     root.id='r191-stock-catalog';
-    const sections=make('div','r191-stock-sections');
-    sections.classList.add('r192-room-grid');
+    const stockSection=(title)=>{
+      const section=make('section','beta-stock-section');
+      const tiles=make('div','r192-room-grid');
+      section.append(make('h2','r191-home-group-title',title),tiles);
+      return {section,tiles};
+    };
+    const storage=stockSection('Помещения и техника'),supplies=stockSection('Расходники');
     const catalog=make('div','hidden');
     catalog.append(search,categories,counters,toolbar,filterBox,rows);
     rooms.open=false;
@@ -196,7 +232,7 @@ function installBetaReferenceDesign(){
     rooms.style.display='none';
     const sectionDefs=[['Склад 11','warehouse'],['Офис 7','office'],['Техника','camera'],['Рамки','frame'],['Винил','vinyl'],['Фотобумага','paper']];
     const oldRoomIcon={warehouse:'consumable',office:'accessory',camera:'camera',frame:'accessory',vinyl:'consumable',paper:'printer'};
-    for(const [name,kind] of sectionDefs){
+    for(const [index,[name,kind]] of sectionDefs.entries()){
       const button=make('button','r191-category');
       button.type='button';button.classList.add('r192-room-tile');button.dataset.roomKind=kind;
       button.append(make('span','r192-room-title',name));
@@ -215,16 +251,16 @@ function installBetaReferenceDesign(){
           openRoom(room.id,room.name);
         }catch(e){showToast(e.message)}
       };
-      sections.append(button);
+      (index<3?storage.tiles:supplies.tiles).append(button);
     }
     if(add){root.append(add);add.classList.add('r192-stock-add');add.textContent='Добавить товар';}
-    root.append(sections);
     const stockStatistics=make('section','r193-stock-statistics');
     if(low){
       low.open=true;
       stockStatistics.append(low);
     }
-    root.append(stockStatistics);
+    supplies.section.append(stockStatistics);
+    root.append(storage.section,supplies.section);
     // Keep the existing room list and launch targets mounted, but not on the visible Stock screen.
     root.append(rooms,catalog);
     header.after(root);
@@ -321,6 +357,18 @@ function installBetaReferenceDesign(){
     });
     window.betaReferenceStockRefresh=renderStock;
   }
+  for(const id of ['screen-platforms','screen-th']){
+    const screen=byId(id);
+    const search=screen?.querySelector('.search-wrapper');
+    if(!search)continue;
+    const sync=screen.querySelector('.r182-sync'),stamp=screen.querySelector('.r182-sync-time');
+    const tabs=screen.querySelector('.r182-event-tabs');
+    const field=search.querySelector('input');
+    if(field)field.setAttribute('aria-label',id==='screen-platforms'?'Поиск по площадке':'Поиск по теплоходу');
+    groupControls(search,'Поиск и статус',search,tabs,sync,stamp);
+  }
+  byId('screen-category-stats')?.querySelector('.stats-filters')?.classList.add('beta-list-controls','beta-stats-controls');
+  byId('screen-buyout-sheet')?.querySelector('.buyout-sheet-toolbar')?.classList.add('beta-list-controls');
   // HISTORY. Date-grouped timeline and four primary filter tabs (like the mock).
   const history=byId('screen-history');
   if(history&&!byId('r191-history-chips')){
@@ -363,6 +411,7 @@ function installBetaReferenceDesign(){
       date.setAttribute('aria-label','Дата события');
       const exportButton=byId('export-history-btn');
       if(exportButton)advanced.append(exportButton);
+      groupControls(search,'Поиск и фильтры истории',search,chips,advanced);
       const oldRender=renderHistory17;
       const dateLabel=key=>{
         const parsed=/^\d{4}-\d{2}-\d{2}$/.test(key)?new Date(key+'T12:00:00'):null;

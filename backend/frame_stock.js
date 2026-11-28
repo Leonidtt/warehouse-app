@@ -12,10 +12,16 @@
   const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}):'—';
   const kinds={inventory:'Инвентаризация',receipt:'Поступление',issue:'Выдача',transfer:'На площадку',unpack:'Распаковка',minimum:'Мин. остаток'};
   const label=r=>r.group+' · '+r.orientation;
+  function materialActions(card){
+    const actions=document.createElement('div');
+    actions.className='beta-material-actions';
+    card.append(actions);
+    return actions;
+  }
   const detail=r=>r.total==null?'Не посчитано':`${fmt(r.boxes)} кор. · ${fmt(r.packs)} уп. · ${fmt(r.loose)} шт.\nВсего: ${fmt(r.total)} шт.`;
   function summary(rows){const known=rows.filter(r=>r.total!=null);return ['РАМКИ · остатки склада · '+date(new Date().toISOString()),...rows.map(r=>label(r)+'\n'+detail(r)),'Итого '+(known.length===rows.length?'':'по посчитанным позициям: ')+fmt(known.reduce((s,r)=>s+r.total,0))+' шт.','Проверено: '+known.length+' из '+rows.length].join('\n\n')}
   async function open(tab='Остатки'){
-    const {o,b}=overlay17('Рамки');const tabs=document.createElement('div');tabs.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:8px 0';b.append(tabs);
+    const {o,b}=overlay17('Рамки');const tabs=document.createElement('div');tabs.className='beta-material-tabs';b.append(tabs);
     const content=document.createElement('div');b.append(content);
     let data;let active=tab;
     for(const t of ['Остатки','Движение','Инвентаризация','Статистика'])btn17(tabs,t,()=>render(t));
@@ -27,7 +33,7 @@
         btn17(content,'Копировать сводку',()=>copyText(summary(rows)),'ok');
         for(const r of rows){const c=card17(content,label(r),detail(r)+(r.minimum==null?'':'\nМинимум: '+fmt(r.minimum)+' шт.'));if(r.low){const p=document.createElement('p');p.style.color='var(--danger)';p.textContent='Заканчивается';c.append(p)}btn17(c,'Мин. остаток',()=>edit(r,'minimum'));}
       }else if(t==='Движение'){
-        for(const r of rows){const c=card17(content,label(r),detail(r));if(r.total==null)continue;for(const k of ['receipt','issue','transfer','unpack'])btn17(c,kinds[k],()=>edit(r,k));}
+        for(const r of rows){const c=card17(content,label(r),detail(r));if(r.total==null)continue;const actions=materialActions(c);for(const k of ['receipt','issue','transfer','unpack'])btn17(actions,kinds[k],()=>edit(r,k));}
         card17(content,'Последние операции','До 100 записей');for(const e of data.events){const r=rows.find(x=>x.id===e.position);card17(content,kinds[e.kind]+' · '+label(r),`${date(e.created_at)} · ${e.actor}${e.destination?' · '+e.destination:''}\n${e.before_total==null?'Первичный остаток':fmt(e.before_total)+' →'} ${fmt(e.after_total)} шт.${e.comment?'\n'+e.comment:''}`)}
       }else if(t==='Инвентаризация'){
         card17(content,'Фактические остатки','Неучтённые позиции не считаются нулевыми. Расхождения не попадают в расход.');for(const r of rows){const c=card17(content,label(r),detail(r)+'\nПроверка: '+date(r.counted_at));btn17(c,'Пересчитать',()=>edit(r,'inventory'),'ok');}
@@ -63,7 +69,8 @@
         for(const r of data.rows.filter(r=>positions.includes(r.position))){
           const c=card17(host,names[r.position],r.counted_at?describe(r):'Не посчитано');
           if(r.minimum!=null){const p=document.createElement('p');p.textContent='Минимум: '+fmt(r.minimum)+(r.counted_at&&amount(r)<r.minimum?' · Заканчивается':'');if(r.counted_at&&amount(r)<r.minimum)p.style.color='var(--danger)';c.append(p)}
-          for(const k of ['inventory','minimum',...(r.counted_at?['receipt','transfer','issue',r.position==='vinyl'?'cut':'unpack']:[])])btn17(c,ops[k],()=>edit(r,k));
+          const actions=materialActions(c);
+          for(const k of ['inventory','minimum',...(r.counted_at?['receipt','transfer','issue',r.position==='vinyl'?'cut':'unpack']:[])])btn17(actions,ops[k],()=>edit(r,k));
         }
         const events=data.events.filter(e=>positions.includes(e.position));
         card17(host,'Статистика','Выдача со склада, не продажи. По последним 500 операциям.');
