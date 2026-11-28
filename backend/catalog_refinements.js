@@ -33,7 +33,8 @@
     const sortSelect=allPanels[1]?.querySelector('select');
     const filters=toolbar.querySelectorAll('.r184-icon');
     const filterButton=filters[0];
-    if(!filterPanel||!sortSelect||!filterButton)return;
+    const search=main.querySelector('#main-search-wrapper');
+    if(!search||!filterPanel||!sortSelect||!filterButton)return;
     const e=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
     sortSelect.classList.add('r186-sort-select');
     sortSelect.setAttribute('aria-label','Сортировка товаров');
@@ -49,22 +50,22 @@
       printer:'<path d="M6 8V3h12v5M6 17H3V9h18v8h-3M6 14h12v7H6zM16 11h2"/>',
       consumable:'<path d="m3 8 9-5 9 5v12H3zM3 8l9 5 9-5M12 13v7M9 3v7"/>'
     };
-    const options=[['camera','Фотокомплекты'],['flash','Вспышки'],['laptop','Ноутбуки'],['printer','Принтеры'],['consumable','Расходники']];
-    function categoryButton(key,label){
+    const options=[['camera','Фотокомплекты','Камеры'],['flash','Вспышки'],['laptop','Ноутбуки'],['printer','Принтеры'],['consumable','Расходники']];
+    function categoryButton(key,label,caption=label){
       const button=e('button','r186-family');
       button.type='button';
       button.title=label;
       button.setAttribute('aria-label',label);
       const icon=e('span','r186-family-illustration');
       icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+icons[key]+'</svg>';
-      button.append(icon);
+      button.append(icon,e('span','r186-family-label',caption));
       return button;
     }
     const bar=e('div','r186-family-bar');bar.id='warehouse-category-switcher';
     bar.setAttribute('role','group');bar.setAttribute('aria-label','Быстрые категории товаров');
     const buttons=new Map();
-    for(const [key,label]of options){
-      const b=categoryButton(key,label);
+    for(const [key,label,caption]of options){
+      const b=categoryButton(key,label,caption);
       b.onclick=()=>{
         view.selected=view.selected===key?'':key;
         const kind=document.getElementById('filter-kind');
@@ -75,14 +76,26 @@
       };
       bar.append(b);buttons.set(key,b);
     }
-    filterPanel.after(bar);
+    const controls=e('div','beta-list-controls beta-catalog-controls');
+    controls.setAttribute('role','group');
+    controls.setAttribute('aria-label','Поиск и фильтры товаров');
+    search.before(controls);
+    controls.append(search,bar,toolbar,filterPanel);
+    filterPanel.id='catalog-filter-options';
+    filterButton.setAttribute('aria-controls',filterPanel.id);
+    const updateExpanded=()=>filterButton.setAttribute('aria-expanded',String(!filterPanel.classList.contains('hidden')));
+    new MutationObserver(updateExpanded).observe(filterPanel,{attributes:true,attributeFilter:['class']});
+    updateExpanded();
+    for(const [id,label]of [['filter-location','Помещение'],['filter-category','Категория'],['filter-status','Статус']]){
+      document.getElementById(id)?.setAttribute('aria-label',label);
+    }
 
     const takeTools=document.getElementById('take-tools');
     if(takeTools){
       takeTools.setAttribute('role','group');
       takeTools.setAttribute('aria-label','Категории и сортировка выдачи');
-      const takeButtons=options.slice(0,4).map(([key,label])=>{
-        const button=categoryButton(key,label);
+      const takeButtons=options.slice(0,4).map(([key,label,caption])=>{
+        const button=categoryButton(key,label,caption);
         button.onclick=()=>{
           view.takeSelected=view.takeSelected===key?'':key;
           updateTakeTools();
@@ -118,6 +131,13 @@
         b.querySelector('button[aria-pressed="true"]')?.focus();
       };
       takeTools.append(sortButton);
+      const takeSearch=document.getElementById('take-search-wrapper');
+      if(takeSearch){
+        const tools=e('div','beta-list-controls beta-take-controls');
+        takeSearch.querySelector('input')?.setAttribute('aria-label','Поиск оборудования');
+        takeSearch.before(tools);
+        tools.append(takeSearch,takeTools);
+      }
       function updateTakeTools(){
         for(const [key,button]of takeButtons){
           const active=view.takeSelected===key;

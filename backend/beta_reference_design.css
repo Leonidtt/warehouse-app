@@ -435,10 +435,6 @@
   color:var(--r191-text);font-size:11px;font-weight:590;white-space:nowrap;
  }
  #screen-main.r191-reference-home .r182-report-metric strong{font-size:17px;font-variant-numeric:tabular-nums}
- #screen-main.r191-reference-home .v18-quick{
-  display:flex!important;flex-direction:column!important;
-  gap:9px!important;margin:0 0 12px!important;
- }
  #screen-main.r191-reference-home .v18-quick>button{
   width:100%;min-height:54px!important;margin:0!important;
   font-size:15px!important;font-weight:680!important;
@@ -618,8 +614,11 @@
  border:solid var(--r191-muted);border-width:0 1.5px 1.5px 0;
  transform:rotate(-45deg);
 }
-#screen-main.r191-reference-home details[open] > :is(.r191-home-row,.r188-disclosure > summary)::after{
+#screen-main.r191-reference-home details > :is(.r191-home-row,.r188-disclosure > summary)::after{
  transform:rotate(45deg);
+}
+#screen-main.r191-reference-home details[open] > :is(.r191-home-row,.r188-disclosure > summary)::after{
+ transform:rotate(225deg);
 }
 #screen-main.r191-reference-home :is(.r191-home-row,.r188-disclosure > summary):focus-visible{
  outline-offset:-3px;
@@ -802,28 +801,13 @@ body #r191-stock-catalog .r191-stock-item .r1857-state{min-width:0;max-width:65%
  body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-top{flex-wrap:wrap}
  body :is(#items-list,#room-items,#take-items-list,#my-items-list,#cat-stats-items,#cat-detailed-list,#r191-stock-catalog) .r1857-compact .r1857-state{max-width:100%;margin-left:auto}
 }
-/* Three stock landing blocks. Extra rooms and QR remain in the statistics disclosure. */
-#r191-stock-catalog>.r193-stock-statistics{
- margin:0!important;padding:0!important;min-width:0;
- background:var(--beta-panel);border:1px solid var(--beta-edge);
- border-radius:20px;box-shadow:inset 0 1px 0 var(--beta-rim),var(--beta-panel-shadow);
-}
-#r191-stock-catalog>.r193-stock-statistics>summary{
- min-height:48px;padding:11px 13px;box-sizing:border-box;font-size:14px;font-weight:680;
-}
-#r191-stock-catalog .r193-stock-statistics .r182-consumables-body{padding:0 12px 12px}
+/* Statistics stays mounted independently of the inventory tiles and their handlers. */
 #r191-stock-catalog .r193-stock-statistics .r182-consumable-metric{
  min-height:52px;border-radius:13px;background:var(--beta-panel-raised);border-color:var(--beta-edge);
 }
-#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms{margin:8px 0 0;border-radius:14px}
-#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms>summary{min-height:44px}
-#r191-stock-catalog .r193-stock-statistics .r191-stock-rooms #rooms-list{padding:8px!important}
-
-/* Stable statistics wrapper; room tools remain accessible even when overview refresh fails. */
-#r191-stock-catalog>.r193-stock-statistics{display:grid;gap:8px;padding:8px!important}
-#r191-stock-catalog>.r193-stock-statistics>#low-stock-banner{margin:0!important;border:0;box-shadow:none;background:transparent}
-#r191-stock-catalog>.r193-stock-statistics>#low-stock-banner>summary{min-height:44px;padding:8px 5px;font-size:14px;font-weight:680}
-#r191-stock-catalog>.r193-stock-statistics .r182-consumables-body{padding:0 4px 4px}
+#r191-stock-catalog .r193-stock-statistics>#low-stock-banner{margin:0!important;border:0;box-shadow:none;background:transparent}
+#r191-stock-catalog .r193-stock-statistics>#low-stock-banner>summary{min-height:44px;padding:8px 2px;font-size:14px;font-weight:600}
+#r191-stock-catalog .r193-stock-statistics .r182-consumables-body{padding:0}
 #screen-rooms.r191-reference-stock #r191-stock-catalog>.r192-stock-add{width:100%!important;min-height:48px!important;border-radius:16px!important;background:var(--beta-accent-fill)!important;color:#fff!important;font-size:14px!important}
 #screen-th .r193-vessel-delivery{display:grid;gap:7px;min-width:0;padding:9px 11px;border-radius:12px;background:var(--beta-panel-raised)}
 #screen-th .r193-vessel-delivery.r182-event-shortage{background:color-mix(in srgb,var(--r182-red,var(--danger)) 8%,var(--beta-panel));border-left:2px solid var(--r182-red,var(--danger))}
@@ -836,3 +820,188 @@ body #r191-stock-catalog .r191-stock-item .r1857-state{min-width:0;max-width:65%
 #r191-stock-catalog>.r191-stock-rooms[hidden]{display:none!important}
 #locations-list .r194-open-room{display:flex;align-items:center;min-height:44px;flex:1;min-width:0;color:var(--text);text-decoration:none;overflow-wrap:anywhere}
 #locations-list .r194-open-room:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:8px}
+
+/* Shared Beta controls and surfaces. The equipment overview keeps its own artwork and layout. */
+:root{
+ --beta-tap-size:44px;
+ --beta-control-gap:8px;
+ --beta-control-radius:12px;
+ --beta-group-radius:18px;
+}
+.screen .beta-list-controls,
+#r191-stock-catalog .beta-stock-section{
+ min-width:0;padding:10px;
+ border:1px solid var(--beta-edge);
+ border-radius:var(--beta-group-radius);
+ background:var(--beta-panel);
+}
+.screen .beta-list-controls{
+ display:grid;gap:var(--beta-control-gap);
+ margin:0 0 var(--beta-section-gap);
+}
+.screen .beta-list-controls > :is(.search-wrapper,.r186-family-bar,.r186-sort-tools,.r184-filter-panel,.take-tools,.r191-history-search,.r191-history-chips,.r191-history-extra,.r182-event-tabs,.r182-sync,.r182-sync-time){
+ min-width:0;margin:0!important;
+}
+.screen .beta-list-controls .search-wrapper input{
+ min-height:var(--beta-tap-size);
+ border-radius:var(--beta-control-radius);
+ background:var(--beta-panel-raised);
+}
+.screen .beta-list-controls :is(.r186-filter,.r186-sort-select,.r191-history-chip,.r182-event-tab,.r182-sync){
+ min-height:var(--beta-tap-size);
+ border-radius:var(--beta-control-radius);
+}
+.screen .beta-list-controls .r186-sort-select{height:auto}
+.screen .beta-list-controls .r184-filter-panel .filters{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));
+ gap:var(--beta-control-gap);
+}
+.screen .beta-list-controls .r184-filter-panel .filters select{
+ width:100%;min-width:0;
+}
+.screen .beta-list-controls .r186-family-bar,
+.screen .beta-list-controls .take-tools{gap:5px}
+.screen .beta-list-controls .r186-family-bar{
+ grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,1.26fr);
+}
+:is(#screen-main,#screen-take) .beta-list-controls button.r186-family{
+ display:flex;flex-direction:column;justify-content:center;gap:4px;
+ min-height:54px;padding:4px 1px;
+ border-radius:var(--beta-control-radius);
+}
+.beta-list-controls .r186-family-illustration{width:19px;height:19px}
+.beta-list-controls .r186-family-label{
+ max-width:100%;font-size:11px;line-height:1.2;
+ font-weight:600;overflow-wrap:anywhere;
+}
+.screen .beta-list-controls .r191-history-extra{border:0;border-radius:0;background:transparent}
+.screen .beta-list-controls .r191-history-extra>summary{
+ display:flex;align-items:center;justify-content:space-between;
+ padding:5px 4px;list-style:none;font-size:13px;
+}
+.screen .beta-list-controls .r191-history-extra>summary::-webkit-details-marker{display:none}
+.screen .beta-list-controls .r191-history-extra>summary::after{
+ content:'';width:7px;height:7px;margin-inline:5px;
+ border:solid var(--text-muted);border-width:0 1.5px 1.5px 0;transform:rotate(45deg);
+}
+.screen .beta-list-controls .r191-history-extra[open]>summary::after{transform:rotate(225deg)}
+.screen .beta-list-controls .r182-sync-time:empty{display:none}
+.screen .beta-stats-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+#screen-buyout-sheet .buyout-sheet-toolbar.beta-list-controls{display:flex}
+
+/* The same row typography and disclosure cues apply to Settings, Stock and Buyout. */
+body :is(.screen,.modal-content) input,
+body :is(.screen,.modal-content) select,
+body :is(.screen,.modal-content) textarea{font-family:inherit}
+body :is(.screen,.modal-content) :is(select,textarea,input:not([type]),input:is([type=text],[type=search],[type=number],[type=date],[type=month],[type=password],[type=url],[type=tel],[type=email])){
+ min-height:var(--beta-tap-size);border-radius:var(--beta-control-radius);
+ background-color:var(--beta-panel-raised);border-color:var(--beta-edge);
+ color:var(--text);
+}
+body .screen:not(#screen-main) > .sticky-header{
+ min-height:54px;border-color:var(--beta-edge);
+}
+body .screen:not(#screen-main) :is(.card,.extra-card):not(.r1857-compact,.take-row,.r191-stock-item,.v18-place-row,.r191-history-entry){
+ border-radius:var(--beta-group-radius);
+}
+body .screen:not(#screen-main) :is(.extra-card,.r182-event-card,.buyout-balance-overview,.buyout-balance-rows),
+body .modal-overlay .modal-content{
+ border-color:var(--beta-edge);
+ background:var(--beta-panel);
+}
+body .screen:not(#screen-main) :is(.extra-card,.r182-event-card,.buyout-balance-overview,.buyout-balance-rows){
+ border-radius:var(--beta-group-radius);
+}
+body .modal-overlay .modal-content > .field-row:first-child{
+ align-items:center;gap:var(--beta-control-gap);
+}
+body .modal-overlay .modal-content > .field-row:first-child h2{
+ min-width:0;overflow-wrap:anywhere;line-height:1.25;
+}
+body .modal-overlay .modal-content > .field-row:first-child button{
+ min-height:var(--beta-tap-size);
+ border-radius:var(--beta-control-radius);
+}
+.modal-content :is(.beta-material-tabs,.beta-material-actions){
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:var(--beta-control-gap);margin-block:var(--beta-control-gap);
+}
+.modal-content :is(.beta-material-tabs,.beta-material-actions)>button{
+ min-width:0;min-height:var(--beta-tap-size);margin:0;
+ padding:6px;border-radius:var(--beta-control-radius);white-space:normal;
+ overflow-wrap:anywhere;font-size:13px;
+}
+.modal-content .beta-material-tabs>button[aria-pressed=true]{
+ background:var(--beta-accent-fill);color:white;
+}
+body .screen :is(.v18-settings-group > summary,.r191-history-extra > summary,.buyout-balance-summary,.r182-consumables > summary){
+ min-height:var(--beta-tap-size);
+ color:var(--text);font-weight:600;
+}
+#screen-settings .v18-settings-group,#screen-settings .v18-settings-list{
+ border-radius:var(--beta-group-radius);
+ background:var(--beta-panel);
+}
+#screen-settings .v18-settings-list > button:not(.hidden){min-height:48px}
+#screen-settings .v18-settings-list > button .v18-setting-icon{
+ width:28px;height:28px;border-radius:8px;color:#fff;background:#48648c;
+}
+#screen-settings .v18-settings-group > summary > .v18-icon,
+#r191-stock-catalog .r182-consumables > summary > .r182-icon{transform:rotate(90deg)}
+#screen-settings .v18-settings-group[open] > summary > .v18-icon,
+#r191-stock-catalog .r182-consumables[open] > summary > .r182-icon{transform:rotate(270deg)}
+#screen-buyout-sheet .buyout-balance-chevron{transform:rotate(45deg)}
+#screen-buyout-sheet .buyout-balance-record[open] .buyout-balance-chevron{transform:rotate(225deg)}
+
+#r191-stock-catalog .beta-stock-section .r191-home-group-title{
+ margin:0 2px 8px;color:var(--text-muted);font-size:13px;font-weight:650;
+}
+#r191-stock-catalog .beta-stock-section .r192-room-grid{
+ grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--beta-control-gap);
+}
+#r191-stock-catalog .beta-stock-section .r192-room-tile{
+ flex-direction:column-reverse!important;align-items:center!important;justify-content:center!important;
+ min-height:82px!important;padding:6px 3px!important;
+ border-radius:var(--beta-control-radius)!important;
+ background:var(--beta-panel-raised)!important;
+ font-size:12px!important;overflow-wrap:anywhere;text-align:center;
+}
+#r191-stock-catalog .beta-stock-section .r192-room-art{width:32px;height:32px}
+#r191-stock-catalog .beta-stock-section .r192-room-art>.r191-line-icon{width:28px;height:28px}
+#r191-stock-catalog .beta-stock-section .r193-stock-statistics{
+ margin-top:var(--beta-control-gap);border-top:1px solid var(--beta-edge);
+}
+
+#screen-main.r191-reference-home .v18-quick{
+ display:grid;grid-template-columns:minmax(0,1fr) 78px;
+ gap:var(--beta-control-gap)!important;margin-bottom:var(--beta-section-gap);
+}
+#screen-main.r191-reference-home .v18-quick > button:only-of-type,
+#screen-main.r191-reference-home .v18-quick > button.hidden + button,
+#screen-main.r191-reference-home .v18-quick:has(> .r191-scan-action.hidden) > .r191-take-action{grid-column:1/-1}
+#screen-main.r191-reference-home .v18-quick > .r191-scan-action svg{width:18px;height:18px}
+#screen-main.r191-reference-home .r1859-prices-dot{display:none}
+#screen-main.r191-reference-home .r1856-count{
+ flex:none;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums;
+}
+@media(max-width:899px){
+ body .screen{padding-inline:14px}
+ #screen-main.r191-reference-home.beta-home-compact .sticky-header{
+  min-height:48px;padding-block:1px;
+ }
+ #screen-main.r191-reference-home.beta-home-compact .beta-profile-header #user-info{
+  font-size:0!important;line-height:1;
+ }
+ #screen-main.r191-reference-home.beta-home-compact .beta-profile-header #user-info > *{display:none}
+ #screen-main.r191-reference-home.beta-home-compact .beta-profile-header #user-info::before{
+  content:'Склад';font-size:15px;
+ }
+ #screen-main.r191-reference-home.beta-home-compact .sticky-header .v18-icon-btn{
+  width:44px;min-width:44px;height:44px;min-height:44px;
+ }
+}
+@media(max-width:360px){
+ .screen .beta-list-controls .r186-family-bar,
+ #screen-take .beta-list-controls .take-tools{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
