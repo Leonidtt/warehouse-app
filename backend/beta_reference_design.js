@@ -35,16 +35,29 @@ function installBetaReferenceDesign(){
     price:'<path d="M3 11V4h7l11 11-7 7L3 11Z"/><circle cx="7" cy="8" r="1"/>',
     wallet:'<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18"/><path d="M16 14h2"/>'
   };
-  // HOME. Put existing controls into the same visual order as the approved design.
+  // HOME. Group the existing controls without changing their actions or permissions.
   const home=byId('screen-main');
   const activity=byId('main-activity');
   if(home&&activity){
     home.classList.add('r191-reference-home');
     const styleHomeRow=(row,label,icon)=>{
       row.classList.add('r191-home-row');
+      row.dataset.homeIcon=icon;
       label.classList.add('r191-home-row-label');
       row.prepend(svg(pict[icon]));
     };
+    const makeHomeList=(section,label)=>{
+      section.classList.add('r191-home-group');
+      section.setAttribute('aria-label',label);
+      const list=make('div','r191-home-list');
+      section.append(make('h2','r191-home-group-title',label),list);
+      return list;
+    };
+    const issues=makeHomeList(activity,'Выдачи');
+    const planning=make('section'),accounting=make('section');
+    const schedules=makeHomeList(planning,'Планирование');
+    const accounts=makeHomeList(accounting,'Учёт');
+    activity.after(planning,accounting);
     const title=activity.querySelector('.beta-activity-title');
     if(title)title.setAttribute('aria-hidden','true');
     const quick=home.querySelector('.v18-quick');
@@ -58,35 +71,39 @@ function installBetaReferenceDesign(){
       const label=make('span','','История');
       historyButton.replaceChildren(label);
       styleHomeRow(historyButton,label,'history');
-      historyButton.classList.add('r191-history-shortcut');
       historyButton.setAttribute('aria-label','Открыть историю действий');
     }
     const mySection=byId('my-items-section');
     if(mySection){
       const details=make('details','r191-my-items-drawer');
-      const summary=make('summary'),label=make('span','','Моя выданная техника');
+      const summary=make('summary'),label=make('span','','Мои вещи');
       summary.append(label);
       styleHomeRow(summary,label,'issued');
       details.append(summary,mySection);
-      activity.append(details);
+      issues.append(details);
       const update=()=>details.classList.toggle('hidden',mySection.classList.contains('hidden'));
       update();
       new MutationObserver(update).observe(mySection,{attributes:true,attributeFilter:['class']});
     }
-    const actions=make('div','r191-home-actions');
-    actions.id='r191-home-actions';
-    activity.after(actions);
-    for(const [id,icon] of [['held-list1857','hand'],['buyout-list1856','checkout'],['boss-equipment-costs1859','price']]){
+    for(const [id,icon,list] of [
+      ['held-list1857','hand',issues],
+      ['staff-schedule-panel','calendar',schedules],
+      ['camera-schedule-entry','camera',schedules],
+      ['buyout-list1856','checkout',accounts],
+      ['boss-equipment-costs1859','price',accounts],
+    ]){
       const panel=byId(id);
       if(!panel)continue;
-      actions.append(panel);
-      const summary=panel.querySelector(':scope > summary'),label=summary?.querySelector('.r1856-title');
+      const summary=panel.querySelector(':scope > summary'),label=summary?.querySelector('.r1856-title,strong');
       if(label)styleHomeRow(summary,label,icon);
+      list.append(panel);
     }
-    for(const [id,icon] of [['staff-schedule-panel','calendar'],['camera-schedule-entry','camera']]){
-      const summary=byId(id)?.querySelector(':scope > summary'),label=summary?.querySelector('strong');
-      if(label)styleHomeRow(summary,label,icon);
-    }
+    const historyBar=activity.querySelector('.beta-activity-bar');
+    if(historyBar)issues.append(historyBar);
+    home.addEventListener('click',event=>{
+      const row=event.target.closest('.r191-home-row,.r188-disclosure > summary');
+      if(row&&window.Telegram?.WebApp?.initData)haptic('soft');
+    });
   }
 
   // STOCK. Actual product catalogue becomes the first view; rooms remain accessible.
